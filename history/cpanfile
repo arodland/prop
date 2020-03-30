@@ -1,0 +1,8 @@
+requires 'DBI';
+requires 'DBD::Pg';
+requires 'JSON::MaybeXS';
+requires 'DateTime';
+requires 'DateTime::Format::Strptime';
+requires 'Web::Simple';
+requires 'Plack';
+requires 'Starman';
