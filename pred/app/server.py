@@ -23,7 +23,11 @@ app = Flask(__name__)
 
 @app.route("/stations.json", methods=['GET'])
 def stationsjson():
+    ts = request.args.get('time', None)
     now = dt.datetime.utcnow()
+    if ts is not None:
+        now = dt.datetime.fromtimestamp(float(ts))
+
     data = get_data()
 
     out = []
