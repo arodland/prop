@@ -42,7 +42,7 @@ do
   dhour = ymdhms(4) + ymdhms(5) / 60. + ymdhms(6) / 3600.
 
   if(ssn.gt.-99.) then
-    sfi = 63.75+ssn*(0.725+ssn*0.000089)
+    sfi = 63.75+ssn*(0.728+ssn*0.000089)
     jf(17) = .false.
     jf(25) = .false.
   else
