@@ -53,7 +53,7 @@ if ($ts->{epoch} > time() + 3600) {
 }
 
 my @cols = ('station_id', 'time', 'cs', 'source');
-my @vals = ($station_id, $time, 0+$sao->confidence, 'giro');
+my @vals = ($station_id, $time, 0+$sao->confidence, 'noaa');
 my @placeholders = ('?', '?', '?', '?');
 
 my %map = (
