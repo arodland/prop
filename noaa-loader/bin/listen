@@ -1,0 +1,2 @@
+#!/bin/bash
+/usr/bin/inoticoming --foreground --initialsearch /noaa-data/in --suffix .zip /noaa-loader/process \;

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+shopt -s nullglob
+
+cd /noaa-data/in
+
+for x in *.zip ; do
+        pushd /noaa-data/unzipped > /dev/null
+        unzip "../in/$x" && rm "../in/$x" || mv "../in/$x" /noaa-data/unzip-fail
+        popd > /dev/null
+done
+
+cd /noaa-data/unzipped
+
+for x in *.SAO ; do
+        MONTH="$(date +%Y-%m)"
+        mkdir -p "/noaa-data/loaded/$MONTH" "/noaa-data/load-error/$MONTH"
+        perl -I/perl5lib /app/load.pl "$x" && mv "$x" "/noaa-data/loaded/$MONTH" || mv "$x" "/noaa-data/load-error/$MONTH"
+done
