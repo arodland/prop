@@ -22,10 +22,11 @@ my $sth = $giro_db->prepare("select * from station order by id asc");
 $sth->execute;
 
 while (my $station = $sth->fetchrow_hashref) {
-  $prop_db->do("insert into station (id, name, code, longitude, latitude, giro) values (?, ?, ?, ?, ?, ?)",
+  $prop_db->do("insert into station (id, name, code, longitude, latitude, giro, use_for_essn) values (?, ?, ?, ?, ?, ?, ?)",
     undef,
     $station->{id}, $station->{name}, $station->{code}, $station->{longitude}, $station->{latitude},
     (defined($station->{active}) ? 0 : 1),
+    1,
   );
 }
 
@@ -38,7 +39,7 @@ $prop_db->begin_work;
 while (my $meas = $sth->fetchrow_hashref) {
   delete $meas->{id};
   my $alt = delete $meas->{altitude};
-  my $source = defined($alt) ? 'giro' : 'ncei';
+  my $source = defined($alt) ? 'giro' : 'noaa';
 
   my @keys = keys %$meas;
   my @vals = @$meas{@keys};

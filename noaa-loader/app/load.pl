@@ -31,7 +31,7 @@ sub debug {
 
 my ($station_id) = $dbh->selectrow_array("SELECT id FROM station WHERE code=?", undef, $code);
 if (!defined $station_id) {
-  ($station_id) = $dbh->selectrow_array("INSERT INTO station (name, code, longitude, latitude, giro) VALUES (?, ?, ?, ?, FALSE) RETURNING id", undef, $name, $code, $lon, $lat);
+  ($station_id) = $dbh->selectrow_array("INSERT INTO station (name, code, longitude, latitude, giro, use_for_essn) VALUES (?, ?, ?, ?, FALSE, FALSE) RETURNING id", undef, $name, $code, $lon, $lat);
   debug "Created station ID $station_id";
 } else {
   debug "Found station ID $station_id";
