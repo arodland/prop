@@ -53,7 +53,7 @@ do glat=-90,90
       0, 0, 1, &
       OUTF,OARR, datadir)
  
-    write(stdout, '(7ES16.8)') glat, glon, oarr(1), oarr(89), oarr(36), oarr(36) * oarr(89), oarr(90)
+    write(stdout, '(7ES16.8)') glat, glon, oarr(1), oarr(91), oarr(36), oarr(36) * oarr(89), oarr(92)
   enddo
 enddo
 

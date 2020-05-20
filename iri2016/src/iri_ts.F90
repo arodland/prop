@@ -70,7 +70,7 @@ do
       0, 0, 1, &
       OUTF,OARR, datadir)
   
-    write(stdout, '(3ES16.8)', advance="no") oarr(89), oarr(36) * oarr(89), oarr(2)
+    write(stdout, '(3ES16.8)', advance="no") oarr(91), oarr(36) * oarr(91), oarr(2)
   enddo
   write(stdout,*) ""
 

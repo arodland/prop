@@ -57,7 +57,7 @@ do
     0, 0, 1, &
     OUTF,OARR, datadir)
  
-    write(stdout, '(8ES16.8)') glat, glon, oarr(1), oarr(89), oarr(36), oarr(36) * oarr(89), oarr(2), oarr(90)
+    write(stdout, '(8ES16.8)') glat, glon, oarr(1), oarr(91), oarr(36), oarr(36) * oarr(91), oarr(2), oarr(92)
 enddo
 42 continue
 end program
