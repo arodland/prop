@@ -9,7 +9,7 @@ real :: glat, glon, dhour
 integer :: ymdhms(6)
 real:: alt_km_range(3)
 real::  TECtotal, TECtop, TECbot
-real:: sfi, ssn
+real:: sfi, ssn, ig
 
 #ifndef BIN_DIR
 #define BIN_DIR '.'
@@ -43,15 +43,22 @@ do
 
   if(ssn.gt.-99.) then
     sfi = 63.75+ssn*(0.728+ssn*0.000089)
+    ig=(-0.0031*ssn+1.5332)*ssn-11.5634
     jf(17) = .false.
     jf(25) = .false.
+    jf(27) = .false.
+    jf(32) = .false.
   else
     jf(17) = .true.
     jf(25) = .true.
+    jf(27) = .true.
+    jf(32) = .true.
   endif
 
   OARR(33)=ssn
   OARR(41)=sfi
+  OARR(46)=sfi
+  OARR(39)=ig
 
   call IRI_SUB(JF,JMAG,glat,glon,IYYYY,MMDD,DHOUR+25., &
     0, 0, 1, &

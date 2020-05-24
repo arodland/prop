@@ -21,6 +21,7 @@ real :: oarr(100), outf(20,1000)
 real, allocatable :: altkm(:)
 character(80) :: argv
 integer :: i
+real :: sfi, ssn, ig
 
 jf = .true.
 jf(4:6) = .false.
@@ -39,6 +40,23 @@ do i=1,6
   read(argv,*) ymdhms(i)
 enddo
 
+call get_command_argument(7, argv)
+read(argv,*) ssn
+
+if(ssn.gt.-99.) then
+  sfi = 63.75+ssn*(0.728+ssn*0.000089)
+  ig=(-0.0031*ssn+1.5332)*ssn-11.5634
+  jf(17) = .false.
+  jf(25) = .false.
+  jf(27) = .false.
+  jf(32) = .false.
+else
+  jf(17) = .true.
+  jf(25) = .true.
+  jf(27) = .true.
+  jf(32) = .true.
+endif
+
 iyyyy = ymdhms(1)
 mmdd = ymdhms(2) * 100 + ymdhms(3)
 dhour = ymdhms(4) + ymdhms(5) / 60. + ymdhms(6) / 3600.
@@ -49,6 +67,12 @@ call readapf107
 
 do glat=-90,90
   do glon=-180,180
+
+    OARR(33)=ssn
+    OARR(41)=sfi
+    OARR(46)=sfi
+    OARR(39)=ig
+
     call IRI_SUB(JF,JMAG,glat,glon,IYYYY,MMDD,DHOUR+25., &
       0, 0, 1, &
       OUTF,OARR, datadir)

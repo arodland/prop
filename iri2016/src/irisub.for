@@ -917,7 +917,7 @@ C
         ENDIF
         CALL GEODIP(IYEAR,LATI,LONGI,MLAT,MLONG,JMAG)
 
-        CALL FELDCOF(RYEAR)
+        if((iyear.ne.iyearo).or.(daynr.ne.idaynro)) CALL FELDCOF(RYEAR)
 
         if(jf(18)) then
         	call igrf_dip(lati,longi,ryear,300.0,dec,dip,magbr,modip)
@@ -1178,6 +1178,8 @@ C
           IF(sam_mon.AND.(nmonth.EQ.nmono).and.sam_yea) GOTO 4292
           IF(sam_mon) GOTO 4293
           endif
+      if(sam_mon.AND.(nmonth.EQ.nmono).and.sam_yea) GOTO 4291
+
 
 7797    URSIFO=URSIF2
         WRITE(FILNAM,104) MONTH+10
