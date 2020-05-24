@@ -368,7 +368,7 @@ C       OARR(83) = Kp at current time OARR(84) = magnetic declination
 C       OARR(85) = L-value            OARR(86) = dipole moment
 C       OARR(87) = SAX300             OARR(88) = SUX300
 C      #OARR(89) = HNEA              #OARR(90) = HNEE
-C       OARR(91) = foF2               OARR(91) = foE
+C       OARR(91) = foF2               OARR(92) = foE
 C                # INPUT as well as OUTPUT parameter
 C                $ special for IRIWeb (only place-holders)
 C		for more details got to end of subroutine
