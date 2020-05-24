@@ -78,7 +78,7 @@ do glat=-90,90
       OUTF,OARR, datadir)
  
     ! lat, lon, nmf2, fof2, m(3000), muf(3000), hmf2, foe
-    write(stdout, '(8ES16.8)') glat, glon, oarr(1), oarr(91), oarr(36), oarr(36) * oarr(89), oarr(2), oarr(92)
+    write(stdout, '(8ES16.8)') glat, glon, oarr(1), oarr(91), oarr(36), oarr(36) * oarr(91), oarr(2), oarr(92)
   enddo
 enddo
 
