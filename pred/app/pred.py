@@ -30,7 +30,7 @@ for pt in s['history']:
     sd = cs_to_stdev(cs, adj100=True)
     fof2, mufd, hmf2 = pt[2:5]
 
-    print("%d\t%f\t%f\t%f\t%f\t%d" % (tm, fof2, mufd, hmf2, sd, cs))
+#    print("%d\t%f\t%f\t%f\t%f\t%d" % (tm, fof2, mufd, hmf2, sd, cs))
     x.append(tm / 86400.)
     y_fof2.append(np.log(fof2))
     y_mufd.append(np.log(mufd))

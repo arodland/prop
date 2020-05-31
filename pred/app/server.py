@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, make_response
 
 import os
 import datetime as dt
@@ -10,8 +10,7 @@ import numpy as np
 import george
 from kernel import kernel
 from cs import cs_to_stdev, stdev_to_cs
-
-from pandas.io.json import json_normalize
+import psycopg2
 
 def get_data(url=os.getenv("HISTORY_URI")):
     with urllib.request.urlopen(url) as res:
@@ -21,12 +20,16 @@ def get_data(url=os.getenv("HISTORY_URI")):
 
 app = Flask(__name__)
 
-@app.route("/stations.json", methods=['GET'])
-def stationsjson():
-    ts = request.args.get('time', None)
-    now = dt.datetime.utcnow()
-    if ts is not None:
-        now = dt.datetime.fromtimestamp(float(ts))
+@app.route("/generate", methods=['POST'])
+def generate():
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    con = psycopg2.connect(dsn)
+
+    times = [ dt.datetime.fromtimestamp(float(ts)) for ts in request.form.getlist('target') ]
+    if len(times) == 0:
+        times = [ dt.datetime.utcnow() ]
+
+    run_id = int(request.form.get('run_id', -1))
 
     data = get_data()
 
@@ -65,10 +68,11 @@ def stationsjson():
         y_hmf2 -= mean_hmf2
         sigma = np.array(sigma)
 
+#        gp = george.GP(kernel, solver=george.HODLRSolver, tol=1e-5)
         gp = george.GP(kernel)
         gp.compute(x, 2. * sigma + 1e-4)
 
-        tm = np.array([ time.mktime(now.timetuple()) ])
+        tm = np.array([ time.mktime(ts.timetuple()) for ts in times ])
         pred_fof2, sd_fof2 = gp.predict(y_fof2, tm / 86400., return_var=True)
         pred_fof2 += mean_fof2
         sd_fof2 = sd_fof2**0.5
@@ -79,19 +83,31 @@ def stationsjson():
         pred_hmf2 += mean_hmf2
         sd_hmf2 = sd_hmf2**0.5
 
-        st_out = {
-            "station": copy.copy(station),
-            "cs": stdev_to_cs(sd_mufd[0]),
-            "fof2": round(np.exp(pred_fof2[0]), 2),
-            "mufd": round(np.exp(pred_mufd[0]), 2),
-            "hmf2": round(np.exp(pred_hmf2[0]), 2),
-            "time": now.strftime("%Y-%m-%d %H:%M:%S")
-        }
-        del(st_out["station"]["history"])
+        for i in range(len(times)):
+            with con.cursor() as cur:
+                cur.execute("""
+                insert into prediction (run_id, station_id, time, cs, log_stdev, fof2, mufd, hmf2) 
+                values (%s, %s, %s, %s, %s, %s, %s, %s)
+                on conflict (station_id, run_id, time) do update
+                set cs=excluded.cs, log_stdev=excluded.log_stdev,
+                fof2=excluded.fof2, mufd=excluded.mufd, hmf2=excluded.hmf2
+                """,
+                    (
+                        run_id,
+                        station['id'],
+                        times[i],
+                        stdev_to_cs(sd_mufd[i]),
+                        sd_mufd[i],
+                        np.exp(pred_fof2[i]),
+                        np.exp(pred_mufd[i]),
+                        np.exp(pred_hmf2[i]),
+                    )
+                )
 
-        out.append(st_out)
+        con.commit()
 
-    return jsonify(out)
+
+    return make_response("OK")
 
 if __name__ == "__main__":
-    app.run(debug=False,host='0.0.0.0', port=5000)
+    app.run(debug=False,host='0.0.0.0', port=5000, threaded=False, processes=4)
