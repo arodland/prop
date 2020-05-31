@@ -1,0 +1,3 @@
+requires 'Mojolicious::Lite';
+requires 'Minion';
+requires 'Mojo::Pg';
