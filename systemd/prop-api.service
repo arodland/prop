@@ -1,0 +1,10 @@
+[Unit]
+Description=Prop Current API
+BindsTo=prop-postgres.service
+After=prop-postgres.service
+[Service]
+ExecStart=docker run --rm --name=%N -i --user 1001 --env-file /etc/kc2gprop/db.env -e PORT=4761 -e WORKERS_PER_CORE=0.25 --link prop-postgres:pg -p 4761:4761 prop-api
+ExecStartPost=sleep 2
+ExecStop=docker stop %N
+[Install]
+WantedBy=multi-user.target

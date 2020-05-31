@@ -1,0 +1,10 @@
+[Unit]
+Description=Prop Prediction API
+BindsTo=prop-history.service
+After=prop-history.service
+[Service]
+ExecStart=docker run --rm --name=%N -u 1001 --env-file /etc/kc2gprop/db.env --link prop-history:prophist --link prop-postgres:pg -e HISTORY_URI=http://prophist:5000/history.json?days=14 -p 5001:5000 prop-pred
+ExecStartPost=sleep 2
+ExecStop=docker stop %N
+[Install]
+WantedBy=multi-user.target

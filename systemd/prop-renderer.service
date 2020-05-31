@@ -1,0 +1,10 @@
+[Unit]
+Description=Prop Renderer
+BindsTo=prop-api.service
+After=prop-api.service
+[Service]
+ExecStart=docker run --rm --name=%N -u 1001 --link prop-api:prop-api -e PROP_API=http://prop-api:4761 --mount type=bind,src=/home/prop/output,dst=/output -p 5006:5000 prop-renderer
+ExecStartPost=sleep 2
+ExecStop=docker stop %N
+[Install]
+WantedBy=multi-user.target

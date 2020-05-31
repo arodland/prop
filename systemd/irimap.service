@@ -1,0 +1,10 @@
+[Unit]
+Description=IRI Map Generator
+BindsTo=prop-postgres.service
+After=prop-postgres.service
+[Service]
+ExecStart=docker run --rm --name=%N -u 1001 --env-file /etc/kc2gprop/db.env --link prop-postgres:pg -p 5004:5000 irimap
+ExecStartPost=sleep 2
+ExecStop=docker stop %N
+[Install]
+WantedBy=multi-user.target
