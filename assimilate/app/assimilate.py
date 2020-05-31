@@ -50,10 +50,8 @@ def assimilate(run_id, ts):
         irimodel = spline.Spline(irimap['/maps/' + metric])
         pred = irimodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
 
-        error = pred - df_pred_filtered[metric].values
-
         gp3dmodel = gp3d.GP3D()
-        gp3dmodel.train(df_pred, np.log(df_pred_filtered[metric].values) - np.log(pred))
+        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred))
 
         model = combinators.Product(irimodel, combinators.LogSpace(gp3dmodel))
 
@@ -74,10 +72,8 @@ def assimilate(run_id, ts):
 
         pred_md = pred_mufd / pred_fof2
 
-        error = pred_md - df_pred_filtered[metric].values
-
         gp3dmodel = gp3d.GP3D()
-        gp3dmodel.train(df_pred, np.log(df_pred_filtered[metric].values) - np.log(pred_md))
+        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred_md))
 
         iri_mufd_map = iri_mufd.predict(lat, lon)
         iri_fof2_map = iri_fof2.predict(lat, lon)
