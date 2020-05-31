@@ -88,7 +88,7 @@ def get_data(s, n=1):
             delim_whitespace=True,
             parse_dates=[0],
             names = ['time', 'cs', 'fof2', 'qd1', 'mufd', 'qd2', 'foes', 'qd3', 'foe', 'qd4', 'hmf2', 'qd5', 'tec', 'qd6'])\
-            .assign(station_id=row['id'],source='giro')
+            .assign(station_id=int(row['id']))
         df_list.append(df)
     stationdata=pd.concat(df_list)
     logger.info('{} read_csv complete {}'.format(dt.datetime.now(),s))
@@ -132,7 +132,8 @@ def get_data(s, n=1):
 
     unprocessed.sort_values(by=['time'], inplace=True)
 
-    unprocessed = unprocessed[['time','cs','fof2','fof1','mufd','foes','foe','hf2','he','hme','hmf2','hmf1','yf2','yf1','tec','scalef2','fbes', 'station_id', 'source']]
+    unprocessed = unprocessed[['time','cs','fof2','fof1','mufd','foes','foe','hf2','he','hme','hmf2','hmf1','yf2','yf1','tec','scalef2','fbes', 'station_id']]
+    unprocessed = unprocessed.assign(source='giro')
 
     #logger.info('{} to_sql start {}'.format(dt.datetime.now(),s))
     unprocessed.to_sql('measurement', con=engine, if_exists='append', index=False)
