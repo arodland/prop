@@ -1,0 +1,16 @@
+#!/bin/bash
+
+set -x
+
+docker build --tag iri2016 iri2016
+
+docker build --tag prop-api api
+docker build --tag prop-assimilate assimilate
+docker build --tag prop-essn essn
+docker build --tag prop-history history
+docker build --tag irimap irimap
+docker build --tag prop-pred pred
+docker build --tag prop-renderer render
+docker build --tag prop-scheduler scheduler
+
+docker build --tag noaa-loader noaa-loader
