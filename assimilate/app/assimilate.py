@@ -43,7 +43,7 @@ def assimilate(run_id, ts):
     h5.create_dataset('/stationdata/pred', data=df_pred.to_json(orient='records', date_format='iso'))
 
     for metric in ["fof2", "hmf2"]:
-        df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric])
+        df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
         print(metric, "df:", len(df_pred_filtered.index))
 
@@ -62,7 +62,7 @@ def assimilate(run_id, ts):
         h5.create_dataset('/maps/' + metric, data=assimilated, compression='gzip', scaleoffset=3)
 
     for metric in ["md"]:
-        df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric])
+        df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
         print(metric, "df:", len(df_pred_filtered.index))
 
