@@ -1,0 +1,11 @@
+FROM iri2016 AS essn
+RUN apt-get update && apt-get install -y python3 python3-dateutil python3-xarray python3-sklearn python3-pip python3-sympy python3-pybind11 cython3 git dumb-init
+WORKDIR /src
+COPY requirements.txt ./
+RUN pip3 install -r requirements.txt
+# wmm2015 does a build-on-first-use thing...
+RUN python3 -c 'import wmm2015' 
+COPY irimap.py ./
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
+CMD python3 /src/irimap.py

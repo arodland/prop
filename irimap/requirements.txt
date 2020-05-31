@@ -1,0 +1,5 @@
+igrf12==1.3.6
+wmm2015==1.0.2
+psycopg2-binary==2.8.5
+h5py==2.10.0
+Flask==1.1.2
