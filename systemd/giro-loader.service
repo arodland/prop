@@ -1,0 +1,7 @@
+[Unit]
+Description=GIRO Data Loader
+BindsTo=prop-postgres.service
+After=prop-postgres.service
+[Service]
+ExecStart=docker run --rm --name=%N -u 1001 --env-file /etc/kc2gprop/db.env --link prop-postgres:pg giro-loader
+ExecStop=docker stop %N
