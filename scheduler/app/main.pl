@@ -41,8 +41,33 @@ sub target_times {
       dots => 'curr',
     },
     {
+      name => '1h',
+      target_time => $run_time + 300 + 1*3600,
+      dots => 'pred',
+    },
+    {
+      name => '2h',
+      target_time => $run_time + 300 + 2*3600,
+      dots => 'pred',
+    },
+    {
+      name => '3h',
+      target_time => $run_time + 300 + 3*3600,
+      dots => 'pred',
+    },
+    {
+      name => '4h',
+      target_time => $run_time + 300 + 4*3600,
+      dots => 'pred',
+    },
+    {
+      name => '5h',
+      target_time => $run_time + 300 + 5*3600,
+      dots => 'pred',
+    },
+    {
       name => '6h',
-      target_time => $run_time + 21900,
+      target_time => $run_time + 300 + 6*3600,
       dots => 'pred',
     },
   )
@@ -181,5 +206,6 @@ if ($child) {
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
+  $worker->status->{jobs} = 4;
   $worker->run;
 }
