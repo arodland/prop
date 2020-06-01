@@ -6,7 +6,7 @@ sub register {
 
   $app->minion->add_task(rendersvg => sub {
       my ($job, %args) = @_;
-      my $res = Mojo::UserAgent->new->inactivity_timeout(300)->post('http://prop-renderer:5000/rendersvg', =>
+      my $res = Mojo::UserAgent->new->inactivity_timeout(300)->post("http://localhost:$ENV{RENDERER_PORT}/rendersvg", =>
         form => \%args,
       )->result;
       $res->is_success or die $res->error . "\n" . $res->body;
@@ -14,7 +14,7 @@ sub register {
 
   $app->minion->add_task(renderhtml => sub {
       my ($job, %args) = @_;
-      my $res = Mojo::UserAgent->new->inactivity_timeout(300)->post('http://prop-renderer:5000/renderhtml', =>
+      my $res = Mojo::UserAgent->new->inactivity_timeout(300)->post("http://localhost:$ENV{RENDERER_PORT}/renderhtml", =>
         form => \%args,
       )->result;
       $res->is_success or die $res->error . "\n" . $res->body;

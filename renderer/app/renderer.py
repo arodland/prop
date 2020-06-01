@@ -75,7 +75,7 @@ if __name__ == '__main__':
         pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
         out_path = '%s/%s-%s-%s' % (job_path, metric, format, name)
 
-        h5 = get_dataset('%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('PROP_API'), run_id, ts))
+        h5 = get_dataset('http://localhost:%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
         draw_map(
             out_path = out_path,
@@ -100,4 +100,4 @@ if __name__ == '__main__':
 
         return make_response("OK\n")
 
-    app.run(debug=False, host='0.0.0.0', port=5000, threaded=False, processes=4)
+    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=4)

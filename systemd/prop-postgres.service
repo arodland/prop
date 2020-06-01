@@ -1,11 +1,13 @@
 [Unit]
 Description=Prop Postgres
-BindsTo=docker.service
-After=docker.service
+BindsTo=prop-podman-pod.service
+After=prop-podman-pod.service
 [Service]
 StateDirectory=prop-postgres
-ExecStart=docker run --rm --name=%N --env-file /etc/kc2gprop/postgres.env -p 5432:5432 --mount type=bind,src=/var/lib/prop-postgres,dst=/var/lib/postgresql/data postgres:12 postgres
-ExecStartPost=/usr/bin/sleep 5
-ExecStop=docker stop %N
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --env-file /etc/kc2gprop/postgres.env --mount type=bind,src=/var/lib/prop-postgres,dst=/var/lib/postgresql/data postgres:12 postgres
+ExecStop=/usr/bin/podman stop %N
+KillMode=none
+Restart=on-failure
 [Install]
-WantedBy=multi-user.target
+WantedBy=kc2gprop.target

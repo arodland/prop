@@ -10,4 +10,4 @@ RUN cpm install -g
 COPY ./app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
-CMD perl -I/app/lib /app/main.pl daemon -l http://*:5000
+CMD perl -I/app/lib /app/main.pl daemon -l "http://*:$SCHEDULER_PORT"

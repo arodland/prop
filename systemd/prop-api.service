@@ -1,10 +1,12 @@
 [Unit]
 Description=Prop Current API
-BindsTo=prop-postgres.service
-After=prop-postgres.service
+BindsTo=prop-podman-pod.service prop-postgres.service
+After=prop-podman-pod.service prop-postgres.service
 [Service]
-ExecStart=docker run --rm --name=%N -i --user 1001 --env-file /etc/kc2gprop/db.env -e PORT=4761 -e WORKERS_PER_CORE=0.25 --link prop-postgres:pg -p 4761:4761 prop-api
-ExecStartPost=sleep 2
-ExecStop=docker stop %N
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env -e WORKERS_PER_CORE=0.25 prop-api
+ExecStop=/usr/bin/podman stop %N
+KillMode=none
+Restart=on-failure
 [Install]
-WantedBy=multi-user.target
+WantedBy=kc2gprop.target

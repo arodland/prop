@@ -169,7 +169,7 @@ def generate_essn(run_id, series):
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg2.connect(dsn)
 
-    with urllib.request.urlopen(os.getenv("HISTORY_URI")) as res:
+    with urllib.request.urlopen('http://localhost:%s/history.json?days=2' % (os.getenv('HISTORY_PORT'))) as res:
         data = json.loads(res.read().decode())
 
     data = [ station for station in data if station['use_for_essn'] == 1 ]
@@ -220,4 +220,4 @@ if __name__ == '__main__':
 
         return jsonify(generate_essn(run_id, series))
 
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ESSN_PORT')))

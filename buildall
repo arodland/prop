@@ -1,16 +1,17 @@
 #!/bin/bash
 
-set -x
+set -e
 
-docker build --tag iri2016 iri2016
+podman build --tag iri2016 iri2016
 
-docker build --tag prop-api api
-docker build --tag prop-assimilate assimilate
-docker build --tag prop-essn essn
-docker build --tag prop-history history
-docker build --tag irimap irimap
-docker build --tag prop-pred pred
-docker build --tag prop-renderer render
-docker build --tag prop-scheduler scheduler
+podman build --tag prop-api api
+podman build --tag prop-assimilate assimilate
+podman build --tag prop-essn essn
+podman build --tag prop-history history
+podman build --tag irimap irimap
+podman build --tag prop-pred pred
+podman build --tag prop-renderer renderer
+podman build --tag prop-scheduler scheduler
 
-docker build --tag noaa-loader noaa-loader
+podman build --tag noaa-loader noaa-loader
+podman build --tag giro-loader giro-loader
