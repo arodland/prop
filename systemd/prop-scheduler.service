@@ -4,7 +4,7 @@ BindsTo=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.s
 After=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.service prop-pred.service prop-assimilate.service prop-renderer.service
 [Service]
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
-ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-scheduler
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env --mount type=bind,src=/home/prop/output,dst=/output prop-scheduler
 ExecStop=/usr/bin/podman stop %N
 KillMode=none
 Restart=on-failure
