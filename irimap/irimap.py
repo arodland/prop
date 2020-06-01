@@ -103,4 +103,4 @@ if __name__ == '__main__':
 
         return make_response("OK\n")
 
-    app.run(debug=False, host='0.0.0.0', port=5000, threaded=False, processes=4)
+    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('IRIMAP_PORT')), threaded=False, processes=4)

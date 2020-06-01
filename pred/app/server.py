@@ -12,7 +12,7 @@ from kernel import kernel
 from cs import cs_to_stdev, stdev_to_cs
 import psycopg2
 
-def get_data(url=os.getenv("HISTORY_URI")):
+def get_data(url):
     with urllib.request.urlopen(url) as res:
         data = json.loads(res.read().decode())
 
@@ -31,7 +31,7 @@ def generate():
 
     run_id = int(request.form.get('run_id', -1))
 
-    data = get_data()
+    data = get_data('http://localhost:%s/history.json?days=14' % (os.getenv('HISTORY_PORT')))
 
     out = []
 
@@ -110,4 +110,4 @@ def generate():
     return make_response("OK")
 
 if __name__ == "__main__":
-    app.run(debug=False,host='0.0.0.0', port=5000, threaded=False, processes=4)
+    app.run(debug=False,host='0.0.0.0', port=int(os.getenv('PRED_PORT')), threaded=False, processes=4)

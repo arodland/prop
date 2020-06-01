@@ -14,13 +14,13 @@ import psycopg2
 from flask import Flask, request, make_response
 
 def get_current():
-    return jsonapi.get_data(os.getenv("PROP_API") + '/stations.json')
+    return jsonapi.get_data('http://localhost:%s/stations.json' % os.getenv('API_PORT'))
 
 def get_pred(run_id, ts):
-    return jsonapi.get_data(os.getenv("PROP_API") + "/pred.json?run_id=%d&ts=%d" % (run_id, ts))
+    return jsonapi.get_data('http://localhost:%s/pred.json?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
 def get_irimap(run_id, ts):
-    return hdf5.get_data(os.getenv("PROP_API") + "/irimap.h5?run_id=%d&ts=%d" % (run_id, ts))
+    return hdf5.get_data('http://localhost:%s/irimap.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
 def assimilate(run_id, ts):
     df_cur = get_current()
@@ -115,4 +115,4 @@ if __name__ == '__main__':
 
         return make_response("OK\n")
 
-    app.run(debug=False, host='0.0.0.0', port=5000, threaded=False, processes=4)
+    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ASSIMILATE_PORT')), threaded=False, processes=4)

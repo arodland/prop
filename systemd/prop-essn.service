@@ -1,10 +1,12 @@
 [Unit]
 Description=Prop eSSN API
-BindsTo=prop-history.service prop-postgres.service
-After=prop-history.service prop-postgres.service
+BindsTo=prop-history.service prop-podman-pod.service prop-postgres.service
+After=prop-history.service prop-podman-pod.service prop-postgres.service
 [Service]
-ExecStart=docker run --rm --name=%N -u 1001 --env-file /etc/kc2gprop/db.env --link prop-history:prophist --link prop-postgres:pg -e HISTORY_URI=http://prophist:5000/history.json?days=2 -p 5003:5000 prop-essn
-ExecStartPost=sleep 2
-ExecStop=docker stop %N
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-essn
+ExecStop=/usr/bin/podman stop %N
+KillMode=none
+Restart=on-failure
 [Install]
-WantedBy=multi-user.target
+WantedBy=kc2gprop.target

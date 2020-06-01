@@ -1,9 +1,12 @@
 [Unit]
 Description=Prop Scheduler
-BindsTo=prop-postgres.service prop-essn.service prop-pred.service prop-assimilate.service prop-renderer.service
-After=prop-postgres.service prop-essn.service prop-pred.service prop-assimilate.service prop-renderer.service
+BindsTo=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.service prop-pred.service prop-assimilate.service prop-renderer.service
+After=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.service prop-pred.service prop-assimilate.service prop-renderer.service
 [Service]
-ExecStart=docker run --rm --name=%N -i --user 1001 --env-file /etc/kc2gprop/db.env --link prop-postgres:pg --link prop-essn:prop-essn --link irimap:irimap --link prop-pred:prop-pred --link prop-assimilate:prop-assimilate --link prop-renderer:prop-renderer -p 5002:5000 prop-scheduler
-ExecStop=docker stop %N
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-scheduler
+ExecStop=/usr/bin/podman stop %N
+KillMode=none
+Restart=on-failure
 [Install]
-WantedBy=multi-user.target
+WantedBy=kc2gprop.target

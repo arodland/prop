@@ -1,7 +1,12 @@
 [Unit]
 Description=NOAA Data Loader
-BindsTo=prop-postgres.service
-After=prop-postgres.service
+BindsTo=prop-podman-pod.service prop-postgres.service
+After=prop-podman-pod.service prop-postgres.service
 [Service]
-ExecStart=docker run --rm --name=%N -u 1002 --env-file /etc/kc2gprop/db.env --link prop-postgres:pg --mount type=bind,src=/home/noaa-iono/noaa-data,dst=/noaa-data noaa-loader
-ExecStop=docker stop %N
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1002 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env --mount type=bind,src=/home/noaa-iono/noaa-data,dst=/noaa-data noaa-loader
+ExecStop=/usr/bin/podman stop %N
+KillMode=none
+Restart=on-failure
+[Install]
+WantedBy=kc2gprop.target
