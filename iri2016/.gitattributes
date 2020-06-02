@@ -1,4 +1,7 @@
 src/* linguist-vendored
+iri_opt.F90 linguist-vendored=false
+iri_ts.F90 linguist-vendored=false
+irimap.F90 linguist-vendored=false
 
 .gitattributes text eol=lf
 .gitignore text eol=lf
