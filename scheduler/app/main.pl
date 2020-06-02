@@ -18,6 +18,7 @@ plugin 'Task::Pred';
 plugin 'Task::IRIMap';
 plugin 'Task::Assimilate';
 plugin 'Task::Render';
+plugin 'Task::Cleanup';
 
 sub next_run {
   my $INTERVAL = 900; # 15 minutes
@@ -117,13 +118,16 @@ sub queue_job {
     },
   );
 
+  my $run_id = $essn_24h;
+  app->pg->db->query('insert into runs (id, started, state) values (?, to_timestamp(?), ?)',
+    $run_id, time(), 'created'
+  );
+
   my $essn_6h = app->minion->enqueue('essn',
     [
       series => '6h',
     ],
   );
-
-  my $run_id = $essn_24h;
 
   my @target_times = target_times($run_time);
 
@@ -181,10 +185,23 @@ sub queue_job {
     },
   );
 
+  app->minion->enqueue('cleanup');
+
   if ($resched) {
     my ($next, $wait) = next_run();
     Mojo::IOLoop->timer($wait => sub { queue_job($next, 1) });
   }
+}
+
+sub next_cleanup {
+  my $INTERVAL = 3600; # 1 hour
+  my $LEAD = 780; # Run at :47
+
+  my $now = time;
+  my $prev = $now - (($now + $LEAD) % $INTERVAL);
+  my $next = $prev + $INTERVAL;
+  my $wait = $next - $now;
+  return ($next, $wait);
 }
 
 my $child = fork;
@@ -201,7 +218,13 @@ if ($child) {
   get '/run_now' => sub {
     my $c = shift;
     queue_job(time, 0);
-    $c->render(text => "OK");
+    $c->render(text => "OK\n");
+  };
+
+  get '/cleanup_now' => sub {
+    my $c = shift;
+    app->minion->enqueue('cleanup');
+    $c->render(text => "OK\n");
   };
 
   app->start;

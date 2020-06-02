@@ -18,6 +18,10 @@ sub register {
         form => \%args,
       )->result;
       $res->is_success or die $res->error . "\n" . $res->body;
+
+      $app->pg->db->query('update runs set state=?, ended=to_timestamp(?) where id=?',
+        'finished', time(), $args{run_id},
+      );
   });
 }
 
