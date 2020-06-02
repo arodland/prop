@@ -25,7 +25,7 @@ def filter_data(df, metric, ts):
 
     return df
 
-def draw_map(out_path, dataset, metric, ts, format, dots):
+def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     tm = datetime.fromtimestamp(ts, timezone.utc)
 
     plt = plot.Plot(metric, tm, decorations=(False if format=='bare' else True))
@@ -54,10 +54,15 @@ def draw_map(out_path, dataset, metric, ts, format, dots):
     if format != 'bare':
         plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
 
-    plt.write(out_path + '.svg')
+    if 'svg' in file_formats:
+        plt.write(out_path + '.svg')
+        subprocess.run(['/usr/local/bin/svgo', '--multipass', out_path + '.svg'], check=True)
 
-    subprocess.run(['/usr/local/bin/svgo', '--multipass', out_path + '.svg'], check=True)
-    plt.write(out_path + '.png')
+    if 'png' in file_formats:
+        plt.write(out_path + '.png')
+
+    if 'jpg' in file_formats:
+        plt.write(out_path + '.jpg')
 
 if __name__ == '__main__':
     app = Flask(__name__)
@@ -70,6 +75,7 @@ if __name__ == '__main__':
         name = request.form['name']
         format = request.form['format']
         dots = request.form['dots']
+        file_formats = request.form.getlist('file_format')
 
         job_path = '/output/%d' % (run_id)
         pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
@@ -83,6 +89,7 @@ if __name__ == '__main__':
             metric = metric,
             ts = ts,
             format = format,
+            file_formats = file_formats,
             dots = dots,
         )
 

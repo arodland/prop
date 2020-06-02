@@ -88,6 +88,11 @@ sub make_maps {
           name   => $args{name},
           format => $format,
           dots   => $args{dots},
+          file_format => (
+            $format eq 'bare'
+            ? ['jpg']
+            : ['svg','png']
+          ),
         ],
         {
           parents => $args{parents},
