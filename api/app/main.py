@@ -90,14 +90,13 @@ class PredictionSchema(ma.ModelSchema):
     station = fields.Nested('StationSchema', only=['name', 'id', 'code', 'longitude', 'latitude'])
 
 prediction_schema = PredictionSchema()
-predictionss_schema = PredictionSchema(many=True)
+predictions_schema = PredictionSchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
 #Returns latest measurements for all stations in JSON
 @app.route("/stations.json" , methods=['GET'])
 def stationsjson():
-
     qry = db.session.query(Measurement).from_statement(
             "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc")
 
@@ -113,15 +112,32 @@ def predjson():
     ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
 
     qry = db.session.query(Measurement).from_statement(
-            "select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc").params(
-                    run_id = run_id,
-                    ts = ts,
-            )
+        "select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc").params(
+            run_id = run_id,
+            ts = ts,
+        )
     db.session.close()
     
-    result = predictionss_schema.dump(qry)
+    result = predictions_schema.dump(qry)
 
     return jsonify(result.data)
+
+@app.route("/essn.json", methods=['GET'])
+def essnjson():
+    days = request.args.get('days', 7)
+
+    with db.engine.connect() as conn:
+        res = conn.execute(
+            text("select extract(epoch from time) as time, series, ssn, sfi, err from essn where time >= now() - :days * interval '1 day' order by time asc").\
+                bindparams(days=days).\
+                columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
+        )
+        rows = list(res.fetchall())
+        series = {}
+        series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '24h' ]
+        series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '6h' ]
+
+        return jsonify(series)
 
 @app.route("/irimap.h5", methods=['GET'])
 def irimap():
