@@ -1,0 +1,6 @@
+*.pl linguist-language=Perl
+*.pm linguist-language=Perl
+*.t linguist-language=Perl
+*.f90 linguist-language=Fortran
+*.F90 linguist-language=Fortran
+*.for linguist-language=Fortran
