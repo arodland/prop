@@ -1,9 +1,14 @@
 #!/usr/bin/perl
 use Mojolicious::Lite;
 use Mojo::IOLoop;
+use Mojo::Pg;
+
+helper pg => sub {
+  state $pg = Mojo::Pg->new("postgresql://$ENV{DB_USER}:$ENV{DB_PASSWORD}\@$ENV{DB_HOST}/$ENV{DB_NAME}");
+};
 
 plugin 'Minion' => {
-  Pg => "postgresql://$ENV{DB_USER}:$ENV{DB_PASSWORD}\@$ENV{DB_HOST}/$ENV{DB_NAME}",
+  Pg => app->pg,
 };
 
 plugin 'Minion::Admin';
@@ -13,12 +18,6 @@ plugin 'Task::Pred';
 plugin 'Task::IRIMap';
 plugin 'Task::Assimilate';
 plugin 'Task::Render';
-
-app->minion->add_task(hello => sub {
-    my ($job, $pid) = @_;
-    $job->app->log->info("Hello from $pid");
-  }
-);
 
 sub next_run {
   my $INTERVAL = 900; # 15 minutes
