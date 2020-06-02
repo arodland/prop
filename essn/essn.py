@@ -18,8 +18,6 @@ import psycopg2
 
 from flask import Flask, request, jsonify
 
-now = datetime.utcnow()
-
 def station_weight(station, tm):
     hour = float(tm.hour) + float(tm.minute) / 60. + float(tm.second) / 3600.
     local_time = (hour + float(station['longitude']) / 15.) % 24.
@@ -40,7 +38,7 @@ tukey_int = interpolate.interp1d(
     windows.tukey(2501, alpha=0.08),
 )
 
-def recency_weight(tm, recency):
+def recency_weight(tm, now, recency):
     delta = now - tm
     hours = delta / timedelta(hours=1)
 
@@ -88,7 +86,7 @@ def get_pred(params):
                 #  0    1    2     3    4    5     6     7 
 
 def station_err(x):
-    station, ssn, recency = x
+    station, ssn, recency, now = x
 
     station_total = 0.0
     station_tw = 0.0
@@ -117,7 +115,7 @@ def station_err(x):
         err /= stdev
 
         sw = station_weight(station, tm)
-        rw = recency_weight(tm, recency)
+        rw = recency_weight(tm, now, recency)
         weight = sw * rw
 
         station_total += err * weight
@@ -130,23 +128,23 @@ def station_err(x):
         return (0,0)
 
 
-def err(ssn, data, recency):
+def err(ssn, data, recency, now):
     total = 0.0
     total_weight = 0.0
 
-    results = pred_pool.imap_unordered(station_err, [ (station, ssn, recency) for station in data ])
+    results = pred_pool.imap_unordered(station_err, [ (station, ssn, recency, now) for station in data ])
     for result in results:
         total += result[0]
         total_weight += result[1]
 
     return total / total_weight
 
-def log_err(ssn, recency):
+def log_err(now, ssn, recency):
     epoch = now.strftime("%s")
 
     fh = open("/errlog.txt", "a+")
 
-    results = pred_pool.imap(station_err, [ (station, ssn, recency) for station in data ])
+    results = pred_pool.imap(station_err, [ (station, ssn, recency, now) for station in data ])
     for i, (station_score, station_weight) in enumerate(results):
         station = data[i]
         if station_weight > 0:
@@ -164,6 +162,7 @@ def make_map(ssn):
 
 
 def generate_essn(run_id, series):
+    now = datetime.utcnow()
     recency = True if series == '6h' else False
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
@@ -191,10 +190,9 @@ def generate_essn(run_id, series):
             record.append(datetime.strftime(record[5], '%Y %m %d %H %M %S'))
 
 
-    res = minimize_scalar(err, args=(data, recency), bounds=(-20.0, 200.0), method='Bounded', options={'xatol':0.01, 'maxiter': 1000})
+    res = minimize_scalar(err, args=(data, recency, now), bounds=(-20.0, 200.0), method='Bounded', options={'xatol':0.01, 'maxiter': 1000})
     ssn = res.x
     sfi = 63.75 + ssn * (0.728 + ssn*0.000089)
-    print("%s\t%f\t%f\t%f\t%f" % (now.strftime("%s"), sfi, ssn, res.fun, err(-100.0, data, recency)))
 
     cur = con.cursor()
 
