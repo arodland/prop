@@ -3,6 +3,8 @@ use Mojolicious::Lite;
 use Mojo::IOLoop;
 use Mojo::Pg;
 
+app->secrets([$ENV{MOJO_SECRET}]);
+
 helper pg => sub {
   state $pg = Mojo::Pg->new("postgresql://$ENV{DB_USER}:$ENV{DB_PASSWORD}\@$ENV{DB_HOST}/$ENV{DB_NAME}");
 };
