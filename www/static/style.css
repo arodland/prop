@@ -1,0 +1,45 @@
+form {
+  margin-bottom: 0;
+}
+
+nav {
+  background-color: #888;
+  color: white;
+  padding: 1em;
+  margin-bottom: 1em;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  margin-right: 1em;
+}
+
+nav span.heading {
+  color: white;
+  text-decoration: none;
+  margin-right: 1em;
+  font-weight: bold;
+}
+
+form div {
+  width: 360px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+form div input, form div select {
+  float: right;
+}
+
+img.big {
+  width: 100%;
+  max-height: 85vh;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+footer {
+  text-align: right;
+}

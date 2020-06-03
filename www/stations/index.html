@@ -1,0 +1,88 @@
+<!doctype html>
+
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script type="text/javascript" src="//code.jquery.com/jquery-3.3.1.js"></script>
+
+<link rel="stylesheet" type="text/css" href="//cdn.datatables.net/v/dt/dt-1.10.18/cr-1.5.0/r-2.2.2/datatables.min.css"/>
+ 
+<script type="text/javascript" src="//cdn.datatables.net/v/dt/dt-1.10.18/cr-1.5.0/r-2.2.2/datatables.min.js"></script>
+
+<link rel="stylesheet" type="text/css" href="/static/style.css" />
+
+<title>GIRO Station Data</title>
+
+</head>
+
+<body>
+  <!--#include virtual="/nav-header.html" -->
+ <div>
+      <table id="stations" class="display compact nowrap row-border" cellspacing="0" style="width:100%">
+        <thead>
+            <tr>
+                <th data-priority="1">Station</th>
+                <th data-priority="2">Time</th>
+                <th>MUFD</th>
+                <th>M(D)</th>
+                <th>TEC</th>
+                <th>foF2</th>
+                <th>hmF2</th>
+                <th>foE</th>
+                <th>Confidence</th>
+                <th>Longitude</th>
+                <th>Latitude</th>
+                </tr>
+        </thead>
+    </table>
+</div>
+</p>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('a[data-toggle="tab"]').on( 'shown.bs.tab', function (e) {
+        $.fn.dataTable.tables( {visible: true, api: true} ).columns.adjust();
+    } );
+    var table = $('#stations').DataTable( {
+        "ajax": {'url': document.location.protocol + '//' + document.location.host + '/api/stations.json', "dataSrc":""} ,
+        // "data": tableData,
+        //"paging": false,
+        //"bFilter": false,
+        "bPaginate": false,
+        //"lengthMenu": [20, 40, 60, 80, 100],
+        //"pageLength": 20,
+        "colReorder": true,
+        //"stateSave": true,
+        "responsive": true,
+        "order": [[ 1, "desc" ]],
+        //"scrollX": false,
+        //"scrollY":        500,
+        //"deferRender":    true,
+        //"scroller":       true,
+        //"scrollY":        "400px",
+        //"scrollCollapse": true,
+        "columns": [
+            { "data": "station.name" },
+            { "data": "time" },
+            { "data": "mufd" },
+            { "data": "md" },
+            { "data": "tec" },
+            { "data": "fof2" },
+            { "data": "hmf2" },
+            { "data": "foe" },
+            { "data": "cs" },
+            { "data": "station.longitude" },
+            { "data": "station.latitude" }
+        ]
+    } );
+    setInterval( function () {
+        console.log('reload table');
+        table.ajax.reload( null, false ); // user paging is not reset on reload
+    }, 60000 );
+    } );
+</script>
+  <!--#include virtual="/footer.html" -->
+</body>
+</html>

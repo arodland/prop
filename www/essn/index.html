@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="refresh" content="300">
+    <meta charset="UTF-8">
+    <meta name="google-site-verification" content="X-bx2byWLazwRQ10DM7uW8RyLibUG-Mb8X6Om8c24FY" />
+		<link rel="stylesheet" type="text/css" href="/static/style.css" />
+    <title>Effective Solar Flux / Effective Sunspot Number</title>
+    <script src="/static/plotly-latest.min.js"></script>
+	</head>
+	<body>
+  <!--#include virtual="/nav-header.html" -->
+  <div id="essn-chart" style="width: 75vw; height: 50vw; max-height: 75vh">
+  </div>
+  <script type="text/javascript">
+    div = document.getElementById("essn-chart");
+    xhr = new XMLHttpRequest();
+    xhr.addEventListener('load', function(e) {
+      var data = JSON.parse(xhr.responseText);
+      var x_6h = data['6h'].map(function(row) { return new Date(row.time*1000) });
+      var sfi_6h = data['6h'].map(function(row) { return row.sfi });
+      var ssn_6h = data['6h'].map(function(row) { return row.ssn });
+
+      var x_24h = data['24h'].map(function(row) { return new Date(row.time*1000) });
+      var sfi_24h = data['24h'].map(function(row) { return row.sfi });
+      var ssn_24h = data['24h'].map(function(row) { return row.ssn });
+
+      var plots = [
+        {
+          'name': 'SFI 6h',
+          'legendgroup': 'sfi',
+          'type': 'scatter',
+          'x': x_6h,
+          'y': sfi_6h,
+          'hovertemplate': '%{y:.2f}',
+        },
+        {
+          'name': 'SFI 24h',
+          'legendgroup': 'sfi',
+          'type': 'scatter',
+          'x': x_24h,
+          'y': sfi_24h,
+          'hovertemplate': '%{y:.2f}',
+        },
+        {
+          'name': 'SSN 6h',
+          'legendgroup': 'ssn',
+          'type': 'scatter',
+          'x': x_6h,
+          'y': ssn_6h,
+          'hovertemplate': '%{y:.2f}',
+          'visible': 'legendonly',
+        },
+        {
+          'name': 'SSN 24h',
+          'legendgroup': 'ssn',
+          'type': 'scatter',
+          'x': x_24h,
+          'y': ssn_24h,
+          'hovertemplate': '%{y:.2f}',
+          'visible': 'legendonly',
+        }
+      ]
+
+      Plotly.newPlot(div, plots, {'title': 'eSFI', 'autosize': true});
+      div.on('plotly_legendclick', function(data) {
+        var turnOn = [];
+        var turnOff = [];
+        var group = data.data[data.curveNumber].legendgroup;
+        for (var i = 0 ; i < data.data.length ; i++) {
+          if (data.data[i].legendgroup == group) {
+            turnOn.push(i);
+          } else {
+            turnOff.push(i);
+          }
+        }
+
+        Plotly.restyle(div, {'visible': true}, turnOn);
+        Plotly.restyle(div, {'visible': 'legendonly'}, turnOff);
+        return false;
+      });
+    });
+    window.onresize = function() {
+      Plotly.Plots.resize(div);
+    };
+    xhr.open("GET", "/api/essn.json");
+    xhr.send();
+  </script>
+  <!--#include virtual="/footer.html" -->
+  </body>
+</html>
