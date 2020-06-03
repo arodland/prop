@@ -11,6 +11,8 @@ plugin 'Minion' => {
   Pg => app->pg,
 };
 
+app->minion->missing_after(120);
+
 plugin 'Minion::Admin';
 
 plugin 'Task::eSSN';
@@ -229,10 +231,10 @@ if ($child) {
 
   app->start;
 } else {
-
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
   $worker->status->{jobs} = 4;
+  $worker->status->{heartbeat_interval} = 30;
   $worker->run;
 }
