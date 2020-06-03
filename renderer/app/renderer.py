@@ -64,6 +64,10 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     if 'jpg' in file_formats:
         plt.write(out_path + '.jpg')
 
+    if 'station_json' in file_formats and dotjson is not None:
+        with open(out_path + '_station.json', 'w') as f:
+            dot_df.to_json(f, orient='records')
+
 if __name__ == '__main__':
     app = Flask(__name__)
 
