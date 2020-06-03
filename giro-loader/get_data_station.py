@@ -94,50 +94,27 @@ def get_data(s, n=1):
     logger.info('{} read_csv complete {}'.format(dt.datetime.now(),s))
     stationdata = stationdata[['station_id', 'time', 'cs', 'fof2', 'mufd', 'foes', 'foe', 'hmf2', 'tec']]
 
-    #logger.info('{} getting processed records for {} from {} to {}'.format(dt.datetime.now(),s, fromDate, toDate))
-    processed = pd.read_sql("SELECT * FROM measurement WHERE station_id = '{}' ORDER BY time DESC LIMIT 100".format(ss), con)
-
     stationdata.cs = stationdata.cs.astype(str)
     stationdata = stationdata[stationdata.cs.str.contains("No") == False]
-
-    #added processing 
-
-    #get same datatypes before concat
-    processed[['time']] = processed[['time']].apply(pd.to_datetime)
     stationdata[['time']] = stationdata[['time']].apply(pd.to_datetime)
 
-    logger.info('{} row count: stationdata {} processed {}'.format(s, len(stationdata), len(processed)))
-    concatted = pd.concat([processed,stationdata], ignore_index=True, sort=False).drop_duplicates(subset=['station_id', 'time'])
-    concatted = concatted[pd.isnull(concatted['id'])]
-    #logger.info ('row count: combined {}'.format(concatted.count()))
-
-    #to shift 0 to 360 to -180 to 180 values for correct mapping, sun altitude
-    stationdf.loc[stationdf.longitude > 180, 'longitude'] = stationdf.longitude - 360
-
-    #merge to get station data
-    stationdf.reset_index(inplace=True)
-    concatted['station_id'] = concatted['station_id'].astype(int)
-    unprocessed = stationdf.merge(concatted, left_on='id', right_on='station_id', how='right')
-
     #set --- to nan
-    unprocessed = unprocessed.applymap(lambda x: None if type(x) is str and x == '---' else x)
+    stationdata = stationdata.applymap(lambda x: None if type(x) is str and x == '---' else x)
 
     #filter out errors
-    #unprocessed = unprocessed[unprocessed.time != 'ERROR:']
+    stationdata[['time']] = stationdata[['time']].apply(pd.to_datetime)
 
-    #unprocessed[['mufd']] = unprocessed[['mufd']].apply(pd.to_numeric)
-    unprocessed[['time']] = unprocessed[['time']].apply(pd.to_datetime)
-    unprocessed.longitude = unprocessed.longitude.astype(float)
-    unprocessed.latitude = unprocessed.latitude.astype(float)
+    stationdata.sort_values(by=['time'], inplace=True)
 
-    unprocessed.sort_values(by=['time'], inplace=True)
+    stationdata = stationdata[['station_id', 'time','cs','fof2','mufd','foes','foe','hmf2','tec']]
+    stationdata = stationdata.assign(source='giro')
 
-    unprocessed = unprocessed[['time','cs','fof2','fof1','mufd','foes','foe','hf2','he','hme','hmf2','hmf1','yf2','yf1','tec','scalef2','fbes', 'station_id']]
-    unprocessed = unprocessed.assign(source='giro')
-
-    #logger.info('{} to_sql start {}'.format(dt.datetime.now(),s))
-    unprocessed.to_sql('measurement', con=engine, if_exists='append', index=False)
-    #logger.info('{} to_sql complete {}'.format(dt.datetime.now(), s))
-    #print ('complete {} {} new records'.format(s, len(unprocessed.index)))
+    with engine.connect() as conn:
+        with conn.begin():
+            for n, row in stationdata.iterrows():
+                conn.execute(
+                    "insert into measurement (station_id, time, cs, fof2, mufd, foes, foe, hmf2, tec, source) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) on conflict do nothing",
+                    tuple(row.array)
+                )
 
 #get_data(sys.argv[1])
