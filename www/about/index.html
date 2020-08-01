@@ -9,8 +9,97 @@
 	</head>
 	<body>
   <!--#include virtual="/nav-header.html" -->
+  <h2 id="what">What is it?</h2>
   <p>
-  TBD
+  prop.kc2g.com provides near-realtime maps and data about ionospheric conditions, for the use of amateur radio operators.
+  </p>
+
+  <h2 id="data">Where does teh data come from?</h2>
+  <p>
+  The near-real-time ionospheric data that powers the site is collected by ionosondes (ionospheric radars) around the world, and compiled by the
+  <a href="https://www.ngdc.noaa.gov/stp/IONO/rt-iono/">NOAA National Centers for Environmental Information</a> and the 
+  <a href="http://giro.uml.edu/">Lowell Global Iosnopheric Radio Observatory</a> (GIRO).
+  </p>
+  <p>
+  The ionospheric phyiscal model for the "IRI" plots is the <a href="http://irimodel.org/">International Reference
+    Ionosphere</a> 2016, produced by a joint task group of the <a href="https://cosparhq.cnes.fr/">Committee on Space
+    Research (COSPAR)</a> and <a href="http://www.ursi.org/">International Union of Radio Science (URSI)</a>.
+  </p>
+  <h2 id="who">Who else is responsible?</h2>
+  <p>
+  The GIRO data fetcher and contour mapper were originally written by Matthew Smith AF7TI and hosted at af7ti.com. Later they
+  were removed from that site, and the code was placed on GitHub. In January of 2019, Andrew KC2G forked the code on GitHub,
+  started making some improvements to the interpolation algorithm, and put the results up on this site.
+  </p>
+  <p>
+  The code itself relies on <a href="https://www.python.org/">Python</a>, 
+  <a href="https://www.scipy.org/">NumPy, SciPy, pandas, matplotlib</a>,
+  <a href="https://scitools.org.uk/cartopy/">cartopy</a>,
+  <a href="https://george.readthedocs.io/en/latest/">george</a>,
+  <a href="https://flask.palletsprojects.com/">Flask</a>,
+  <a href="https://mojolicious.org/">Mojolicious, Minion</a>,
+  <a href="https://www.postgresql.org/">PostgreSQL</a>,
+  and many more open-source projects, as well as the aforementioned IRI2016.
+  </p>
+
+  <h2 id="age">How often does the data update?</h2>
+  <p>
+  A new map is generated every 15 minutes, from data which is usually between 5 and 20 minutes old. Therefore, on average, you're looking at something
+  based on measurements taken about half an hour ago. However, we do our best to time-align all of the data (using short-term extrapolation) to the
+  time indicated in the map header.
+  </p>
+  <h2 id="interpretation">How do I read this?</h2>
+  <p>
+  The MUF map shows the Maximum Usable Frequency using colors and contour lines. For example, if a given area on the map
+  is greenish and lies between the contours labeled "15" and "17", then the MUF is around 16MHz in that location. The
+  readings from each individual station are shown as colored dots with numbers inside them, so you can see where the
+  information is coming from. If a dot is faded out, then that station currently has a low "confidence score".
+  </p>
+  <p>
+  MUF is the highest frequency that is expected to bounce off of the ionosphere on a path 3000km long. So the MUF along
+  a path between two points shows the possibility of long-hop DX between those points on a given band. If the MUF is
+  12MHz, then 30 meters and longer will work, but 20 meters and shorter won't. For long multi-hop paths, the worst MUF
+  anywhere on the path is what matters. For single-hop paths shorter than 3000km, the usable frequency will be less than
+  the MUF, because higher-angle signals "punch through" the ionosphere more easily. As you get closer to vertical, the
+  usable frequency drops to the Critical Frequency (foF2).
+  </p>
+  <p>
+  The foF2 page shows a map similar to the MUF map, except that it displays the Critical Frequency (foF2). This one is
+  simpler: it's the highest frequency that you can use for NVIS (skywave communication "in your own backyard"). When
+  foF2 gets up to 7MHz and above then 40 meters "goes short" and can be used for local contacts; if it goes down below
+  3MHz then 80 meters "goes long" and local stations disappear but far-away ones can still be reachable.
+  </p>
+  <p>
+  Finally, both maps show which parts of the Earth are in daylight, and which are in the night. Pay special attention to
+  the line dividing day and night (the terminator, or as hams call it, the "greyline"). Unique propagation opportunities
+  are often available when one station, or both, are sitting nearly under this line.
+  </p>
+  <p>
+  More information about ionospheric propagation can be found in most decent books about amateur radio.
+  </p>
+
+  <h2 id="quality">Why does the map show something crazy/wrong?</h2>
+  <p>
+  Despite the best efforts of the researchers, there are only so many ionosondes in the world making measurements. Most of these are clustered in
+  a few areas of the world, with large areas that are far from any ionosonde. Because of this, the map you see is an interpolation. That is, my
+  code does its best to look at the MUF (or FoF2) at these scattered points on the globe and figure out what it <i>probably</i> is in every other
+  location. I do my best to tweak the algorithm to make it well-behaved, but coming up with an algorithm that can extrapolate from few data points,
+  without getting unreasonable values every now and then, is a difficult problem. While the guessing process is pretty good in areas that are closer
+  to the measurement stations, the uncertainty is much higher in areas that are far away from any measurements. Only the numbers inside colored dots
+  scattered around the map represent actual measured data.
+  </p>
+  <p>
+  Sometimes the stations themselves provide data that is inaccurate, or disagree with each other. It's not really practical to guess who is right
+  and who is wrong, so the map will show some funny results in an effort to agree with all of the measurements.
+  </p>
+  <p>
+  Sometimes a station will go off-line and stop providing data, and sometimes a station that was off-line will re-appear. The addition or subtraction
+  of a single data point can cause the model to make some surprising changes in its global picture. This is because it's working with not that many
+  data points to begin with.
+  </p>
+  <h2 id="contact">I have something to say!</h2>
+  <p>
+  Please send feedback to <a href="mailto:kc2g@cleverdomain.org">kc2g@cleverdomain.org</a>.
   </p>
   <!--#include virtual="/footer.html" -->
   </body>
