@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-import igrf12
+import igrf
 import json
 import numpy as np
 import os
@@ -175,8 +175,8 @@ def generate_essn(run_id, series):
 
     for station in data:
         # TODO: use the current time once IGRF13 is available
-        mag = igrf12.igrf(
-                '2019-12-31',
+        mag = igrf.igrf(
+                now.strftime('%Y-%m-%d'),
                 glat=station['latitude'],
                 glon=station['longitude'],
                 alt_km=1.
