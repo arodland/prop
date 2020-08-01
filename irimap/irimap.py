@@ -7,7 +7,7 @@ import os
 
 import psycopg2
 import numpy as np
-import wmm2015 as wmm
+import wmm2020 as wmm
 import h5py
 
 from flask import Flask, request, make_response
