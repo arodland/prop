@@ -82,8 +82,16 @@
     window.onresize = function() {
       Plotly.Plots.resize(div);
     };
-    xhr.open("GET", "/api/essn.json");
-    xhr.send();
+
+    function load_data() {
+      var q = new URLSearchParams(window.location.hash.substr(1));
+      var days = q.has('days') ? parseFloat(q.get('days')) : 7;
+      xhr.open("GET", "/api/essn.json?days="+days);
+      xhr.send();
+    }
+
+    window.onhashchange = load_data;
+    load_data();
   </script>
   <!--#include virtual="/footer.html" -->
   </body>
