@@ -77,6 +77,13 @@ sub target_times {
   )
 }
 
+sub pred_times {
+  my ($run_time) = @_;
+
+  return map { $run_time + 300 + 900*$_ } -4 .. 24;
+}
+
+
 sub make_maps {
   my (%args) = @_;
 
@@ -134,11 +141,12 @@ sub queue_job {
   );
 
   my @target_times = target_times($run_time);
+  my @pred_times = pred_times($run_time);
 
   my $pred = app->minion->enqueue('pred',
     [
       run_id => $run_id,
-      target => [ map $_->{target_time}, @target_times ]
+      target => [ @pred_times ],
     ],
     {
       attempts => 2,

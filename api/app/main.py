@@ -62,6 +62,7 @@ class Prediction(db.Model):
     fof2 = db.Column(db.Numeric(asdecimal=False))
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
+    log_stdev = db.Column(db.Numeric(asdecimal=False))
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station_name = db.relationship('Station', foreign_keys=[station_id])
     def __repr__(self):
@@ -79,7 +80,7 @@ stations_schema = StationSchema(many=True)
 class MeasurementSchema(ma.ModelSchema):
     class Meta:
         model = Measurement
-    station = fields.Nested('StationSchema', only=['name', 'id', 'code', 'longitude', 'latitude'])
+    station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude']))
 
 measurement_schema = MeasurementSchema()
 measurements_schema = MeasurementSchema(many=True)
@@ -87,7 +88,7 @@ measurements_schema = MeasurementSchema(many=True)
 class PredictionSchema(ma.ModelSchema):
     class Meta:
         model = Prediction
-    station = fields.Nested('StationSchema', only=['name', 'id', 'code', 'longitude', 'latitude'])
+    station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude']))
 
 prediction_schema = PredictionSchema()
 predictions_schema = PredictionSchema(many=True)
@@ -121,6 +122,35 @@ def predjson():
     result = predictions_schema.dump(qry)
 
     return jsonify(result.data)
+
+@app.route("/pred_series.json", methods=['GET'])
+def predseries():
+    station_id = request.args.get('station', None)
+    sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished')"
+    if station_id is not None:
+        sql = sql + " and station_id=:station_id"
+    sql = sql + " order by station_id asc, time asc"
+
+    qry = db.session.query(Measurement).from_statement(sql)
+    if station_id is not None:
+        qry = qry.params(station_id = station_id)
+
+    db.session.close()
+
+    result = predictions_schema.dump(qry)
+
+    out = []
+    prev_st = None
+
+    for row in result.data:
+        if prev_st is None or row['station_name'] != prev_st:
+            out.append({'station': row['station'], 'pred': []})
+
+        prev_st = row['station_name']
+
+        out[len(out)-1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'], 'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
+
+    return jsonify(out)
 
 @app.route("/essn.json", methods=['GET'])
 def essnjson():
