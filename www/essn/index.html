@@ -1,18 +1,19 @@
 <!DOCTYPE html>
 <html>
-	<head>
+  <head>
     <meta charset="UTF-8">
-		<link rel="stylesheet" type="text/css" href="/static/style.css" />
+    <link rel="stylesheet" type="text/css" href="/static/style.css" />
     <title>Effective Solar Flux / Effective Sunspot Number</title>
     <script src="/static/plotly-latest.min.js"></script>
-	</head>
-	<body>
+  </head>
+  <body>
   <!--#include virtual="/nav-header.html" -->
   <div id="essn-chart" style="width: 75vw; height: 50vw; max-height: 75vh">
   </div>
   <script type="text/javascript">
     div = document.getElementById("essn-chart");
     xhr = new XMLHttpRequest();
+    created = false;
     xhr.addEventListener('load', function(e) {
       var data = JSON.parse(xhr.responseText);
       var x_6h = data['6h'].map(function(row) { return new Date(row.time*1000) });
@@ -58,7 +59,7 @@
           'x': x_24h,
           'y': ssn_24h,
           'hovertemplate': '%{y:.2f}',
-          'visible': false, 
+          'visible': false,
         }
       ]
 
@@ -71,31 +72,53 @@
             'buttons': [{
               'step': 'day',
               'stepmode': 'backward',
+              'count': 1,
+              'label': '1d'
+            }, {
+              'step': 'day',
+              'stepmode': 'backward',
               'count': 7,
               'label': '1w'
             }, {
               'step': 'month',
               'stepmode': 'backward',
               'count': 1,
-              'label': '1m',
+              'label': '1m'
             }, {
               'step': 'month',
               'stepmode': 'backward',
               'count': 3,
-              'label': '3m',
+              'label': '3m'
             }, {
               'step': 'all',
-              'label': '1y',
+              'label': '1y'
             }]
           },
           'rangeslider': {},
-          'range': [ x_6h[x_6h.length-1] - 7 * 86400 * 1000, x_6h[x_6h.length-1] ]
         }
       }
 
-      var mode = 'eSFI';
+      var new_dataEnd = +x_6h[x_6h.length-1];
+
+      if (created) {
+        var prev_rangeStart = +new Date(div.layout.xaxis.range[0]);
+        var prev_rangeEnd = +new Date(div.layout.xaxis.range[1]);
+        var prev_dataEnd = +div.data[0].x[div.data[0].x.length-1];
+
+        if (prev_rangeEnd == prev_dataEnd) { // We're at real time, slide forward
+          var delta = new_dataEnd - prev_dataEnd;
+          layout.xaxis.range = [ prev_rangeStart + delta, prev_rangeEnd + delta ];
+        }  else { // If graph is already drawn and scrolled back, don't change range at all
+          layout.xaxis.range = [ prev_rangeStart, prev_rangeEnd ];
+        }
+      } else { // If it's never been drawn, set a default
+        layout.xaxis.range = [ new_dataEnd - 7 * 86400 * 1000, new_dataEnd ];
+      }
 
       Plotly.react(div, plots, layout);
+
+      created = true;
+      var mode = 'eSFI';
 
       div.on('plotly_legenddoubleclick', function() {
         var tracesEnabled = {}, turnOn = [], turnOff = [];
