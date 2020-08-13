@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<meta http-equiv="refresh" content="300">
     <meta charset="UTF-8">
 		<link rel="stylesheet" type="text/css" href="/static/style.css" />
     <title>Effective Solar Flux / Effective Sunspot Number</title>
@@ -32,6 +31,7 @@
           'x': x_6h,
           'y': sfi_6h,
           'hovertemplate': '%{y:.2f}',
+          'visible': true,
         },
         {
           'name': '24h',
@@ -40,6 +40,7 @@
           'x': x_24h,
           'y': sfi_24h,
           'hovertemplate': '%{y:.2f}',
+          'visible': true,
         },
         {
           'name': '6h',
@@ -64,6 +65,7 @@
       var layout = {
         'title': 'eSFI',
         'autosize': true,
+        'uirevision': 1,
         'xaxis': {
           'rangeselector': {
             'buttons': [{
@@ -93,12 +95,12 @@
 
       var mode = 'eSFI';
 
-      Plotly.newPlot(div, plots, layout);
+      Plotly.react(div, plots, layout);
 
       div.on('plotly_legenddoubleclick', function() {
         var tracesEnabled = {}, turnOn = [], turnOff = [];
         for (var i = 0 ; i < div.data.length ; i++) {
-          if (div.data[i]._series == mode && div.data[i].visible !== false) {
+          if (div.data[i]._series == mode && div.data[i].visible) {
             tracesEnabled[div.data[i].name] = true;
           }
         }
@@ -127,8 +129,13 @@
       Plotly.Plots.resize(div);
     };
 
-    xhr.open("GET", "/api/essn.json?days=365");
-    xhr.send();
+    function load_data() {
+      xhr.open("GET", "/api/essn.json?days=365");
+      xhr.send();
+    };
+
+    load_data();
+    window.setInterval(load_data, 300000);
   </script>
   <!--#include virtual="/footer.html" -->
   </body>
