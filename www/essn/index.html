@@ -26,48 +26,91 @@
 
       var plots = [
         {
-          'name': 'SFI 6h',
-          'legendgroup': 'sfi',
+          'name': '6h',
+          '_series': 'eSFI',
           'type': 'scatter',
           'x': x_6h,
           'y': sfi_6h,
           'hovertemplate': '%{y:.2f}',
         },
         {
-          'name': 'SFI 24h',
-          'legendgroup': 'sfi',
+          'name': '24h',
+          '_series': 'eSFI',
           'type': 'scatter',
           'x': x_24h,
           'y': sfi_24h,
           'hovertemplate': '%{y:.2f}',
         },
         {
-          'name': 'SSN 6h',
-          'legendgroup': 'ssn',
+          'name': '6h',
+          '_series': 'eSSN',
           'type': 'scatter',
           'x': x_6h,
           'y': ssn_6h,
           'hovertemplate': '%{y:.2f}',
-          'visible': 'legendonly',
+          'visible': false,
         },
         {
-          'name': 'SSN 24h',
-          'legendgroup': 'ssn',
+          'name': '24h',
+          '_series': 'eSSN',
           'type': 'scatter',
           'x': x_24h,
           'y': ssn_24h,
           'hovertemplate': '%{y:.2f}',
-          'visible': 'legendonly',
+          'visible': false, 
         }
       ]
 
-      Plotly.newPlot(div, plots, {'title': 'eSFI', 'autosize': true});
-      div.on('plotly_legendclick', function(data) {
-        var turnOn = [];
-        var turnOff = [];
-        var group = data.data[data.curveNumber].legendgroup;
-        for (var i = 0 ; i < data.data.length ; i++) {
-          if (data.data[i].legendgroup == group) {
+      var layout = {
+        'title': 'eSFI',
+        'autosize': true,
+        'xaxis': {
+          'rangeselector': {
+            'buttons': [{
+              'step': 'day',
+              'stepmode': 'backward',
+              'count': 7,
+              'label': '1w'
+            }, {
+              'step': 'month',
+              'stepmode': 'backward',
+              'count': 1,
+              'label': '1m',
+            }, {
+              'step': 'month',
+              'stepmode': 'backward',
+              'count': 3,
+              'label': '3m',
+            }, {
+              'step': 'all',
+              'label': '1y',
+            }]
+          },
+          'rangeslider': {},
+          'range': [ x_6h[x_6h.length-1] - 7 * 86400 * 1000, x_6h[x_6h.length-1] ]
+        }
+      }
+
+      var mode = 'eSFI';
+
+      Plotly.newPlot(div, plots, layout);
+
+      div.on('plotly_legenddoubleclick', function() {
+        var tracesEnabled = {}, turnOn = [], turnOff = [];
+        for (var i = 0 ; i < div.data.length ; i++) {
+          if (div.data[i]._series == mode && div.data[i].visible !== false) {
+            tracesEnabled[div.data[i].name] = true;
+          }
+        }
+
+        if (mode == 'eSFI') {
+          mode = 'eSSN';
+        } else {
+          mode = 'eSFI';
+        }
+
+        for (var i = 0 ; i < div.data.length ; i++) {
+          if (div.data[i]._series == mode && tracesEnabled[div.data[i].name]) {
             turnOn.push(i);
           } else {
             turnOff.push(i);
@@ -75,7 +118,8 @@
         }
 
         Plotly.restyle(div, {'visible': true}, turnOn);
-        Plotly.restyle(div, {'visible': 'legendonly'}, turnOff);
+        Plotly.restyle(div, {'visible': false}, turnOff);
+        Plotly.relayout(div, {'title': mode } );
         return false;
       });
     });
@@ -83,15 +127,8 @@
       Plotly.Plots.resize(div);
     };
 
-    function load_data() {
-      var q = new URLSearchParams(window.location.hash.substr(1));
-      var days = q.has('days') ? parseFloat(q.get('days')) : 7;
-      xhr.open("GET", "/api/essn.json?days="+days);
-      xhr.send();
-    }
-
-    window.onhashchange = load_data;
-    load_data();
+    xhr.open("GET", "/api/essn.json?days=365");
+    xhr.send();
   </script>
   <!--#include virtual="/footer.html" -->
   </body>
