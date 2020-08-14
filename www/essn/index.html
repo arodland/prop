@@ -117,36 +117,34 @@
 
       Plotly.react(div, plots, layout);
 
-      created = true;
       var mode = 'eSFI';
 
-      div.on('plotly_legenddoubleclick', function() {
-        var tracesEnabled = {}, turnOn = [], turnOff = [];
-        for (var i = 0 ; i < div.data.length ; i++) {
-          if (div.data[i]._series == mode && div.data[i].visible) {
-            tracesEnabled[div.data[i].name] = true;
-          }
-        }
+      if (!created) {
+        div.on('plotly_legenddoubleclick', function() {
+          var turnOn = [], turnOff = [];
 
-        if (mode == 'eSFI') {
-          mode = 'eSSN';
-        } else {
-          mode = 'eSFI';
-        }
-
-        for (var i = 0 ; i < div.data.length ; i++) {
-          if (div.data[i]._series == mode && tracesEnabled[div.data[i].name]) {
-            turnOn.push(i);
+          if (mode == 'eSFI') {
+            mode = 'eSSN';
           } else {
-            turnOff.push(i);
+            mode = 'eSFI';
           }
-        }
 
-        Plotly.restyle(div, {'visible': true}, turnOn);
-        Plotly.restyle(div, {'visible': false}, turnOff);
-        Plotly.relayout(div, {'title': mode } );
-        return false;
-      });
+          for (var i = 0 ; i < div.data.length ; i++) {
+            if (div.data[i]._series == mode) {
+              turnOn.push(i);
+            } else {
+              turnOff.push(i);
+            }
+          }
+
+          Plotly.restyle(div, {'visible': true}, turnOn);
+          Plotly.restyle(div, {'visible': false}, turnOff);
+          Plotly.relayout(div, {'title': mode } );
+          return false;
+        });
+      }
+
+      created = true;
     });
     window.onresize = function() {
       Plotly.Plots.resize(div);
