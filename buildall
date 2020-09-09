@@ -12,6 +12,7 @@ podman-remote build --tag irimap irimap
 podman-remote build --tag prop-pred pred
 podman-remote build --tag prop-renderer renderer
 podman-remote build --tag prop-scheduler scheduler
+podman-remote build --tag prop-storm storm
 
 podman-remote build --tag noaa-loader noaa-loader
 podman-remote build --tag giro-loader giro-loader
