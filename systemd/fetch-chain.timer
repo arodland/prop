@@ -2,7 +2,7 @@
 Description=fetch CHAIN data twice daily
 
 [Timer]
-OnCalendar=7/12:21:00
+OnCalendar=0/12:21:00 UTC
 Persistent=true
 
 [Install]

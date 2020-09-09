@@ -2,7 +2,7 @@
 Description=prop-storm every 3 hours
 
 [Timer]
-OnCalendar=0/3:07:00
+OnCalendar=0/3:07:00 UTC
 Persistent=true
 
 [Install]
