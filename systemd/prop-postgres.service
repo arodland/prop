@@ -7,7 +7,7 @@ StateDirectory=prop-postgres
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
 ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --env-file /etc/kc2gprop/postgres.env --mount type=bind,src=/var/lib/prop-postgres,dst=/var/lib/postgresql/data postgres:12 postgres
 ExecStop=/usr/bin/podman stop %N
-KillMode=none
+KillMode=process
 Restart=on-failure
 [Install]
 WantedBy=kc2gprop.target
