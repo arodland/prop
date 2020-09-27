@@ -1,0 +1,9 @@
+[Unit]
+Description=fetch CHAIN data twice daily
+
+[Timer]
+OnCalendar=0/12:21:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=kc2gprop.target

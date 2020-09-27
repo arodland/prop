@@ -1,0 +1,7 @@
+[Unit]
+Description=Fetch CHAIN data
+[Service]
+Type=oneshot
+User=prop
+Group=prop
+ExecStart=/usr/bin/wget -q -P /home/prop/iri-index/chain -N https://chain-new.chain-project.net/echaim_downloads/apf107.dat https://chain-new.chain-project.net/echaim_downloads/ig_rz.dat
