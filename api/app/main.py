@@ -180,12 +180,17 @@ def essnjson():
 @app.route("/irimap.h5", methods=['GET'])
 def irimap():
     run_id = request.args.get('run_id', None)
-    ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
+    ts = request.args.get('ts', None)
 
     with db.engine.connect() as conn:
-        res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
-            (run_id, ts),
-        )
+        if run_id is not None and ts is not None:
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
+                (run_id, ts),
+            )
+        else:
+            res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
+
         rows = list(res.fetchall())
 
         if len(rows) == 0:
@@ -196,12 +201,17 @@ def irimap():
 @app.route("/assimilated.h5", methods=['GET'])
 def assimilated():
     run_id = request.args.get('run_id', None)
-    ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
+    ts = request.args.get('ts', None)
 
     with db.engine.connect() as conn:
-        res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
-            (run_id, ts),
-        )
+        if run_id is not None and ts is not None:
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
+                (run_id, ts),
+            )
+        else:
+            res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
+
         rows = list(res.fetchall())
 
         if len(rows) == 0:
