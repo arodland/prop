@@ -42,6 +42,8 @@ def assimilate(run_id, ts):
     h5.create_dataset('/stationdata/curr', data=df_cur.to_json(orient='records'))
     h5.create_dataset('/stationdata/pred', data=df_pred.to_json(orient='records'))
 
+    h5.create_dataset('/maps/foe', data=irimap['/maps/foe'])
+
     for metric in ["fof2", "hmf2"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
