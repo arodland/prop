@@ -60,6 +60,7 @@ def generate_map(ssn, sfi, tm):
     for key, val in sorted(data.items()):
         h5.create_dataset('maps/' + key, data=val, compression='gzip', scaleoffset=3)
 
+    h5.create_dataset('/ts', data=np.array(tm.timestamp()))
     h5.create_dataset('/essn/ssn', data=np.array(ssn, np.float32))
     h5.create_dataset('/essn/sfi', data=np.array(sfi, np.float32))
 
