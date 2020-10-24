@@ -2,13 +2,27 @@
 <html>
   <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" type="text/css" href="/static/style.css" />
     <title>Effective Solar Flux / Effective Sunspot Number</title>
     <script src="/static/plotly-latest.min.js"></script>
+    <style type="text/css">
+      #essn-chart {
+        width: 90%;
+      }
+
+      @media only screen and (min-width: 1000px) {
+        #essn-chart {
+          width: 75vw;
+          height: 50vw;
+          max-height: 75vh;
+        }
+      }
+    </style>
   </head>
   <body>
   <!--#include virtual="/nav-header.html" -->
-  <div id="essn-chart" style="width: 75vw; height: 50vw; max-height: 75vh">
+  <div id="essn-chart">
   </div>
   <script type="text/javascript">
     div = document.getElementById("essn-chart");
