@@ -98,8 +98,16 @@ predictions_schema = PredictionSchema(many=True)
 #Returns latest measurements for all stations in JSON
 @app.route("/stations.json" , methods=['GET'])
 def stationsjson():
-    qry = db.session.query(Measurement).from_statement(
+    maxage = request.args.get('maxage', None)
+
+    if maxage is None:
+        qry = db.session.query(Measurement).from_statement(
             "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc")
+    else:
+        qry = db.session.query(Measurement).from_statement(
+            "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc").params(
+            maxage=int(maxage),
+        )
 
     db.session.close()
     
