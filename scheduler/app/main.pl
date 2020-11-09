@@ -44,43 +44,18 @@ sub target_times {
       target_time => $run_time + 300,
       dots => 'curr',
     },
-    {
-      name => '1h',
-      target_time => $run_time + 300 + 1*3600,
+    map(+{
+      name => "${_}h",
+      target_time => $run_time + 300 + $_*3600,
       dots => 'pred',
-    },
-    {
-      name => '2h',
-      target_time => $run_time + 300 + 2*3600,
-      dots => 'pred',
-    },
-    {
-      name => '3h',
-      target_time => $run_time + 300 + 3*3600,
-      dots => 'pred',
-    },
-    {
-      name => '4h',
-      target_time => $run_time + 300 + 4*3600,
-      dots => 'pred',
-    },
-    {
-      name => '5h',
-      target_time => $run_time + 300 + 5*3600,
-      dots => 'pred',
-    },
-    {
-      name => '6h',
-      target_time => $run_time + 300 + 6*3600,
-      dots => 'pred',
-    },
+    }, 1 .. 24),
   )
 }
 
 sub pred_times {
   my ($run_time) = @_;
 
-  return map { $run_time + 300 + 900*$_ } -4 .. 24;
+  return map { $run_time + 300 + 900*$_ } -4 .. 96;
 }
 
 
@@ -244,7 +219,7 @@ if ($child) {
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
-  $worker->status->{jobs} = 4;
+  $worker->status->{jobs} = 6;
   $worker->status->{heartbeat_interval} = 30;
   $worker->run;
 }
