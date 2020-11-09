@@ -219,8 +219,7 @@ def assimilated():
 
         return make_response(rows[0]['dataset'].tobytes(), { 'Content-Type': 'application/x-hdf5' })
         
-@app.route("/latest_run.json", methods=['GET'])
-def latest_run():
+def get_latest_run():
     with db.engine.connect() as conn:
         res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished') order by ts asc")
         rows = list(res.fetchall())
@@ -233,7 +232,11 @@ def latest_run():
             'maps': [ { 'id': x['id'], 'ts': x['ts'] } for x in rows ],
         }
 
-        return jsonify(out)
+        return out
+
+@app.route("/latest_run.json", methods=['GET'])
+def latest_run():
+    return jsonify(get_latest_run())
 
 @app.route("/", methods=['GET'])
 def static_stations():
