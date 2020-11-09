@@ -11,6 +11,7 @@ itsdangerous==1.1.0
 Jinja2==2.10.1
 kiwisolver==1.0.1
 MarkupSafe==1.1.0
+maidenhead==1.5.0
 marshmallow==2.16.3
 marshmallow-sqlalchemy==0.15.0
 psycopg2

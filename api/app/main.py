@@ -6,6 +6,8 @@ import json
 import os
 import datetime as dt
 from sqlalchemy import and_, text
+import urllib.request
+import maidenhead
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -237,6 +239,38 @@ def get_latest_run():
 @app.route("/latest_run.json", methods=['GET'])
 def latest_run():
     return jsonify(get_latest_run())
+
+@app.route("/moflof.svg", methods=['GET'])
+def mof_lof():
+    run_id = request.values.get('run_id', None)
+    ts = request.values.get('ts', None)
+    metric = request.values.get('metric', 'mof_sp')
+    grid = request.values.get('grid', 'fn21wa')
+    grid = grid.strip()
+
+    if len(grid) < 4:
+        grid += "55"
+    if len(grid) < 6:
+        grid += "mm"
+    if len(grid) < 8:
+        grid += "55"
+
+    lat, lon = maidenhead.to_location(grid)
+
+    if run_id is None or ts is None:
+        latest = get_latest_run()
+        run_id = latest['run_id']
+        ts = latest['maps'][0]['ts']
+    else:
+        run_id = int(run_id)
+        ts = int(ts)
+
+    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon)
+    with urllib.request.urlopen(url) as res:
+        content = res.read()
+        res = make_response(content)
+        res.mimetype = 'image/svg+xml'
+        return res
 
 @app.route("/", methods=['GET'])
 def static_stations():
