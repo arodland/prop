@@ -2,7 +2,7 @@
 Description=Podman Pod for Prop
 After=network-online.target
 [Service]
-ExecStart=podman pod create --name prop -p 127.0.0.1:5500-5507:5500-5507
+ExecStart=podman pod create --name prop -p 127.0.0.1:5500-5520:5500-5520
 ExecStop=podman pod rm prop
 Type=oneshot
 RemainAfterExit=yes
