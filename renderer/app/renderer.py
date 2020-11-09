@@ -81,6 +81,7 @@ def mof_lof(dataset, metric, ts, lat, lon, file_format):
 
     zi = dataset['/maps/' + metric][:]
     plt.draw_contour(zi)
+    plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
     bio = io.BytesIO()
