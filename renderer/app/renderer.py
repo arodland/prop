@@ -68,6 +68,25 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         with open(out_path + '_station.json', 'w') as f:
             dot_df.to_json(f, orient='records')
 
+def mof_lof(dataset, metric, ts, lat, lon, file_format):
+    tm = datetime.fromtimestamp(ts, timezone.utc)
+    plt = plot.Plot(metric, tm, decorations=True)
+
+    if metric.startswith('mof_'):
+        plt.scale_mufd()
+    elif metric.startswith('lof_'):
+        plt.scale_fof2()
+    else:
+        plt.scale_generic()
+
+    zi = dataset['/maps/' + metric][:]
+    plt.draw_contour(zi)
+
+    plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
+    bio = io.BytesIO()
+    plt.write(bio, format=file_format)
+    return bio.getvalue()
+
 if __name__ == '__main__':
     app = Flask(__name__)
 
@@ -110,5 +129,20 @@ if __name__ == '__main__':
         os.symlink('%d' % (run_id), '/output/current')
 
         return make_response("OK\n")
+
+    @app.route('/moflof.svg', methods=['GET'])
+    def moflof():
+        run_id = int(request.values['run_id'])
+        ts = int(request.values['ts'])
+        metric = request.values['metric']
+        lat = float(request.values['lat'])
+        lon = float(request.values['lon'])
+
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon))
+
+        svg = mof_lof(h5, metric, ts, lat, lon, 'svg')
+        resp = make_response(svg)
+        resp.mimetype = 'image/svg+xml'
+        return resp
 
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=4)

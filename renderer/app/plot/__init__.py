@@ -144,11 +144,11 @@ class Plot:
                         }
                     )
 
-    def write(self, filename):
+    def write(self, filename, format=None):
         if self.decorations:
             plt.tight_layout()
-            plt.savefig(filename, dpi=180, bbox_inches='tight')
+            plt.savefig(filename, format=format, dpi=180, bbox_inches='tight')
         else:
             plt.tight_layout(pad=0.0)
-            plt.savefig(filename, dpi=256, bbox_inches='tight', pad_inches=0.0)
+            plt.savefig(filename, format=format, dpi=256, bbox_inches='tight', pad_inches=0.0)
 
