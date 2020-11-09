@@ -126,23 +126,30 @@ class Plot:
     def draw_title(self, metric, extra):
         plt.title(metric + ' ' + str(self.date.strftime('%Y-%m-%d %H:%M') + ' ' + extra))
 
+    def draw_dot(self, lon, lat, text, color, alpha):
+        self.ax.text(lon, lat, text,
+            fontsize=9,
+            ha='left',
+            transform=ccrs.PlateCarree(),
+            alpha=alpha,
+            bbox={
+                'boxstyle': 'circle',
+                'alpha': alpha - 0.1,
+                'color': color,
+                'mutation_scale': 0.5
+            }
+        )
+
     def draw_dots(self, df, metric):
         for index, row in df.iterrows():
             lon = float(row['station.longitude'])
             lat = float(row['station.latitude'])
-            alpha = 0.2 + 0.6 * row.cs
-            self.ax.text(lon, lat, int(row[metric] + 0.5),
-                    fontsize=9,
-                    ha='left',
-                    transform=ccrs.PlateCarree(),
-                    alpha=alpha,
-                    bbox={
-                        'boxstyle': 'circle',
-                        'alpha': alpha - 0.1,
-                        'color': self.cmap(self.norm(row[metric])),
-                        'mutation_scale': 0.5
-                        }
-                    )
+
+            self.draw_dot(lon, lat,
+                text=int(row[metric] + 0.5),
+                alpha=0.2 + 0.6 * row.cs,
+                color=self.cmap(self.norm(row[metric])),
+            )
 
     def write(self, filename, format=None):
         if self.decorations:
