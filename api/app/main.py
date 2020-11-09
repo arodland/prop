@@ -222,7 +222,7 @@ def assimilated():
 @app.route("/latest_run.json", methods=['GET'])
 def latest_run():
     with db.engine.connect() as conn:
-        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished')")
+        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished') order by ts asc")
         rows = list(res.fetchall())
 
         if len(rows) == 0:
