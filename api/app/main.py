@@ -260,7 +260,8 @@ def mof_lof():
     if run_id is None or ts is None:
         latest = get_latest_run()
         run_id = latest['run_id']
-        ts = latest['maps'][0]['ts']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
     else:
         run_id = int(run_id)
         ts = int(ts)
