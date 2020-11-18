@@ -4,7 +4,7 @@ import numpy as np
 import raytrace
 from iono import Iono
 import h5py
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 
 if __name__ == '__main__':
 
@@ -61,5 +61,35 @@ if __name__ == '__main__':
         resp = make_response(bio.getvalue())
         resp.mimetype = 'application/x-hdf5'
         return resp
+
+    @app.route('/ptp.json', methods=['GET'])
+    def ptp_json():
+        from_lat = np.array(float(request.args.get('from_lat', None)))
+        from_lon = np.array(float(request.args.get('from_lon', None)))
+        to_lat = np.array(float(request.args.get('to_lat', None)))
+        to_lon = np.array(float(request.args.get('to_lon', None)))
+        run_id = request.args.get('run_id', None)
+        ts_list = request.args.getlist('ts')
+        path = request.args.get('path', 'both')
+
+        ret = []
+        for ts in ts_list:
+            iono_url = 'http://localhost:%s/assimilated.h5?run_id=%s&ts=%s' % (os.getenv('API_PORT'), run_id, ts)
+            iono = Iono(iono_url)
+
+            out = {
+                'ts': ts,
+            }
+
+            if path in ('short', 'both'):
+                out['mof_sp'], out['lof_sp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
+
+            if path in ('long', 'both'):
+                out['mof_lp'], out['lof_lp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+
+            ret.append(out)
+
+        return jsonify(ret)
+
 
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RAYTRACE_PORT')), threaded=False, processes=8)
