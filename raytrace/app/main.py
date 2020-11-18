@@ -79,13 +79,14 @@ if __name__ == '__main__':
 
             out = {
                 'ts': int(ts),
+                'metrics': {},
             }
 
             if path in ('short', 'both'):
-                out['mof_sp'], out['lof_sp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
+                out['metrics']['mof_sp'], out['metrics']['lof_sp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
 
             if path in ('long', 'both'):
-                out['mof_lp'], out['lof_lp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+                out['metrics']['mof_lp'], out['metrics']['lof_lp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
 
             ret.append(out)
 
