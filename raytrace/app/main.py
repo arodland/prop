@@ -72,6 +72,11 @@ if __name__ == '__main__':
         ts_list = request.args.getlist('ts')
         path = request.args.get('path', 'both')
 
+        from_lat *= np.pi / 180
+        from_lon *= np.pi / 180
+        to_lat *= np.pi / 180
+        to_lon *= np.pi / 180
+
         ret = []
         for ts in ts_list:
             iono_url = 'http://localhost:%s/assimilated.h5?run_id=%s&ts=%s' % (os.getenv('API_PORT'), run_id, ts)
