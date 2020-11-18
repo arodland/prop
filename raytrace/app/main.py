@@ -78,7 +78,7 @@ if __name__ == '__main__':
             iono = Iono(iono_url)
 
             out = {
-                'ts': ts,
+                'ts': int(ts),
             }
 
             if path in ('short', 'both'):
