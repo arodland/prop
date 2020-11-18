@@ -101,6 +101,7 @@ sub queue_job {
     ],
     {
       attempts => 2,
+      priority => 1,
     },
   );
 
@@ -125,6 +126,7 @@ sub queue_job {
     ],
     {
       attempts => 2,
+      priority => 2,
     },
   );
 
@@ -140,6 +142,7 @@ sub queue_job {
       {
         parents => [ $essn_24h ],
         attempts => 2,
+        priority => 2,
       },
     );
     my $assimilate = app->minion->enqueue('assimilate',
@@ -150,6 +153,7 @@ sub queue_job {
       {
         parents => [ $pred, $irimap ],
         attempts => 2,
+        priority => 3,
       },
     );
     my @map_jobs = make_maps(
@@ -219,7 +223,10 @@ if ($child) {
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
-  $worker->status->{jobs} = 6;
+  $worker->status->{jobs} = 16;
   $worker->status->{heartbeat_interval} = 30;
   $worker->run;
+  END {
+    $worker->unregister;
+  }
 }
