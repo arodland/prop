@@ -38,18 +38,19 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     half_hop = dist / (2 * khop)
     max_khop = np.max(khop)
 
-    phi = np.arctan2(np.sin(half_hop), (((r0 + h_calc)/r0)-np.cos(half_hop)))
+    phi = np.arctan2(np.sin(half_hop), (1.0 + h_calc/r0 - np.cos(half_hop)))
     phi = np.clip(phi, constants.min_phi, constants.max_phi)
 
     m9 = constants.m9_1 * np.power(constants.m9_2, khop) / np.cos(phi)
 
     takeoff = np.arctan2(np.cos(half_hop) - (r0/(h_calc+r0)), np.sin(half_hop))
+    takeoff_true = takeoff
     takeoff = np.clip(takeoff, constants.min_takeoff, constants.max_takeoff)
 
-    sex = constants.sex_1 - constants.sex_2 * np.power(np.cos(takeoff), constants.sex_3)
-
-    clof = np.zeros_like(to_lat)
     cmof = np.full_like(to_lat, 10000.)
+
+    avg_foe = np.zeros_like(to_lat)
+    rms_gyf = np.zeros_like(to_lat)
 
     for hop in range(1, max_khop+1):
         idx = hop <= khop
@@ -59,15 +60,34 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
 
         cmof[idx] = np.fmin(cmof[idx], iono.fof2.predict(cp_lat, cp_lon))
-        ls = constants.ls_1 * np.power(iono.foe.predict(cp_lat, cp_lon), constants.ls_2)
-        clof[idx] += ls
+        avg_foe[idx] += iono.foe.predict(cp_lat, cp_lon)
+        rms_gyf[idx] += np.power(iono.gyf.predict(cp_lat, cp_lon), 2)
+
+    avg_foe /= khop
+    rms_gyf = np.sqrt(rms_gyf / khop)
 
     ### TODO: TEP
 
     cmof *= m9
     cmof = np.clip(cmof, 1.0, 50.0)
 
-    clof *= np.power(np.abs(sex), constants.sex_4)
-    clof = np.clip(clof, 1.0, 50.0)
+    pathlen = 2 * khop * (h_calc + r0 * (1 - np.cos(half_hop))) / np.sin(half_hop + takeoff_true)
+    g_loss = np.clip(20 * np.log10(pathlen / constants.lof_distance_base), 0.0, None)
 
-    return cmof, clof
+    # https://apps.dtic.mil/dtic/tr/fulltext/u2/a269557.pdf
+
+    loss_tgt = constants.lof_threshold - 27.088 - g_loss
+    clof = np.power(np.clip(khop * 35.9082 * np.exp(0.8445 * avg_foe) / loss_tgt - 10.2, 0.0, None), 1 / 1.98) - rms_gyf
+    clof = np.clip(clof, 1.0, None)
+
+    return {
+        'mof': cmof,
+        'lof': clof,
+        'm9': m9,
+        'takeoff': takeoff,
+        'phi': phi,
+        'khop': khop.astype(float),
+        'half_hop': half_hop,
+        'pathlen': pathlen,
+        'g_loss': g_loss,
+    }

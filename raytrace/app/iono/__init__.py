@@ -24,6 +24,7 @@ class Iono:
             self.hmf2 = self.spline('/maps/hmf2')
             self.fof2 = self.spline('/maps/fof2')
             self.foe = self.spline('/maps/foe')
+            self.gyf = self.spline('/maps/gyf')
 
     def spline(self, ds):
         return Spline(self.h5[ds])

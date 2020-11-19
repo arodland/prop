@@ -34,8 +34,11 @@ if __name__ == '__main__':
         from_lat = np.full_like(to_lat, from_lat)
         from_lon = np.full_like(to_lon, from_lon)
 
-        mof_sp, lof_sp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
-        mof_lp, lof_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+        rt_sp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
+        mof_sp, lof_sp = rt_sp['mof'], rt_sp['lof']
+
+        rt_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+        mof_lp, lof_lp = rt_lp['mof'], rt_lp['lof']
 
         lof_combined = np.fmin(lof_sp, lof_lp)
 
@@ -71,6 +74,11 @@ if __name__ == '__main__':
         run_id = request.args.get('run_id', None)
         ts_list = request.args.getlist('ts')
         path = request.args.get('path', 'both')
+        debug = request.args.get('debug', None)
+        try:
+            debug = int(debug)
+        except:
+            pass
 
         from_lat *= np.pi / 180
         from_lon *= np.pi / 180
@@ -88,10 +96,14 @@ if __name__ == '__main__':
             }
 
             if path in ('short', 'both'):
-                out['metrics']['mof_sp'], out['metrics']['lof_sp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
+                rt_sp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
+                keys = rt_sp.keys() if debug else ['mof', 'lof']
+                out['metrics'].update({ k+'_sp': rt_sp[k] for k in keys })
 
             if path in ('long', 'both'):
-                out['metrics']['mof_lp'], out['metrics']['lof_lp'] = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+                rt_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+                keys = rt_lp.keys() if debug else ['mof', 'lof']
+                out['metrics'].update({ k+'_lp': rt_lp[k] for k in keys })
 
             ret.append(out)
 
