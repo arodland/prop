@@ -240,12 +240,7 @@ def get_latest_run():
 def latest_run():
     return jsonify(get_latest_run())
 
-@app.route("/moflof.svg", methods=['GET'])
-def mof_lof():
-    run_id = request.values.get('run_id', None)
-    ts = request.values.get('ts', None)
-    metric = request.values.get('metric', 'mof_sp')
-    grid = request.values.get('grid', 'fn21wa')
+def maidenhead_to_latlon(grid):
     grid = grid.strip()
 
     if len(grid) < 4:
@@ -256,6 +251,17 @@ def mof_lof():
         grid += "55"
 
     lat, lon = maidenhead.to_location(grid)
+
+    return lat, lon
+
+@app.route("/moflof.svg", methods=['GET'])
+def mof_lof():
+    run_id = request.values.get('run_id', None)
+    ts = request.values.get('ts', None)
+    metric = request.values.get('metric', 'mof_sp')
+    grid = request.values.get('grid', 'fn21wa')
+
+    lat, lon = maidenhead_to_latlon(grid)
 
     if run_id is None or ts is None:
         latest = get_latest_run()
@@ -271,6 +277,30 @@ def mof_lof():
         content = res.read()
         res = make_response(content)
         res.mimetype = 'image/svg+xml'
+        return res
+
+@app.route('/ptp.json', methods=['GET'])
+def ptp_json():
+    path = request.values.get('path', 'both')
+    from_grid = request.values.get('from_grid', None)
+    to_grid = request.values.get('to_grid', None)
+    debug = request.values.get('debug', '0')
+
+    from_lat, from_lon = maidenhead_to_latlon(from_grid)
+    to_lat, to_lon = maidenhead_to_latlon(to_grid)
+
+    latest = get_latest_run()
+    run_id = latest['run_id']
+
+    url = "http://localhost:%s/ptp.json?run_id=%d&path=%s&debug=%s&from_lat=%f&from_lon=%f&to_lat=%f&to_lon=%f" % (os.getenv('RAYTRACE_PORT'), run_id, path, debug, from_lat, from_lon, to_lat, to_lon)
+
+    for m in latest['maps']:
+        url += '&ts=%d' % (m['ts'])
+
+    with urllib.request.urlopen(url) as res:
+        content = res.read()
+        res = make_response(content)
+        res.mimetype = 'application/json'
         return res
 
 @app.route("/", methods=['GET'])
