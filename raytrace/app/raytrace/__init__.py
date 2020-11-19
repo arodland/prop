@@ -49,8 +49,8 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
 
     cmof = np.full_like(to_lat, 10000.)
 
-    avg_foe = np.zeros_like(to_lat)
     rms_gyf = np.zeros_like(to_lat)
+    sum_foe = np.zeros_like(to_lat)
 
     for hop in range(1, max_khop+1):
         idx = hop <= khop
@@ -60,10 +60,9 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
 
         cmof[idx] = np.fmin(cmof[idx], iono.fof2.predict(cp_lat, cp_lon))
-        avg_foe[idx] += iono.foe.predict(cp_lat, cp_lon)
+        sum_foe[idx] += np.exp(0.8445 * iono.foe.predict(cp_lat, cp_lon))
         rms_gyf[idx] += np.power(iono.gyf.predict(cp_lat, cp_lon), 2)
 
-    avg_foe /= khop
     rms_gyf = np.sqrt(rms_gyf / khop)
 
     ### TODO: TEP
@@ -77,8 +76,10 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     # https://apps.dtic.mil/dtic/tr/fulltext/u2/a269557.pdf
 
     loss_tgt = constants.lof_threshold - 27.088 - g_loss
-    clof = np.power(np.clip(khop * 35.9082 * np.exp(0.8445 * avg_foe) / loss_tgt - 10.2, 0.0, None), 1 / 1.98) - rms_gyf
+    clof = np.power(np.clip(35.9082 * sum_foe / loss_tgt - 10.2, 0.0, None), 1 / 1.98) - rms_gyf
     clof = np.clip(clof, 1.0, None)
+
+    avg_foe = np.log(sum_foe / khop) / 0.8445
 
     return {
         'mof': cmof,
@@ -89,5 +90,8 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         'khop': khop.astype(float),
         'half_hop': half_hop,
         'pathlen': pathlen,
+        'bearing': bearing,
         'g_loss': g_loss,
+        'rms_gyf': rms_gyf,
+        'avg_foe': avg_foe,
     }
