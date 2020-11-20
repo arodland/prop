@@ -126,6 +126,7 @@ class Plot:
                     ticks=CS2.levels,
                     drawedges=False
                     )
+            cbar.minorticks_off()
             cbar.add_lines(CS2)
 
 
@@ -152,7 +153,7 @@ class Plot:
                 self.levels,
                 cmap=self.cmap,
                 extend='both',
-                hatches='/',
+                hatches=['//'],
                 norm=self.norm,
                 transform=ccrs.PlateCarree(),
                 alpha=self.plotalpha,
@@ -160,6 +161,8 @@ class Plot:
 
             invalid = invalid & zi_secondary.mask
 
+        # Draw "blackout" region anywhere that we haven't drawn a contourf with valid data
+        # (otherwise white will show through, which is not the wanted effect!)
         if invalid.any():
             black = np.zeros((*invalid.shape, 3))
             alpha = self.plotalpha * np.expand_dims(invalid, axis=2)
@@ -176,6 +179,7 @@ class Plot:
             self.levels,
             cmap=self.cmap_dark,
             norm=self.norm,
+            extend='both',
             linewidths=.6,
             alpha=.75,
             transform=ccrs.PlateCarree(),
@@ -197,10 +201,11 @@ class Plot:
                 fraction=0.03,
                 orientation='horizontal',
                 pad=0.02,
+                ticks=self.levels,
                 format='%.1f',
-                ticks=matplotlib.ticker.FixedLocator(self.levels),
                 drawedges=False
                 )
+            cbar.minorticks_off()
             cbar.add_lines(CS)
 
     def draw_title(self, metric, extra):
