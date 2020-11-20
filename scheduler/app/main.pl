@@ -77,7 +77,7 @@ sub make_maps {
           file_format => (
             $format eq 'bare'
             ? ['jpg']
-            : ['svg','png','station_json']
+            : ['svg','station_json']
           ),
         ],
         {
