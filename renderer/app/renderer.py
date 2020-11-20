@@ -7,6 +7,7 @@ import subprocess
 
 import h5py
 import pandas as pd
+import numpy as np
 from flask import Flask, request, make_response
 
 import plot
@@ -71,16 +72,43 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
 def mof_lof(dataset, metric, ts, lat, lon, file_format):
     tm = datetime.fromtimestamp(ts, timezone.utc)
     plt = plot.Plot(metric, tm, decorations=True)
+    maps = { name: dataset['/maps/' + name][:] for name in ('mof_sp', 'mof_lp', 'lof_sp', 'lof_lp') }
 
     if metric.startswith('mof_'):
-        plt.scale_mufd()
+        plt.scale_mufd('turbo')
     elif metric.startswith('lof_'):
-        plt.scale_fof2()
+        plt.scale_fof2('turbo')
     else:
-        plt.scale_generic()
+        plt.scale_generic('turbo')
 
-    zi = dataset['/maps/' + metric][:]
-    plt.draw_contour(zi)
+    if metric.endswith('_combined'):
+        base_metric = metric[:len(metric)-9]
+        primary = maps[base_metric + '_sp']
+        primary_valid = maps['mof_sp'] > maps['lof_sp']
+
+        secondary = maps[base_metric + '_lp']
+        secondary_valid = maps['mof_lp'] > maps['lof_lp']
+
+        if base_metric == 'mof':
+            secondary_valid = secondary_valid & (secondary > primary)
+            primary_valid = primary_valid & ~secondary_valid
+        else:
+            secondary_valid = secondary_valid & (secondary < primary)
+            primary_valid = primary_valid & ~secondary_valid
+
+        primary = np.ma.MaskedArray(primary, ~primary_valid)
+        secondary = np.ma.MaskedArray(secondary, ~secondary_valid)
+        contour = primary.filled(secondary)
+
+    else:
+        path = metric[len(metric)-3:]
+        primary = maps[metric]
+        primary_valid = maps['mof' + path] > maps['lof' + path]
+        primary = np.ma.MaskedArray(primary, ~primary_valid)
+        secondary = None
+        contour = primary
+
+    plt.draw_mofstyle(primary, secondary, contour)
     plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
