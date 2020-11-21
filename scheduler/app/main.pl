@@ -223,7 +223,7 @@ if ($child) {
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
-  $worker->status->{jobs} = 16;
+  $worker->status->{jobs} = 12;
   $worker->status->{heartbeat_interval} = 30;
   $worker->run;
   END {
