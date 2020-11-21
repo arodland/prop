@@ -55,7 +55,8 @@ sub target_times {
 sub pred_times {
   my ($run_time) = @_;
 
-  return map { $run_time + 300 + 900*$_ } -4 .. 96;
+  # Every 15 minutes from -1hr to +6hr; every hour from +7hr to +24hr, inclusive.
+  return map({ $run_time + 300 + 900*$_ } -4 .. 24), map({ $run_time + 300 + 3600*$_ } 7 .. 24);
 }
 
 
