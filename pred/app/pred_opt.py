@@ -24,6 +24,7 @@ last_tm = None
 
 for pt in s['history']:
     tm = (pd.to_datetime(pt[0]) - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")
+    cs = pt[1]
     if cs < 10 and cs != -1:
         continue
 

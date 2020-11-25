@@ -37,7 +37,7 @@ for station in data:
         x.append(tm / 86400.)
         y.append(np.log(mufd))
         cslist.append(cs)
-        sigma.append(sd)
+        sigma.append(sd + 1e-3)
 
     if len(x) < 40:
         continue

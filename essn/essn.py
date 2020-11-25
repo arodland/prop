@@ -58,10 +58,10 @@ def recency_weight(tm, now, recency):
 
 def cs_to_stdev(cs):
     if cs == -1 or cs > 100:
-        cs = 69
+        cs = 62
     if cs == 100:
-        cs = 81
-    return 0.191 - 0.00147 * cs
+        cs = 86
+    return 0.237 - 0.00170 * cs
 
 iri = None
 pred_pool = None

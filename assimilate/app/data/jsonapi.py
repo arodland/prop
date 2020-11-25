@@ -5,7 +5,7 @@ from pandas import json_normalize
 
 known_metrics = ['fof2', 'md', 'mufd', 'foes', 'foe', 'hmf2', 'tec']
 
-def get_data(url=os.getenv("METRICS_URI"), default_confidence=77):
+def get_data(url=os.getenv("METRICS_URI"), default_confidence=62):
     data = None
 
     if url.startswith(("http:", "https:")):
