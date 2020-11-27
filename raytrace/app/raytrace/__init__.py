@@ -11,7 +11,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
 
     if longpath:
         dist = 2 * np.pi - dist
-        bearing = (-bearing) % (2 * np.pi)
+        bearing = (bearing + np.pi) % (2 * np.pi)
 
     khop = np.floor(dist / constants.maxhop).astype(int) + 1
     half_hop = dist / (2 * khop)
