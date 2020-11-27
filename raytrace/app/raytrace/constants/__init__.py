@@ -17,5 +17,5 @@ sex_4 = -0.5
 ls_1 = 0.028
 ls_2 = 2.0
 
-lof_distance_base = 1300.
-lof_threshold = 65.
+lof_distance_base = 1.
+lof_threshold = 100.

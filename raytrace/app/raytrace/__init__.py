@@ -50,7 +50,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     cmof = np.full_like(to_lat, 10000.)
 
     rms_gyf = np.zeros_like(to_lat)
-    sum_foe = np.zeros_like(to_lat)
+    sum_I = np.zeros_like(to_lat)
 
     for hop in range(1, max_khop+1):
         idx = hop <= khop
@@ -58,9 +58,9 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         cp_lat, cp_lon = geodesy.sphere.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac * constants.r_earth_m, radian=True)
         cp_lon = (cp_lon + np.pi) % (2 * np.pi) - np.pi
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
-
         cmof[idx] = np.fmin(cmof[idx], iono.fof2.predict(cp_lat, cp_lon))
-        sum_foe[idx] += np.exp(0.8445 * iono.foe.predict(cp_lat, cp_lon))
+
+        sum_I[idx] += np.clip(np.exp(0.8445 * iono.foe.predict(cp_lat, cp_lon) - 2.937) - 0.4, 0, None)
         rms_gyf[idx] += np.power(iono.gyf.predict(cp_lat, cp_lon), 2)
 
     rms_gyf = np.sqrt(rms_gyf / khop)
@@ -75,11 +75,14 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
 
     # https://apps.dtic.mil/dtic/tr/fulltext/u2/a269557.pdf
 
-    loss_tgt = constants.lof_threshold - 27.088 - g_loss
-    clof = np.power(np.clip(35.9082 * sum_foe / loss_tgt - 10.2, 0.0, None), 1 / 1.98) - rms_gyf
-    clof = np.clip(clof, 1.0, None)
+    loss_tgt = constants.lof_threshold - g_loss
+    loss_sec = loss_tgt * np.cos(phi)
 
-    avg_foe = np.log(sum_foe / khop) / 0.8445
+    clof = np.full_like(to_lat, 2.0)
+    clof = np.power(np.clip(677.2 * sum_I / loss_sec - 10.2, 0.0, None), 1 / 1.98) - rms_gyf
+    # Empirical correction for the fact that the above calculation is missing the 20*log10(f) loss
+    clof += 0.0591 - 4.344 * sum_I * (np.exp(-0.0775 * loss_sec) + 0.00366 * np.sqrt(loss_sec))
+    clof = np.clip(clof, 1.0, None)
 
     return {
         'mof': cmof,
@@ -93,5 +96,5 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         'bearing': bearing,
         'g_loss': g_loss,
         'rms_gyf': rms_gyf,
-        'avg_foe': avg_foe,
+        'sum_I': 0.0 + sum_I.astype(float),
     }

@@ -40,12 +40,6 @@ if __name__ == '__main__':
         rt_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
         mof_lp, lof_lp = rt_lp['mof'], rt_lp['lof']
 
-        lof_combined = np.fmin(lof_sp, lof_lp)
-
-        mof_sp[mof_sp < lof_sp] = 0.0
-        mof_lp[mof_lp < lof_lp] = 0.0
-        mof_combined = np.fmax(mof_sp, mof_lp)
-
         bio = io.BytesIO()
         h5 = h5py.File(bio, 'w')
 
@@ -54,10 +48,8 @@ if __name__ == '__main__':
         h5.create_dataset('/ts', data=iono.h5['/ts'])
         h5.create_dataset('/maps/mof_sp', data=mof_sp, compression='gzip', scaleoffset=3)
         h5.create_dataset('/maps/mof_lp', data=mof_lp, compression='gzip', scaleoffset=3)
-        h5.create_dataset('/maps/mof_combined', data=mof_combined, compression='gzip', scaleoffset=3)
         h5.create_dataset('/maps/lof_sp', data=lof_sp, compression='gzip', scaleoffset=3)
         h5.create_dataset('/maps/lof_lp', data=lof_lp, compression='gzip', scaleoffset=3)
-        h5.create_dataset('/maps/lof_combined', data=lof_combined, compression='gzip', scaleoffset=3)
 
         h5.close()
 
@@ -98,12 +90,12 @@ if __name__ == '__main__':
             if path in ('short', 'both'):
                 rt_sp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
                 keys = rt_sp.keys() if debug else ['mof', 'lof']
-                out['metrics'].update({ k+'_sp': rt_sp[k] for k in keys })
+                out['metrics'].update({ k+'_sp': rt_sp[k].tolist() for k in keys })
 
             if path in ('long', 'both'):
                 rt_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
                 keys = rt_lp.keys() if debug else ['mof', 'lof']
-                out['metrics'].update({ k+'_lp': rt_lp[k] for k in keys })
+                out['metrics'].update({ k+'_lp': rt_lp[k].tolist() for k in keys })
 
             ret.append(out)
 
