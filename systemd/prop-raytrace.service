@@ -1,0 +1,12 @@
+[Unit]
+Description=Prop Raytracer
+BindsTo=prop-api.service prop-assimilate.service prop-podman-pod.service
+After=prop-api.service prop-podman-pod.service
+[Service]
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-raytrace
+ExecStop=/usr/bin/podman stop %N
+KillMode=process
+Restart=on-failure
+[Install]
+WantedBy=kc2gprop.target

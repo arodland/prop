@@ -7,6 +7,7 @@ import subprocess
 
 import h5py
 import pandas as pd
+import numpy as np
 from flask import Flask, request, make_response
 
 import plot
@@ -68,6 +69,53 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         with open(out_path + '_station.json', 'w') as f:
             dot_df.to_json(f, orient='records')
 
+def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
+    tm = datetime.fromtimestamp(ts, timezone.utc)
+    plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
+    maps = { name: dataset['/maps/' + name][:] for name in ('mof_sp', 'mof_lp', 'lof_sp', 'lof_lp') }
+
+    if metric.startswith('mof_'):
+        plt.scale_mufd('turbo')
+    elif metric.startswith('lof_'):
+        plt.scale_fof2('turbo')
+    else:
+        plt.scale_generic('turbo')
+
+    if metric.endswith('_combined'):
+        base_metric = metric[:len(metric)-9]
+        primary = maps[base_metric + '_sp']
+        primary_valid = maps['mof_sp'] > maps['lof_sp']
+
+        secondary = maps[base_metric + '_lp']
+        secondary_valid = maps['mof_lp'] > maps['lof_lp']
+
+        if base_metric == 'mof':
+            secondary_valid = secondary_valid & (secondary > primary)
+            primary_valid = primary_valid & ~secondary_valid
+        else:
+            secondary_valid = secondary_valid & (secondary < primary)
+            primary_valid = primary_valid & ~secondary_valid
+
+        primary = np.ma.MaskedArray(primary, ~primary_valid)
+        secondary = np.ma.MaskedArray(secondary, ~secondary_valid)
+        contour = primary.filled(secondary)
+
+    else:
+        path = metric[len(metric)-3:]
+        primary = maps[metric]
+        primary_valid = maps['mof' + path] > maps['lof' + path]
+        primary = np.ma.MaskedArray(primary, ~primary_valid)
+        secondary = None
+        contour = primary
+
+    plt.draw_mofstyle(primary, secondary, contour)
+    plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
+
+    plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
+    bio = io.BytesIO()
+    plt.write(bio, format=file_format)
+    return bio.getvalue()
+
 if __name__ == '__main__':
     app = Flask(__name__)
 
@@ -111,4 +159,20 @@ if __name__ == '__main__':
 
         return make_response("OK\n")
 
-    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=4)
+    @app.route('/moflof.svg', methods=['GET'])
+    def moflof():
+        run_id = int(request.values['run_id'])
+        ts = int(request.values['ts'])
+        metric = request.values['metric']
+        lat = float(request.values['lat'])
+        lon = float(request.values['lon'])
+        centered = request.values.get('centered') in ('true', '1')
+
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon))
+
+        svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
+        resp = make_response(svg)
+        resp.mimetype = 'image/svg+xml'
+        return resp
+
+    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=16)

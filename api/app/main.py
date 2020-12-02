@@ -6,6 +6,8 @@ import json
 import os
 import datetime as dt
 from sqlalchemy import and_, text
+import urllib.request
+import maidenhead
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -180,12 +182,17 @@ def essnjson():
 @app.route("/irimap.h5", methods=['GET'])
 def irimap():
     run_id = request.args.get('run_id', None)
-    ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
+    ts = request.args.get('ts', None)
 
     with db.engine.connect() as conn:
-        res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
-            (run_id, ts),
-        )
+        if run_id is not None and ts is not None:
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
+                (run_id, ts),
+            )
+        else:
+            res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
+
         rows = list(res.fetchall())
 
         if len(rows) == 0:
@@ -196,12 +203,17 @@ def irimap():
 @app.route("/assimilated.h5", methods=['GET'])
 def assimilated():
     run_id = request.args.get('run_id', None)
-    ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
+    ts = request.args.get('ts', None)
 
     with db.engine.connect() as conn:
-        res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
-            (run_id, ts),
-        )
+        if run_id is not None and ts is not None:
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
+                (run_id, ts),
+            )
+        else:
+            res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
+
         rows = list(res.fetchall())
 
         if len(rows) == 0:
@@ -209,6 +221,89 @@ def assimilated():
 
         return make_response(rows[0]['dataset'].tobytes(), { 'Content-Type': 'application/x-hdf5' })
         
+def get_latest_run():
+    with db.engine.connect() as conn:
+        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished') order by ts asc")
+        rows = list(res.fetchall())
+
+        if len(rows) == 0:
+            return make_response('Not Found', 404)
+
+        out = {
+            'run_id': rows[0]['run_id'],
+            'maps': [ { 'id': x['id'], 'ts': x['ts'] } for x in rows ],
+        }
+
+        return out
+
+@app.route("/latest_run.json", methods=['GET'])
+def latest_run():
+    return jsonify(get_latest_run())
+
+def maidenhead_to_latlon(grid):
+    grid = grid.strip()
+
+    if len(grid) < 4:
+        grid += "55"
+    if len(grid) < 6:
+        grid += "mm"
+    if len(grid) < 8:
+        grid += "55"
+
+    lat, lon = maidenhead.to_location(grid)
+
+    return lat, lon
+
+@app.route("/moflof.svg", methods=['GET'])
+def mof_lof():
+    run_id = request.values.get('run_id', None)
+    ts = request.values.get('ts', None)
+    metric = request.values.get('metric', 'mof_sp')
+    grid = request.values.get('grid', 'fn21wa')
+    centered = '1' if request.values.get('centered') in ['true', '1'] else '0'
+
+    lat, lon = maidenhead_to_latlon(grid)
+
+    if run_id is None or ts is None:
+        latest = get_latest_run()
+        run_id = latest['run_id']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
+    else:
+        run_id = int(run_id)
+        ts = int(ts)
+
+    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f&centered=%s" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon, centered)
+    with urllib.request.urlopen(url) as res:
+        content = res.read()
+        res = make_response(content)
+        res.mimetype = 'image/svg+xml'
+        return res
+
+@app.route('/ptp.json', methods=['GET'])
+def ptp_json():
+    path = request.values.get('path', 'both')
+    from_grid = request.values.get('from_grid', None)
+    to_grid = request.values.get('to_grid', None)
+    debug = request.values.get('debug', '0')
+
+    from_lat, from_lon = maidenhead_to_latlon(from_grid)
+    to_lat, to_lon = maidenhead_to_latlon(to_grid)
+
+    latest = get_latest_run()
+    run_id = latest['run_id']
+
+    url = "http://localhost:%s/ptp.json?run_id=%d&path=%s&debug=%s&from_lat=%f&from_lon=%f&to_lat=%f&to_lon=%f" % (os.getenv('RAYTRACE_PORT'), run_id, path, debug, from_lat, from_lon, to_lat, to_lon)
+
+    for m in latest['maps']:
+        url += '&ts=%d' % (m['ts'])
+
+    with urllib.request.urlopen(url) as res:
+        content = res.read()
+        res = make_response(content)
+        res.mimetype = 'application/json'
+        return res
+
 @app.route("/", methods=['GET'])
 def static_stations():
       index_path = os.path.join(app.static_folder, 'index.html')

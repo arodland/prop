@@ -70,7 +70,7 @@ def generate():
 
 #        gp = george.GP(kernel, solver=george.HODLRSolver, tol=1e-5)
         gp = george.GP(kernel)
-        gp.compute(x, 2. * sigma + 1e-4)
+        gp.compute(x, sigma + 1e-3)
 
         tm = np.array([ time.mktime(ts.timetuple()) for ts in times ])
         pred_fof2, sd_fof2 = gp.predict(y_fof2, tm / 86400., return_var=True)

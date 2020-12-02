@@ -44,43 +44,19 @@ sub target_times {
       target_time => $run_time + 300,
       dots => 'curr',
     },
-    {
-      name => '1h',
-      target_time => $run_time + 300 + 1*3600,
+    map(+{
+      name => "${_}h",
+      target_time => $run_time + 300 + $_*3600,
       dots => 'pred',
-    },
-    {
-      name => '2h',
-      target_time => $run_time + 300 + 2*3600,
-      dots => 'pred',
-    },
-    {
-      name => '3h',
-      target_time => $run_time + 300 + 3*3600,
-      dots => 'pred',
-    },
-    {
-      name => '4h',
-      target_time => $run_time + 300 + 4*3600,
-      dots => 'pred',
-    },
-    {
-      name => '5h',
-      target_time => $run_time + 300 + 5*3600,
-      dots => 'pred',
-    },
-    {
-      name => '6h',
-      target_time => $run_time + 300 + 6*3600,
-      dots => 'pred',
-    },
+    }, 1 .. 24),
   )
 }
 
 sub pred_times {
   my ($run_time) = @_;
 
-  return map { $run_time + 300 + 900*$_ } -4 .. 24;
+  # Every 15 minutes from -1hr to +6hr; every hour from +7hr to +24hr, inclusive.
+  return map({ $run_time + 300 + 900*$_ } -4 .. 24), map({ $run_time + 300 + 3600*$_ } 7 .. 24);
 }
 
 
@@ -102,7 +78,7 @@ sub make_maps {
           file_format => (
             $format eq 'bare'
             ? ['jpg']
-            : ['svg','png','station_json']
+            : ['svg','station_json']
           ),
         ],
         {
@@ -126,6 +102,7 @@ sub queue_job {
     ],
     {
       attempts => 2,
+      priority => 1,
     },
   );
 
@@ -150,6 +127,7 @@ sub queue_job {
     ],
     {
       attempts => 2,
+      priority => 2,
     },
   );
 
@@ -165,6 +143,7 @@ sub queue_job {
       {
         parents => [ $essn_24h ],
         attempts => 2,
+        priority => 2,
       },
     );
     my $assimilate = app->minion->enqueue('assimilate',
@@ -175,6 +154,7 @@ sub queue_job {
       {
         parents => [ $pred, $irimap ],
         attempts => 2,
+        priority => 3,
       },
     );
     my @map_jobs = make_maps(
@@ -244,7 +224,10 @@ if ($child) {
   app->minion->on(worker => sub { srand });
   my $worker = app->minion->worker;
   $worker->status->{dequeue_timeout} = 1;
-  $worker->status->{jobs} = 4;
+  $worker->status->{jobs} = 12;
   $worker->status->{heartbeat_interval} = 30;
   $worker->run;
+  END {
+    $worker->unregister;
+  }
 }
