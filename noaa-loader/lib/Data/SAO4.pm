@@ -2,7 +2,7 @@ package Data::SAO4;
 
 use Moo;
 use Fortran::Format;
-use POSIX qw(mktime gmtime);
+use POSIX qw(mktime);
 
 has 'filename' => (is => 'ro');
 has 'fh' => (is => 'lazy');
