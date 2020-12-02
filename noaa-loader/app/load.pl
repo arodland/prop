@@ -77,6 +77,15 @@ my %map = (
 
 my $characteristics = $sao->scaled_characteristics;
 
+# Compute mufd from fof2 and md or fof2 and hmf2, if available
+# (pred can only work with stations that have fof2 + hmf2 + mufd, so it's worth trying to fill in)
+if (defined $characteristics->{'foF2'} && defined $characteristics->{'M(D)'} && !defined $characteristics->{'MUF(D)'}) {
+  $characteristics->{'MUF(D)'} = $characteristics->{'foF2'} * $characteristics->{'M(D)'};
+} elsif (defined $characteristics->{'foF2'} && defined $characteristics->{'zmF2'} && !defined $characteristics->{'MUF(D)'}) {
+  $characteristics->{'M(D)'} = 1 / cos(atan2(sin(1500/6371), 1 + ($characteristics->{'zmF2'}+37)/6371 - cos(1500/6371)));
+  $characteristics->{'MUF(D)'} = $characteristics->{'foF2'} * $characteristics->{'M(D)'};
+}
+
 for my $key (sort keys %map) {
   if (defined(my $val = $characteristics->{$map{$key}})) {
     next if $val == 0;
