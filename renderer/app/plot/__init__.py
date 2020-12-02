@@ -169,7 +169,7 @@ class Plot:
             norm=self.norm,
             extend='both',
             linewidths=.6,
-            alpha=.75,
+            alpha=.85,
             transform=ccrs.PlateCarree(),
         )
 
