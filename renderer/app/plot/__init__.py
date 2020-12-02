@@ -147,52 +147,23 @@ class Plot:
             cbar.add_lines(CS2)
 
 
-    def draw_mofstyle(self, zi_primary, zi_secondary, zi_contour, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
+    def draw_mofstyle(self, zi, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
         loni = np.linspace(lon_min, lon_max, lon_steps)
         lati = np.linspace(lat_min, lat_max, lat_steps)
         loni, lati = np.meshgrid(loni, lati)
 
-        prim = plt.contourf(
-            loni, lati, zi_primary,
+        filled = plt.contourf(
+            loni, lati, zi,
             self.levels,
             cmap=self.cmap,
-            extend='both',
             norm=self.norm,
+            extend='both',
             alpha=self.plotalpha,
             transform=ccrs.PlateCarree(),
         )
 
-        invalid = zi_primary.mask
-
-        if zi_secondary is not None:
-            sec = self.ax.contourf(
-                loni, lati, zi_secondary,
-                self.levels,
-                cmap=self.cmap,
-                extend='both',
-                hatches=['//'],
-                norm=self.norm,
-                alpha=self.plotalpha,
-                transform=ccrs.PlateCarree(),
-            )
-
-            invalid = invalid & zi_secondary.mask
-
-        # Draw "blackout" region anywhere that we haven't drawn a contourf with valid data
-        # (otherwise white will show through, which is not the wanted effect!)
-        if invalid.any():
-            black = np.zeros((*invalid.shape, 3))
-            alpha = self.plotalpha * np.expand_dims(invalid, axis=2)
-            black = np.concatenate((black, alpha), axis=2)
-
-            self.ax.imshow(
-                black,
-                extent=(lon_min, lon_max, lat_min, lat_max),
-                transform=ccrs.PlateCarree(),
-            )
-
         CS = self.ax.contour(
-            loni, lati, zi_contour,
+            loni, lati, zi,
             self.levels,
             cmap=self.cmap_dark,
             norm=self.norm,
@@ -213,8 +184,7 @@ class Plot:
 
         if self.decorations:
             cbar = plt.colorbar(
-                prim,
-                extend='both',
+                filled,
                 fraction=0.03,
                 orientation='horizontal',
                 pad=0.02,
@@ -224,6 +194,38 @@ class Plot:
                 )
             cbar.minorticks_off()
             cbar.add_lines(CS)
+
+    def draw_longpath_hatches(self, lp, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
+        if lp is None or not lp.any():
+            return
+
+        loni = np.linspace(lon_min, lon_max, lon_steps)
+        lati = np.linspace(lat_min, lat_max, lat_steps)
+        loni, lati = np.meshgrid(loni, lati)
+
+        plt.contourf(
+            loni, lati, lp,
+            [ -0.1, 0.9, 1.9 ],
+            colors=[ '#00000000' ], # transparent black
+            hatches=[ None, '//' ],
+            transform=ccrs.PlateCarree(),
+        )
+
+    def draw_blackout(self, bo, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
+        if bo is None or not bo.any():
+            return
+
+        loni = np.linspace(lon_min, lon_max, lon_steps)
+        lati = np.linspace(lat_min, lat_max, lat_steps)
+        loni, lati = np.meshgrid(loni, lati)
+
+        plt.contourf(
+            loni, lati, bo,
+            [ -0.1, 0.9, 1.9 ],
+            colors=[ '#00000000' ], # transparent black
+            hatches=[ None, 'o' ],
+            transform=ccrs.PlateCarree(),
+        )
 
     def draw_title(self, metric, extra):
         plt.title(metric + ' ' + str(self.date.strftime('%Y-%m-%d %H:%M') + ' ' + extra))

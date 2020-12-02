@@ -83,32 +83,33 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
 
     if metric.endswith('_combined'):
         base_metric = metric[:len(metric)-9]
-        primary = maps[base_metric + '_sp']
-        primary_valid = maps['mof_sp'] > maps['lof_sp']
+        sp = maps[base_metric + '_sp']
+        sp_valid = maps['mof_sp'] > maps['lof_sp']
 
-        secondary = maps[base_metric + '_lp']
-        secondary_valid = maps['mof_lp'] > maps['lof_lp']
+        lp = maps[base_metric + '_lp']
+        lp_valid = maps['mof_lp'] > maps['lof_lp']
 
         if base_metric == 'mof':
-            secondary_valid = secondary_valid & (secondary > primary)
-            primary_valid = primary_valid & ~secondary_valid
+            lp_valid = lp_valid & (lp > sp)
+            sp_valid = sp_valid & ~lp_valid
         else:
-            secondary_valid = secondary_valid & (secondary < primary)
-            primary_valid = primary_valid & ~secondary_valid
+            lp_valid = lp_valid & (lp < sp)
+            sp_valid = sp_valid & ~lp_valid
 
-        primary = np.ma.MaskedArray(primary, ~primary_valid)
-        secondary = np.ma.MaskedArray(secondary, ~secondary_valid)
-        contour = primary.filled(secondary)
+        contour = sp
+        contour[lp_valid] = lp[lp_valid]
+        hatch = lp_valid
+        blackout = ~(sp_valid | lp_valid)
 
     else:
         path = metric[len(metric)-3:]
-        primary = maps[metric]
-        primary_valid = maps['mof' + path] > maps['lof' + path]
-        primary = np.ma.MaskedArray(primary, ~primary_valid)
-        secondary = None
-        contour = primary
+        contour = maps[metric]
+        hatch = None
+        blackout = maps['lof' + path] >= maps['mof' + path]
 
-    plt.draw_mofstyle(primary, secondary, contour)
+    plt.draw_longpath_hatches(hatch)
+    plt.draw_blackout(blackout)
+    plt.draw_mofstyle(contour)
     plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
