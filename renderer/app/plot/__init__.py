@@ -14,23 +14,40 @@ turbo_colormap_data = [[0.18995,0.07176,0.23217],[0.19483,0.08339,0.26149],[0.19
 matplotlib.cm.register_cmap('turbo', cmap=ListedColormap(turbo_colormap_data))
 
 class Plot:
-    def __init__(self, metric_name, date, decorations=True):
+    def __init__(self, metric_name, date, decorations=True, centered=None):
         self.metric_name = metric_name
         self.date = date
         self.decorations = decorations
         self.plotalpha = 0.35
 
-        self.fig = plt.figure(figsize=(16,24))
+        if centered is None:
+            self.proj = ccrs.PlateCarree()
+            figsize=(16,24)
+        else:
+            self.proj = ccrs.AzimuthalEquidistant(centered[0], centered[1])
+            figsize=(12,12)
+
+        self.fig = plt.figure(figsize=figsize)
         self.ax = plt.axes(
-            projection=ccrs.PlateCarree(),
+            projection=self.proj,
             frame_on=self.decorations,
         )
         self.ax.set_global()
 
         if self.decorations:
-            self.ax.grid(linewidth=.5, color='black', alpha=0.25, linestyle='--')
-            self.ax.set_xticks([-180, -160, -140, -120,-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100, 120,140, 160,180], crs=ccrs.PlateCarree())
-            self.ax.set_yticks([-80, -60,-40,-20, 0, 20, 40, 60,80], crs=ccrs.PlateCarree())
+            if centered is None:
+                self.ax.grid(linewidth=.5, color='black', alpha=0.25, linestyle='--')
+                self.ax.set_xticks([-180, -160, -140, -120,-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100, 120,140, 160,180], crs=ccrs.PlateCarree())
+                self.ax.set_yticks([-80, -60,-40,-20, 0, 20, 40, 60,80], crs=ccrs.PlateCarree())
+            else:
+                self.ax.gridlines(
+                    linewidth=.5,
+                    color='black',
+                    alpha=0.25,
+                    linestyle='--',
+                    xlocs=[-180, -160, -140, -120,-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100, 120,140, 160,180],
+                    ylocs=[-80, -60,-40,-20, 0, 20, 40, 60,80],
+                )
         else:
             self.ax.axis(False)
             self.ax.outline_patch.set_visible(False)
@@ -91,7 +108,7 @@ class Plot:
                 zi,
                 extent=(lon_min, lon_max, lat_min, lat_max),
                 cmap=self.cmap,
-                transform=ccrs.PlateCarree(),
+                transform=self.proj,
                 alpha=self.plotalpha,
                 norm=self.norm
                 )
@@ -103,7 +120,7 @@ class Plot:
                 norm=self.norm,
                 linewidths=.6,
                 alpha=.75,
-                transform=ccrs.PlateCarree()
+                transform=self.proj
                 )
 
         prev = None
@@ -141,22 +158,22 @@ class Plot:
             cmap=self.cmap,
             extend='both',
             norm=self.norm,
-            transform=ccrs.PlateCarree(),
             alpha=self.plotalpha,
+            transform=ccrs.PlateCarree(),
         )
 
         invalid = zi_primary.mask
 
         if zi_secondary is not None:
-            sec = plt.contourf(
+            sec = self.ax.contourf(
                 loni, lati, zi_secondary,
                 self.levels,
                 cmap=self.cmap,
                 extend='both',
                 hatches=['//'],
                 norm=self.norm,
-                transform=ccrs.PlateCarree(),
                 alpha=self.plotalpha,
+                transform=ccrs.PlateCarree(),
             )
 
             invalid = invalid & zi_secondary.mask
@@ -174,7 +191,7 @@ class Plot:
                 transform=ccrs.PlateCarree(),
             )
 
-        CS = plt.contour(
+        CS = self.ax.contour(
             loni, lati, zi_contour,
             self.levels,
             cmap=self.cmap_dark,
@@ -192,7 +209,7 @@ class Plot:
                 levels.append(lev)
                 prev = lev
 
-        plt.clabel(CS, levels, inline=True, fontsize=10, fmt='%.0f', use_clabeltext=True)
+        self.ax.clabel(CS, levels, inline=True, fontsize=10, fmt='%.0f', use_clabeltext=True)
 
         if self.decorations:
             cbar = plt.colorbar(

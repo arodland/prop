@@ -69,9 +69,9 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         with open(out_path + '_station.json', 'w') as f:
             dot_df.to_json(f, orient='records')
 
-def mof_lof(dataset, metric, ts, lat, lon, file_format):
+def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
     tm = datetime.fromtimestamp(ts, timezone.utc)
-    plt = plot.Plot(metric, tm, decorations=True)
+    plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
     maps = { name: dataset['/maps/' + name][:] for name in ('mof_sp', 'mof_lp', 'lof_sp', 'lof_lp') }
 
     if metric.startswith('mof_'):
@@ -166,10 +166,11 @@ if __name__ == '__main__':
         metric = request.values['metric']
         lat = float(request.values['lat'])
         lon = float(request.values['lon'])
+        centered = request.values.get('centered') in ('true', '1')
 
         h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon))
 
-        svg = mof_lof(h5, metric, ts, lat, lon, 'svg')
+        svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
         resp = make_response(svg)
         resp.mimetype = 'image/svg+xml'
         return resp
