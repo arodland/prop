@@ -22,3 +22,4 @@ six==1.11.0
 SQLAlchemy==1.2.14
 Werkzeug==0.15.5
 WTForms==2.2.1
+uwsgi==2.0.18

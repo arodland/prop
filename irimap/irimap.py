@@ -69,39 +69,39 @@ def generate_map(ssn, sfi, tm):
     return bio.getvalue()
 
 
+# Make sure data is initialized before first request.
+x = wmm.wmm(0, 0, 100, 2019.0)
+
+
+app = Flask(__name__)
+
+@app.route('/generate', methods=['POST'])
+def generate():
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    con = psycopg2.connect(dsn)
+
+    run_id = request.form.get('run_id', -1)
+    tgt = request.form.get('target', None)
+    series = request.form.get('series', '24h')
+
+    tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc) if tgt is not None else datetime.now(timezone.utc)
+
+    ssn = None
+    sfi = None
+
+    with con.cursor() as cur:
+        cur.execute('select ssn, sfi from essn where run_id=%s and series=%s order by time desc limit 1', (run_id, series))
+        ssn, sfi = cur.fetchone()
+
+    dataset = generate_map(ssn, sfi, tm)
+
+    with con.cursor() as cur:
+        cur.execute('insert into irimap (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
+        con.commit()
+
+    con.close()
+
+    return make_response("OK\n")
+
 if __name__ == '__main__':
-    # Make sure data is initialized before first request.
-    x = wmm.wmm(0, 0, 100, 2019.0)
-
-
-    app = Flask(__name__)
-
-    @app.route('/generate', methods=['POST'])
-    def generate():
-        dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-        con = psycopg2.connect(dsn)
-
-        run_id = request.form.get('run_id', -1)
-        tgt = request.form.get('target', None)
-        series = request.form.get('series', '24h')
-
-        tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc) if tgt is not None else datetime.now(timezone.utc)
-
-        ssn = None
-        sfi = None
-
-        with con.cursor() as cur:
-            cur.execute('select ssn, sfi from essn where run_id=%s and series=%s order by time desc limit 1', (run_id, series))
-            ssn, sfi = cur.fetchone()
-
-        dataset = generate_map(ssn, sfi, tm)
-
-        with con.cursor() as cur:
-            cur.execute('insert into irimap (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
-            con.commit()
-
-        con.close()
-
-        return make_response("OK\n")
-
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('IRIMAP_PORT')), threaded=False, processes=16)

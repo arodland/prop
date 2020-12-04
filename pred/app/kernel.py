@@ -1,4 +1,4 @@
-from george.kernels import ExpSquaredKernel, ExpSine2Kernel, RationalQuadraticKernel, ConstantKernel, NegativeConstantKernel
+from george.kernels import ExpSquaredKernel, ExpSine2Kernel, RationalQuadraticKernel, ConstantKernel
 import numpy as np
 
 #kernel = 0.378**2 * ExpSquaredKernel(48.5) * (ExpSine2Kernel(gamma=3.0, log_period=0.0) + NegativeConstantKernel(np.log(0.38))) + 0.0831**2 * ExpSquaredKernel(32.4) * (ExpSine2Kernel(gamma=3.03, log_period=np.log(0.5)) + ConstantKernel(np.log(0.305))) + 0.15**2 * ExpSquaredKernel(0.5) + 0.10**2 * RationalQuadraticKernel(metric=0.025, log_alpha=-1)

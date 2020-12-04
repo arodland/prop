@@ -8,4 +8,4 @@ RUN python3 -c 'import wmm2020'
 COPY irimap.py ./
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
-CMD python3 /src/irimap.py
+CMD uwsgi --http :${IRIMAP_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi irimap:app --processes 16

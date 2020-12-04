@@ -8,7 +8,7 @@ RUN wget -O /tmp/ne_110m_land.zip http://naciscdn.org/naturalearth/110m/physical
 WORKDIR /.local/share/cartopy/shapefiles/natural_earth/physical  
 RUN unzip /tmp/ne_110m_land.zip && rm /tmp/ne_110m_land.zip  
   
-RUN conda create -y -q -n my_cartopy_env -c conda-forge python=3.7 matplotlib cartopy proj4=5.2.0 pandas
+RUN conda create -y -q -n my_cartopy_env -c conda-forge python=3.7 matplotlib=3.2.1 cartopy=0.17.0 proj4=5.2.0 pandas uwsgi
   
 ENV PATH /opt/conda/envs/my_cartopy_env/bin:$PATH  
   
@@ -21,4 +21,6 @@ WORKDIR /
 COPY app /app  
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
-CMD python3 /app/renderer.py
+WORKDIR /app
+ENV HOME=/
+CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 16
