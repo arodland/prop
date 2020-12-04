@@ -2,6 +2,7 @@
 Description=Prop Scheduler
 BindsTo=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.service prop-pred.service prop-assimilate.service prop-renderer.service
 After=prop-podman-pod.service prop-postgres.service prop-essn.service irimap.service prop-pred.service prop-assimilate.service prop-renderer.service
+PartOf=kc2gprop.target
 [Service]
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
 ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/mojo.env --env-file /etc/kc2gprop/ports.env --mount type=bind,src=/home/prop/output,dst=/output --mount type=bind,src=/storage/prop-archive,dst=/archive prop-scheduler

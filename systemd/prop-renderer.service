@@ -2,6 +2,7 @@
 Description=Prop Renderer
 BindsTo=prop-podman-pod.service prop-api.service
 After=prop-podman-pod.service prop-api.service
+PartOf=kc2gprop.target
 [Service]
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
 ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/ports.env --mount type=bind,src=/home/prop/output,dst=/output prop-renderer

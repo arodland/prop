@@ -2,6 +2,7 @@
 Description=Prop Postgres
 BindsTo=prop-podman-pod.service
 After=prop-podman-pod.service
+PartOf=kc2gprop.target
 [Service]
 StateDirectory=prop-postgres
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
