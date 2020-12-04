@@ -107,9 +107,9 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
         hatch = None
         blackout = maps['lof' + path] >= maps['mof' + path]
 
-    plt.draw_longpath_hatches(hatch)
-    plt.draw_blackout(blackout)
-    plt.draw_mofstyle(contour)
+    plt.draw_longpath_hatches(hatch, lat_steps=hatch.shape[0], lon_steps=hatch.shape[1])
+    plt.draw_blackout(blackout, lat_steps=blackout.shape[0], lon_steps=blackout.shape[1])
+    plt.draw_mofstyle(contour, lat_steps=contour.shape[0], lon_steps=contour.shape[1])
     plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
@@ -168,8 +168,9 @@ if __name__ == '__main__':
         lat = float(request.values['lat'])
         lon = float(request.values['lon'])
         centered = request.values.get('centered') in ('true', '1')
+        res = float(request.values.get('res', '2'))
 
-        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon))
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
 
         svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
         resp = make_response(svg)

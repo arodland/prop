@@ -16,6 +16,8 @@ if __name__ == '__main__':
         from_lon = float(request.args.get('lon', -74.138))
         run_id = request.args.get('run_id', None)
         ts = request.args.get('ts', None)
+        res = request.args.get('res', '2')
+        res = float(res)
 
         from_lat *= np.pi / 180
         from_lon *= np.pi / 180
@@ -26,8 +28,8 @@ if __name__ == '__main__':
 
         iono = Iono(iono_url)
 
-        to_lat = np.linspace(-90, 90, 181) * np.pi / 180
-        to_lon = np.linspace(-180, 180, 361) * np.pi / 180
+        to_lat = np.linspace(-90, 90, int(180 / res) + 1) * np.pi / 180
+        to_lon = np.linspace(-180, 180, int(360 / res) + 1) * np.pi / 180
 
         to_lon, to_lat = np.meshgrid(to_lon, to_lat)
 
