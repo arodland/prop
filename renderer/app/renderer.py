@@ -117,64 +117,64 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
     plt.write(bio, format=file_format)
     return bio.getvalue()
 
+app = Flask(__name__)
+
+@app.route('/rendersvg', methods=['POST'])
+def rendersvg():
+    run_id = int(request.form['run_id'])
+    ts = int(request.form['target'])
+    metric = request.form['metric']
+    name = request.form['name']
+    format = request.form['format']
+    dots = request.form['dots']
+    file_formats = request.form.getlist('file_format')
+
+    job_path = '/output/%d' % (run_id)
+    pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
+    out_path = '%s/%s-%s-%s' % (job_path, metric, format, name)
+
+    h5 = get_dataset('http://localhost:%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
+
+    draw_map(
+        out_path = out_path,
+        dataset = h5,
+        metric = metric,
+        ts = ts,
+        format = format,
+        file_formats = file_formats,
+        dots = dots,
+    )
+
+    return make_response("OK\n")
+
+@app.route('/renderhtml', methods=['POST'])
+def renderhtml():
+    run_id = int(request.form['run_id'])
+    try:
+        os.unlink('/output/current')
+    except:
+        pass
+
+    os.symlink('%d' % (run_id), '/output/current')
+
+    return make_response("OK\n")
+
+@app.route('/moflof.svg', methods=['GET'])
+def moflof():
+    run_id = int(request.values['run_id'])
+    ts = int(request.values['ts'])
+    metric = request.values['metric']
+    lat = float(request.values['lat'])
+    lon = float(request.values['lon'])
+    centered = request.values.get('centered') in ('true', '1')
+    res = float(request.values.get('res', '2'))
+
+    h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+
+    svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
+    resp = make_response(svg)
+    resp.mimetype = 'image/svg+xml'
+    return resp
+
 if __name__ == '__main__':
-    app = Flask(__name__)
-
-    @app.route('/rendersvg', methods=['POST'])
-    def rendersvg():
-        run_id = int(request.form['run_id'])
-        ts = int(request.form['target'])
-        metric = request.form['metric']
-        name = request.form['name']
-        format = request.form['format']
-        dots = request.form['dots']
-        file_formats = request.form.getlist('file_format')
-
-        job_path = '/output/%d' % (run_id)
-        pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
-        out_path = '%s/%s-%s-%s' % (job_path, metric, format, name)
-
-        h5 = get_dataset('http://localhost:%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
-
-        draw_map(
-            out_path = out_path,
-            dataset = h5,
-            metric = metric,
-            ts = ts,
-            format = format,
-            file_formats = file_formats,
-            dots = dots,
-        )
-
-        return make_response("OK\n")
-
-    @app.route('/renderhtml', methods=['POST'])
-    def renderhtml():
-        run_id = int(request.form['run_id'])
-        try:
-            os.unlink('/output/current')
-        except:
-            pass
-
-        os.symlink('%d' % (run_id), '/output/current')
-
-        return make_response("OK\n")
-
-    @app.route('/moflof.svg', methods=['GET'])
-    def moflof():
-        run_id = int(request.values['run_id'])
-        ts = int(request.values['ts'])
-        metric = request.values['metric']
-        lat = float(request.values['lat'])
-        lon = float(request.values['lon'])
-        centered = request.values.get('centered') in ('true', '1')
-        res = float(request.values.get('res', '2'))
-
-        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
-
-        svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
-        resp = make_response(svg)
-        resp.mimetype = 'image/svg+xml'
-        return resp
-
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=16)

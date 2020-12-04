@@ -129,8 +129,13 @@ def station_err(x):
 
 
 def err(ssn, data, recency, now):
+    global pred_pool
+
     total = 0.0
     total_weight = 0.0
+
+    if pred_pool is None:
+        pred_pool = multiprocessing.Pool(16)
 
     results = pred_pool.imap_unordered(station_err, [ (station, ssn, recency, now) for station in data ])
     for result in results:
@@ -138,28 +143,6 @@ def err(ssn, data, recency, now):
         total_weight += result[1]
 
     return total / total_weight
-
-def log_err(now, ssn, recency):
-    epoch = now.strftime("%s")
-
-    fh = open("/errlog.txt", "a+")
-
-    results = pred_pool.imap(station_err, [ (station, ssn, recency, now) for station in data ])
-    for i, (station_score, station_weight) in enumerate(results):
-        station = data[i]
-        if station_weight > 0:
-            fh.write("%s\t%s\t%f\t%f\t%f\t%f\t%f\n" % (epoch, station['code'], station['latitude'], station['longitude'], station_score, station_weight, station_score * station_weight))
-
-    fh.write("\n")
-    fh.close()
-
-def make_map(ssn):
-    iritime = datetime.strftime(now, '%Y %m %d %H %M %S')
-    for lat in range(-90, 91):
-        res = pred_pool.imap(get_pred, [ (lat, lon, ssn, iritime) for lon in range(-180, 181) ])
-        for row in res:
-            print("%16.8E %16.8E %16.8E %16.8E %16.8E %16.8E %16.8E" % (row[0], row[1], row[2], row[3], row[4], row[5], row[7]))
-
 
 def generate_essn(run_id, series):
     now = datetime.utcnow()
@@ -207,15 +190,14 @@ def generate_essn(run_id, series):
 
     return { 'sfi': sfi, 'ssn': ssn, 'err': res.fun }
 
+
+app = Flask(__name__)
+@app.route('/generate', methods=['POST'])
+def generate():
+    run_id = request.form.get('run_id', -1)
+    series = request.form.get('series', '24h')
+
+    return jsonify(generate_essn(run_id, series))
+
 if __name__ == '__main__':
-    pred_pool = multiprocessing.Pool(16)
-
-    app = Flask(__name__)
-    @app.route('/generate', methods=['POST'])
-    def generate():
-        run_id = request.form.get('run_id', -1)
-        series = request.form.get('series', '24h')
-
-        return jsonify(generate_essn(run_id, series))
-
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ESSN_PORT')))

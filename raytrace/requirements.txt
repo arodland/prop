@@ -3,3 +3,4 @@ numpy==1.18.4
 cython
 Flask==1.1.2
 numba==0.52.0
+uwsgi==2.0.18

@@ -6,4 +6,4 @@ RUN pip3 install -r requirements.txt
 COPY essn.py ./
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
-CMD python3 /src/essn.py
+CMD uwsgi --http :${ESSN_PORT} --master --need-app --single-interpreter --enable-threads --max-requests 100 --http-timeout 300 --wsgi essn:app --processes 2
