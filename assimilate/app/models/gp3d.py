@@ -1,6 +1,6 @@
 import numpy as np
-import rbf
-import rbf.gauss
+import george
+from george.kernels import Matern32Kernel
 
 def sph_to_xyz(lat, lon):
     lon = lon * np.pi / 180.
@@ -19,11 +19,13 @@ class GP3D:
         x, y, z = sph_to_xyz(df['station.latitude'].values, df['station.longitude'].values)
         stdev = 0.237 - 0.170 * df.cs
 
-        gp = rbf.gauss.gpiso(rbf.basis.mat32, (0.0, 1.0, 1.0))
-        self.gp = gp_cond = gp.condition(np.vstack((x,y,z)).T, t, sigma=(stdev + 0.05))
+        kernel = Matern32Kernel(1.0, ndim=3)
+        self.gp = george.GP(kernel)
+        self.gp.compute(np.column_stack((x,y,z)), stdev + 0.05)
+        self.z = t
 
     def predict(self, latitude, longitude):
         x, y, z = sph_to_xyz(latitude, longitude)
-        xyz = np.array([x.flatten(), y.flatten(), z.flatten()]).T
-        pred, sd = self.gp.meansd(xyz)
+        xyz = np.column_stack((x.flatten(), y.flatten(), z.flatten()))
+        pred = self.gp.predict(self.z, xyz, return_cov=False)
         return pred.reshape(x.shape)
