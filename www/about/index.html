@@ -14,40 +14,6 @@
   prop.kc2g.com provides near-realtime maps and data about ionospheric conditions, for the use of amateur radio operators.
   </p>
 
-  <h2 id="data">Where does the data come from?</h2>
-  <p>
-  The near-real-time ionospheric data that powers the site is collected by ionosondes (ionospheric radars) around the world, and compiled by the
-  <a href="https://www.ngdc.noaa.gov/stp/IONO/rt-iono/">NOAA National Centers for Environmental Information</a> and the 
-  <a href="http://giro.uml.edu/">Lowell Global Iosnopheric Radio Observatory</a> (GIRO).
-  </p>
-  <p>
-  The ionospheric phyiscal model for the "IRI" plots is the <a href="http://irimodel.org/">International Reference
-    Ionosphere</a> 2016, produced by a joint task group of the <a href="https://cosparhq.cnes.fr/">Committee on Space
-    Research (COSPAR)</a> and <a href="http://www.ursi.org/">International Union of Radio Science (URSI)</a>.
-  </p>
-  <h2 id="who">Who else is responsible?</h2>
-  <p>
-  The GIRO data fetcher and contour mapper were originally written by Matthew Smith AF7TI and hosted at af7ti.com. Later they
-  were removed from that site, and the code was placed on GitHub. In January of 2019, Andrew KC2G forked the code on GitHub,
-  started making some improvements to the interpolation algorithm, and put the results up on this site.
-  </p>
-  <p>
-  The code itself relies on <a href="https://www.python.org/">Python</a>, 
-  <a href="https://www.scipy.org/">NumPy, SciPy, pandas, matplotlib</a>,
-  <a href="https://scitools.org.uk/cartopy/">cartopy</a>,
-  <a href="https://george.readthedocs.io/en/latest/">george</a>,
-  <a href="https://flask.palletsprojects.com/">Flask</a>,
-  <a href="https://mojolicious.org/">Mojolicious, Minion</a>,
-  <a href="https://www.postgresql.org/">PostgreSQL</a>,
-  and many more open-source projects, as well as the aforementioned IRI2016.
-  </p>
-
-  <h2 id="age">How often does the data update?</h2>
-  <p>
-  A new map is generated every 15 minutes, from data which is usually between 5 and 20 minutes old. Therefore, on average, you're looking at something
-  based on measurements taken about half an hour ago. However, we do our best to time-align all of the data (using short-term extrapolation) to the
-  time indicated in the map header.
-  </p>
   <h2 id="interpretation">How do I read this?</h2>
   <p>
   The MUF map shows the Maximum Usable Frequency using colors and contour lines. For example, if a given area on the map
@@ -78,6 +44,42 @@
   More information about ionospheric propagation can be found in most decent books about amateur radio.
   </p>
 
+  <h2 id="data">Where does the data come from?</h2>
+  <p>
+  The near-real-time ionospheric data that powers the site is collected by ionosondes (ionospheric radars) around the world, and compiled by the
+  <a href="https://www.ngdc.noaa.gov/stp/IONO/rt-iono/">NOAA National Centers for Environmental Information</a> and the 
+  <a href="http://giro.uml.edu/">Lowell Global Iosnopheric Radio Observatory</a> (GIRO).
+  </p>
+  <p>
+  The ionospheric phyiscal model for the "IRI" plots is the <a href="http://irimodel.org/">International Reference
+    Ionosphere</a> 2016, produced by a joint task group of the <a href="https://cosparhq.cnes.fr/">Committee on Space
+    Research (COSPAR)</a> and <a href="http://www.ursi.org/">International Union of Radio Science (URSI)</a>.
+  </p>
+
+  <h2 id="who">Who else is responsible?</h2>
+  <p>
+  The GIRO data fetcher and contour mapper were originally written by Matthew Smith AF7TI and hosted at af7ti.com. Later they
+  were removed from that site, and the code was placed on GitHub. In January of 2019, Andrew KC2G forked the code on GitHub,
+  started making some improvements to the interpolation algorithm, and put the results up on this site.
+  </p>
+  <p>
+  The code itself relies on <a href="https://www.python.org/">Python</a>, 
+  <a href="https://www.scipy.org/">NumPy, SciPy, pandas, matplotlib</a>,
+  <a href="https://scitools.org.uk/cartopy/">cartopy</a>,
+  <a href="https://george.readthedocs.io/en/latest/">george</a>,
+  <a href="https://flask.palletsprojects.com/">Flask</a>,
+  <a href="https://mojolicious.org/">Mojolicious, Minion</a>,
+  <a href="https://www.postgresql.org/">PostgreSQL</a>,
+  and many more open-source projects, as well as the aforementioned IRI2016.
+  </p>
+
+  <h2 id="age">How often does the data update?</h2>
+  <p>
+  A new map is generated every 15 minutes, from data which is usually between 5 and 20 minutes old. Therefore, on average, you're looking at something
+  based on measurements taken about half an hour ago. However, we do our best to time-align all of the data (using short-term extrapolation) to the
+  time indicated in the map header.
+  </p>
+
   <h2 id="quality">Why does the map show something crazy/wrong?</h2>
   <p>
   Despite the best efforts of the researchers, there are only so many ionosondes in the world making measurements. Most of these are clustered in
@@ -97,6 +99,14 @@
   of a single data point can cause the model to make some surprising changes in its global picture. This is because it's working with not that many
   data points to begin with.
   </p>
+
+  <h2 id="source">Where is the source code?</h2>
+  <p>
+  You can find it at <a href="https://github.com/arodland/prop">github.com/arodland/prop</a>. Be aware that the NOAA ionosonde data is pushed from
+  their servers, so you won't receive any data from that channel unless you arrange for your own push feed. A fair amount of computing power is also
+  needed to run the full suite of maps and predictions.
+  </p>
+
   <h2 id="contact">I have something to say!</h2>
   <p>
   Please send feedback to <a href="mailto:kc2g@cleverdomain.org">kc2g@cleverdomain.org</a>.
