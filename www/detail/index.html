@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+	<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" type="text/css" href="/static/style.css" />
+    <title>Station History and Prediction</title>
+    <script src="/static/promise-fetch.min.js"></script>
+    <script src="/static/plotly-latest.min.js"></script>
+    <style type="text/css">
+      #station {
+        width: 20em;
+      }
+    </style>
+  </head>
+  <body>
+  <!--#include virtual="/nav-header.html" -->
+  <div id="selectors">
+    <span id="stations-container">
+      <select id="station">
+      </select>
+    </span>
+    <span id="metrics-container">
+      <select id="metric">
+        <option value="mufd">MUF(3000)</option>
+        <option value="fof2">foF2</option>
+        <option value="hmf2">hmF2</option>
+      </select>
+    </span>
+  </div>
+  <div id="plot" style="width: 75vw; height: 50vw; max-height: 75vh">
+  </div>
+  <script type="text/javascript">
+    var stationSelect = document.getElementById("station");
+    var metricSelect = document.getElementById("metric");
+    var plotDiv = document.getElementById("plot");
+    var hash = window.location.hash.replace(/^#/, '');
+
+    function cs_to_logstdev(cs) {
+      if (cs == -1) {
+        cs = 62;
+      }
+      if (cs == 100) {
+        cs = 86;
+      }
+      return 0.237 - 0.00170 * cs;
+    }
+
+    function error_plus(val, cs) {
+      return Math.exp(Math.log(val) + cs_to_logstdev(cs)) - val;
+    }
+
+    function error_minus(val, cs) {
+      return val - Math.exp(Math.log(val) - cs_to_logstdev(cs));
+    }
+
+    function update() {
+      var stationId = stationSelect.value;
+      var metric = metricSelect.value;
+
+      window.location = '#'+stationId;
+
+      var getHist = window.fetch('/api/history.json?days=2&station=' + encodeURIComponent(stationId)).then(function (response) {
+        return response.json();
+      }).then(function (data) {
+        rows = data[0].history;
+        rows = rows.map(function (x) {
+          return {
+            'time': x[0],
+            'cs': x[1],
+            'fof2': x[2],
+            'mufd': x[3],
+            'hmf2': x[4]
+          };
+        })
+        return rows;
+      });
+
+      var getPred = window.fetch('/api/pred_series.json?station=' + encodeURIComponent(stationId)).then(function (response) {
+        return response.json();
+      }).then(function (data) {
+        return data[0].pred;
+      });
+
+      Promise.all([getHist, getPred]).then(function (v) {
+        var history = v[0];
+        var pred = v[1];
+
+        var plots = [
+          {
+            'name': 'Hist',
+            'type': 'scatter',
+            'x': history.map(function (x) { return x.time }),
+            'y': history.map(function (x) { return x[metric] }),
+            'customdata': history.map(function(x) { return x.cs }),
+            'error_y': {
+              'type': 'data',
+              'symmetric': false,
+              'array': history.map(function (x) { return error_plus(x[metric], x.cs) }),
+              'arrayminus': history.map(function (x) { return error_minus(x[metric], x.cs) })
+            }
+          },
+          {
+            'name': 'Pred',
+            'type': 'scatter',
+            'x': pred.map(function (x) { return x.time }),
+            'y': pred.map(function (x) { return x[metric] }),
+            'customdata': pred.map(function (x) { return x.cs }),
+            'error_y': {
+              'type': 'data',
+              'symmetric': false,
+              'array': history.map(function (x) { return error_plus(x[metric], x.cs) }),
+              'arrayminus': history.map(function (x) { return error_minus(x[metric], x.cs) })
+            }
+          }
+        ];
+
+        Plotly.newPlot(plotDiv, plots, {'title': 'test', 'autosize': true});
+      });
+    }
+
+    window.onresize = function() {
+      Plotly.Plots.resize(plotDiv);
+    };
+
+    window.fetch('/api/stations.json').then(function (response) {
+      return response.json();
+    }).then(function (data) {
+      var stations = data.map(function (x) { return x.station; }).sort(function (a, b) {
+        if (a.code < b.code) {
+          return -1;
+        } else if (a.code > b.code) {
+          return 1;
+        } else {
+          return 0;
+        }
+      });
+      for (var station of stations) {
+        node = document.createElement("option");
+        node.value = station.id;
+        node.text = station.name;
+        if (station.id == hash) {
+          node.selected = true;
+        }
+        stationSelect.appendChild(node);
+      }
+      update();
+    });
+
+    stationSelect.onchange = metricSelect.onchange = update;
+
+  </script>
+  <!--#include virtual="/footer.html" -->
+  </body>
+</html>

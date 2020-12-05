@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="/static/style.css" />
+    <title>24h Point-to-Point MOF/LOF</title>
+    <script src="/static/plotly-latest.min.js"></script>
+    <script src="/static/serialize.js"></script>
+    <style type="text/css">
+      #moflof-chart {
+        width: 90%;
+      }
+
+      @media only screen and (min-width: 1000px) {
+        #moflof-chart {
+          width: 75vw;
+          height: 50vw;
+          max-height: 75vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+  <!--#include virtual="/nav-header.html" -->
+  <div>
+    <form id="moflof-form">
+      <label for="from_grid">From:</label>
+      <input type="text" name="from_grid" id="from_grid" size="8"></input>
+      <label for="to_grid">To:</label>
+      <input type="text" name="to_grid" id="to_grid" size="8"></input>
+      <label for="path">Path:</label>
+      <select name="path" id="path">
+        <option value="short">Short Path</option>
+        <option value="long">Long Path</option>
+        <option value="both">Both</option>
+      </select>
+      <label for="debug">Debug:</label>
+      <input type="checkbox" name="debug" id="debug"></input>
+      <input type="submit" value="Go!"></input>
+    </form>
+  </div>
+
+  <div id="moflof-chart">
+  </div>
+  <script type="text/javascript">
+    div = document.getElementById("moflof-chart");
+
+    xhr = new XMLHttpRequest();
+    created = false;
+    xhr.addEventListener('load', function(e) {
+      var data = JSON.parse(xhr.responseText);
+      var x = data.map(function(row) { return new Date(row.ts*1000) });
+      var metrics = Object.keys(data[0].metrics);
+
+      var plots = metrics.map(function(metric) {
+        return {
+          'name': metric,
+          'type': 'scatter',
+          'x': x,
+          'y': data.map(function(row) { return row.metrics[metric] }),
+          'hovertemplate': '%{y:.2f}',
+          'visible': true,
+        }
+      });
+
+      var layout = {
+        'title': 'Point-to-Point MOF/LOF',
+        'autosize': true,
+        'uirevision': 1,
+      };
+
+      Plotly.react(div, plots, layout);
+    });
+    window.onresize = function() {
+      Plotly.Plots.resize(div);
+    };
+
+    function load_data(hash) {
+      xhr.open('GET', '/api/ptp.json?' + hash);
+      xhr.send();
+    };
+
+    form = document.getElementById("moflof-form");
+    form.onsubmit = function() {
+      window.location = '#' + serialize(form);
+      return false;
+    };
+
+    function check_hash() {
+      var hash = window.location.hash.replace(/^#/, '');
+      var qs = new URLSearchParams(hash);
+      var inputs = form.elements;
+      for (i = 0 ; i < inputs.length ; i++) {
+        var name = inputs[i].name;
+        if(inputs[i].type == "checkbox") {
+          inputs[i].checked = qs.has(name) && qs.get(name) != "";
+        } else if (qs.has(name)) {
+          inputs[i].value = qs.get(name);
+        }
+      }
+
+      if (hash != "") {
+        load_data(hash);
+      }
+    };
+
+    window.onload = window.onhashchange = check_hash;
+  </script>
+  <!--#include virtual="/footer.html" -->
+  </body>
+</html>
