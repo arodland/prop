@@ -3,7 +3,6 @@ RUN apt-get update && apt-get install -y dumb-init python3-dev
 
 COPY requirements.txt /tmp/
 RUN pip3 install -r /tmp/requirements.txt
-RUN pip3 install git+https://github.com/hckr/geodesy.git
 RUN uwsgi --build-plugin https://github.com/KLab/uwsgi-cheaper-spare2
 
 COPY ./app /app

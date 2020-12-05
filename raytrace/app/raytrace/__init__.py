@@ -1,13 +1,11 @@
 from . import constants
-import geodesy.sphere
+from . import geodesy
 import numpy as np
 
 r0 = constants.r_earth_km
 
 def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag=True):
-    dist = geodesy.sphere.distance(from_lat.flatten(), from_lon.flatten(), to_lat.flatten(), to_lon.flatten(), radian=True).reshape(from_lat.shape) / constants.r_earth_m
-
-    bearing = (geodesy.sphere.bearing(from_lat.flatten(), from_lon.flatten(), to_lat.flatten(), to_lon.flatten(), radian=True).reshape(from_lat.shape)) % (2 * np.pi)
+    dist, bearing = geodesy.distance_bearing(from_lat, from_lon, to_lat, to_lon)
 
     if longpath:
         dist = 2 * np.pi - dist
@@ -23,7 +21,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     for hop in range(1, max_khop+1):
         idx = hop <= khop
         hop_frac = 2*hop - 1
-        cp_lat, cp_lon = geodesy.sphere.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac * constants.r_earth_m, radian=True)
+        cp_lat, cp_lon = geodesy.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac)
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
         cp_lon = (cp_lon + np.pi) % (2 * np.pi) - np.pi
         h_min[idx] = np.fmin(h_min[idx], iono.hmf2.predict(cp_lat, cp_lon))
@@ -55,7 +53,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     for hop in range(1, max_khop+1):
         idx = hop <= khop
         hop_frac = 2*hop - 1
-        cp_lat, cp_lon = geodesy.sphere.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac * constants.r_earth_m, radian=True)
+        cp_lat, cp_lon = geodesy.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac)
         cp_lon = (cp_lon + np.pi) % (2 * np.pi) - np.pi
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
         cmof[idx] = np.fmin(cmof[idx], iono.fof2.predict(cp_lat, cp_lon))
@@ -93,6 +91,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         'khop': khop.astype(float),
         'half_hop': half_hop,
         'pathlen': pathlen,
+        'distance': dist,
         'bearing': bearing,
         'g_loss': g_loss,
         'rms_gyf': rms_gyf,
