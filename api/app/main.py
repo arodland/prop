@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_file, make_response
+from flask import Flask, request, jsonify, render_template, send_file, make_response, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from marshmallow import Schema, fields
@@ -8,6 +8,7 @@ import datetime as dt
 from sqlalchemy import and_, text
 import urllib.request
 import maidenhead
+from pymemcache.client.base import Client as MemcacheClient
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -15,6 +16,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.ge
 # Order matters: Initialize SQLAlchemy before Marshmallow
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
+
+memcache = MemcacheClient('127.0.0.1', ignore_exc=True, no_delay=True)
 
 #Declare models 
 
@@ -102,20 +105,26 @@ predictions_schema = PredictionSchema(many=True)
 def stationsjson():
     maxage = request.args.get('maxage', None)
 
-    if maxage is None:
-        qry = db.session.query(Measurement).from_statement(
-            "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc")
-    else:
-        qry = db.session.query(Measurement).from_statement(
-            "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc").params(
-            maxage=int(maxage),
-        )
+    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage)
+    ret = memcache.get(cachekey)
 
-    db.session.close()
-    
-    result = measurements_schema.dump(qry)
+    if ret is None:
+        if maxage is None:
+            qry = db.session.query(Measurement).from_statement(
+                "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc")
+        else:
+            qry = db.session.query(Measurement).from_statement(
+                "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc").params(
+                maxage=int(maxage),
+            )
 
-    return jsonify(result.data)
+        db.session.close()
+        
+        result = measurements_schema.dump(qry)
+        ret = json.dumps(result.data)
+        memcache.set(cachekey, ret, 60)
+
+    return Response(ret, mimetype='application/json')
 
 @app.route("/pred.json" , methods=['GET'])
 def predjson():
@@ -136,90 +145,119 @@ def predjson():
 @app.route("/pred_series.json", methods=['GET'])
 def predseries():
     station_id = request.args.get('station', None)
-    sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished')"
-    if station_id is not None:
-        sql = sql + " and station_id=:station_id"
-    sql = sql + " order by station_id asc, time asc"
 
-    qry = db.session.query(Measurement).from_statement(sql)
-    if station_id is not None:
-        qry = qry.params(station_id = station_id)
+    cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id)
+    ret = memcache.get(cachekey)
 
-    db.session.close()
+    if ret is None:
+        sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished')"
+        if station_id is not None:
+            sql = sql + " and station_id=:station_id"
+        sql = sql + " order by station_id asc, time asc"
 
-    result = predictions_schema.dump(qry)
+        qry = db.session.query(Measurement).from_statement(sql)
+        if station_id is not None:
+            qry = qry.params(station_id = station_id)
 
-    out = []
-    prev_st = None
+        db.session.close()
 
-    for row in result.data:
-        if prev_st is None or row['station_name'] != prev_st:
-            out.append({'station': row['station'], 'pred': []})
+        result = predictions_schema.dump(qry)
 
-        prev_st = row['station_name']
+        out = []
+        prev_st = None
 
-        out[len(out)-1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'], 'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
+        for row in result.data:
+            if prev_st is None or row['station_name'] != prev_st:
+                out.append({'station': row['station'], 'pred': []})
 
-    return jsonify(out)
+            prev_st = row['station_name']
+
+            out[len(out)-1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'], 'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
+
+        ret = json.dumps(out)
+        memcache.set(cachekey, ret, 60)
+
+    return Response(ret, mimetype='application/json')
 
 @app.route("/essn.json", methods=['GET'])
 def essnjson():
     days = request.args.get('days', 7)
 
-    with db.engine.connect() as conn:
-        res = conn.execute(
-            text("select extract(epoch from time) as time, series, ssn, sfi, err from essn where time >= now() - :days * interval '1 day' order by time asc").\
-                bindparams(days=days).\
-                columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
-        )
-        rows = list(res.fetchall())
-        series = {}
-        series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '24h' ]
-        series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '6h' ]
+    cachekey = 'api;essn.json;' + str(days)
+    ret = memcache.get(cachekey)
 
-        return jsonify(series)
+    if ret is None:
+        with db.engine.connect() as conn:
+            res = conn.execute(
+                text("select extract(epoch from time) as time, series, ssn, sfi, err from essn where time >= now() - :days * interval '1 day' order by time asc").\
+                    bindparams(days=days).\
+                    columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
+            )
+            rows = list(res.fetchall())
+            series = {}
+            series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '24h' ]
+            series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '6h' ]
+
+        ret = json.dumps(series)
+        memcache.set(cachekey, ret, 60)
+
+    return Response(ret, mimetype='application/json')
 
 @app.route("/irimap.h5", methods=['GET'])
 def irimap():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
 
-    with db.engine.connect() as conn:
-        if run_id is not None and ts is not None:
-            ts = dt.datetime.fromtimestamp(float(ts))
-            res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
-                (run_id, ts),
-            )
-        else:
-            res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
+    cachekey = 'api;irimap.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    ret = memcache.get(cachekey)
+    
+    if ret is None:
+        with db.engine.connect() as conn:
+            if run_id is not None and ts is not None:
+                ts = dt.datetime.fromtimestamp(float(ts))
+                res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
+                    (run_id, ts),
+                )
+            else:
+                res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
 
-        rows = list(res.fetchall())
+            rows = list(res.fetchall())
 
-        if len(rows) == 0:
-            return make_response('Not Found', 404)
+            if len(rows) == 0:
+                return make_response('Not Found', 404)
 
-        return make_response(rows[0]['dataset'].tobytes(), { 'Content-Type': 'application/x-hdf5' })
+            ret = rows[0]['dataset'].tobytes()
+            memcache.set(cachekey, ret, 3600)
+
+    return Response(ret, mimetype='application/x-hdf5')
         
 @app.route("/assimilated.h5", methods=['GET'])
 def assimilated():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
 
-    with db.engine.connect() as conn:
-        if run_id is not None and ts is not None:
-            ts = dt.datetime.fromtimestamp(float(ts))
-            res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
-                (run_id, ts),
-            )
-        else:
-            res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
+    cachekey = 'api;assimilated.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    ret = memcache.get(cachekey)
 
-        rows = list(res.fetchall())
+    if ret is None:
+        with db.engine.connect() as conn:
+            if run_id is not None and ts is not None:
+                ts = dt.datetime.fromtimestamp(float(ts))
+                res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
+                    (run_id, ts),
+                )
+            else:
+                res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
 
-        if len(rows) == 0:
-            return make_response('Not Found', 404)
+            rows = list(res.fetchall())
 
-        return make_response(rows[0]['dataset'].tobytes(), { 'Content-Type': 'application/x-hdf5' })
+            if len(rows) == 0:
+                return make_response('Not Found', 404)
+
+            ret = rows[0]['dataset'].tobytes()
+            memcache.set(cachekey, ret, 3600)
+
+    return Response(ret, mimetype='application/x-hdf5')
         
 def get_latest_run():
     with db.engine.connect() as conn:

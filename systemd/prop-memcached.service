@@ -1,0 +1,13 @@
+[Unit]
+Description=Prop Memcached
+BindsTo=prop-podman-pod.service
+After=prop-podman-pod.service
+PartOf=kc2gprop.target
+[Service]
+ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid memcached memcached -m 2048 -I 32m
+ExecStop=/usr/bin/podman stop %N
+KillMode=process
+Restart=on-failure
+[Install]
+WantedBy=kc2gprop.target

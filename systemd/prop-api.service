@@ -1,7 +1,7 @@
 [Unit]
 Description=Prop Current API
-BindsTo=prop-podman-pod.service prop-postgres.service
-After=prop-podman-pod.service prop-postgres.service
+BindsTo=prop-podman-pod.service prop-postgres.service prop-memcached.service
+After=prop-podman-pod.service prop-postgres.service prop-memcached.service
 PartOf=kc2gprop.target
 [Service]
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
