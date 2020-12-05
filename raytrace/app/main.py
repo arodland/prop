@@ -10,8 +10,8 @@ app = Flask(__name__)
 
 @app.route('/moflof.h5', methods=['GET'])
 def moflof():
-    from_lat = float(request.args.get('lat', 41.024))
-    from_lon = float(request.args.get('lon', -74.138))
+    from_lat = np.array(float(request.args.get('lat', 41.024)))
+    from_lon = np.array(float(request.args.get('lon', -74.138)))
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
     res = float(request.args.get('res', '2'))
@@ -29,9 +29,6 @@ def moflof():
     to_lon = np.linspace(-180, 180, int(360 / res) + 1) * np.pi / 180
 
     to_lon, to_lat = np.meshgrid(to_lon, to_lat)
-
-    from_lat = np.full_like(to_lat, from_lat)
-    from_lon = np.full_like(to_lon, from_lon)
 
     rt_sp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon)
     mof_sp, lof_sp = rt_sp['mof'], rt_sp['lof']

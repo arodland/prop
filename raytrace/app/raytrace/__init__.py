@@ -5,6 +5,8 @@ import numpy as np
 r0 = constants.r_earth_km
 
 def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag=True):
+    one_from = np.ndim(from_lat) == 0 and np.ndim(from_lon) == 0
+
     dist, bearing = geodesy.distance_bearing(from_lat, from_lon, to_lat, to_lon)
 
     if longpath:
@@ -21,7 +23,12 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     for hop in range(1, max_khop+1):
         idx = hop <= khop
         hop_frac = 2*hop - 1
-        cp_lat, cp_lon = geodesy.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac)
+        cp_lat, cp_lon = geodesy.destination(
+            (from_lat if one_from else from_lat[idx]),
+            (from_lon if one_from else from_lon[idx]),
+            bearing[idx],
+            half_hop[idx] * hop_frac,
+        )
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
         cp_lon = (cp_lon + np.pi) % (2 * np.pi) - np.pi
         h_min[idx] = np.fmin(h_min[idx], iono.hmf2.predict(cp_lat, cp_lon))
@@ -53,7 +60,12 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     for hop in range(1, max_khop+1):
         idx = hop <= khop
         hop_frac = 2*hop - 1
-        cp_lat, cp_lon = geodesy.destination(from_lat[idx], from_lon[idx], bearing[idx], half_hop[idx] * hop_frac)
+        cp_lat, cp_lon = geodesy.destination(
+            (from_lat if one_from else from_lat[idx]),
+            (from_lon if one_from else from_lon[idx]),
+            bearing[idx],
+            half_hop[idx] * hop_frac,
+        )
         cp_lon = (cp_lon + np.pi) % (2 * np.pi) - np.pi
         cp_lat = (cp_lat + np.pi / 2) % np.pi - np.pi / 2
         cmof[idx] = np.fmin(cmof[idx], iono.fof2.predict(cp_lat, cp_lon))
