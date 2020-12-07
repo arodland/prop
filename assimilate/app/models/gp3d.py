@@ -1,6 +1,6 @@
 import numpy as np
 import george
-from george.kernels import Matern32Kernel
+from george.kernels import Matern52Kernel, ExpSquaredKernel
 
 def sph_to_xyz(lat, lon):
     lon = lon * np.pi / 180.
@@ -19,7 +19,7 @@ class GP3D:
         x, y, z = sph_to_xyz(df['station.latitude'].values, df['station.longitude'].values)
         stdev = 0.237 - 0.170 * df.cs
 
-        kernel = Matern32Kernel(1.0, ndim=3)
+        kernel = 0.0809**2 * Matern52Kernel(0.0648, ndim=3) + 0.169**2 * ExpSquaredKernel(0.481, ndim=3)
         self.gp = george.GP(kernel)
         self.gp.compute(np.column_stack((x,y,z)), stdev + 0.05)
         self.z = t
