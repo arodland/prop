@@ -142,6 +142,20 @@ def predjson():
 
     return jsonify(result.data)
 
+@app.route("/pred_sample.json", methods=['GET'])
+def pred_sample():
+    n_samples = int(request.args.get('samples', 100))
+
+    qry = db.session.query(Prediction).from_statement(
+        "select prediction.* from prediction, (select run_id, min(time) as time from prediction where run_id in (select run_id from prediction order by random() limit :n_samples) group by run_id) sample where prediction.run_id=sample.run_id and prediction.time=sample.time order by run_id asc, station_id asc").params(
+            n_samples = n_samples
+    )
+    db.session.close()
+
+    result = predictions_schema.dump(qry)
+
+    return jsonify(result.data)
+
 @app.route("/pred_series.json", methods=['GET'])
 def predseries():
     station_id = request.args.get('station', None)
