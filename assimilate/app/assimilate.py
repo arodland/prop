@@ -61,6 +61,7 @@ def assimilate(run_id, ts):
         assimilated = model.predict(lat, lon)
 
         h5.create_dataset('/maps/' + metric, data=assimilated, compression='gzip', scaleoffset=3)
+        h5.create_dataset('/stdev/' + metric, data=gp3dmodel.stdev, compression='gzip', scaleoffset=3)
 
     for metric in ["md"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
