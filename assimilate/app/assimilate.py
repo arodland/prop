@@ -49,7 +49,6 @@ def assimilate(run_id, ts):
     for metric in ["fof2", "hmf2"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
-        print(metric, "df:", len(df_pred_filtered.index))
 
         irimodel = spline.Spline(irimap['/maps/' + metric])
         pred = irimodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
@@ -65,8 +64,6 @@ def assimilate(run_id, ts):
 
     for metric in ["md"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
-
-        print(metric, "df:", len(df_pred_filtered.index))
 
         iri_mufd = spline.Spline(irimap['/maps/mufd'])
         iri_fof2 = spline.Spline(irimap['/maps/fof2'])
@@ -95,28 +92,27 @@ def assimilate(run_id, ts):
 
     return bio.getvalue()
 
+app = Flask(__name__)
+
+@app.route('/generate', methods=['POST'])
+def generate():
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    con = psycopg2.connect(dsn)
+
+    run_id = int(request.form.get('run_id', -1))
+    tgt = int(request.form.get('target', None))
+
+    tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
+
+    dataset = assimilate(run_id, tgt)
+
+    with con.cursor() as cur:
+        cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
+        con.commit()
+
+    con.close()
+
+    return make_response("OK\n")
+
 if __name__ == '__main__':
-
-    app = Flask(__name__)
-
-    @app.route('/generate', methods=['POST'])
-    def generate():
-        dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-        con = psycopg2.connect(dsn)
-
-        run_id = int(request.form.get('run_id', -1))
-        tgt = int(request.form.get('target', None))
-
-        tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
-
-        dataset = assimilate(run_id, tgt)
-
-        with con.cursor() as cur:
-            cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
-            con.commit()
-
-        con.close()
-
-        return make_response("OK\n")
-
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ASSIMILATE_PORT')), threaded=False, processes=4)
