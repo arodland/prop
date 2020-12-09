@@ -32,7 +32,9 @@ class Plot:
         self.ax = plt.axes(
             projection=self.proj,
             frame_on=self.decorations,
+            facecolor='white',
         )
+        self.ax.spines['geo'].set_edgecolor('#666')
         self.ax.set_global()
 
         if self.decorations:
@@ -111,7 +113,8 @@ class Plot:
                 cmap=self.cmap,
                 transform=self.proj,
                 alpha=self.plotalpha,
-                norm=self.norm
+                norm=self.norm,
+                origin='lower',
                 )
 
         CS2 = plt.contour(
@@ -195,6 +198,7 @@ class Plot:
                 )
             cbar.minorticks_off()
             cbar.add_lines(CS)
+            cbar.outline.set_visible(False)
 
     def draw_longpath_hatches(self, lp, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
         if lp is None or not lp.any():
