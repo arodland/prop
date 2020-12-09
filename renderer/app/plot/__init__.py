@@ -207,7 +207,7 @@ class Plot:
         plt.contourf(
             loni, lati, lp,
             [ -0.1, 0.9, 1.9 ],
-            colors=[ '#00000000' ], # transparent black
+            colors=[ 'None' ],
             hatches=[ None, '//' ],
             transform=ccrs.PlateCarree(),
         )
@@ -223,7 +223,7 @@ class Plot:
         plt.contourf(
             loni, lati, bo,
             [ -0.1, 0.9, 1.9 ],
-            colors=[ '#00000000' ], # transparent black
+            colors=[ 'None' ],
             hatches=[ None, 'o' ],
             transform=ccrs.PlateCarree(),
         )
