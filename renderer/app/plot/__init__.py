@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import cartopy.feature
 from cartopy.feature.nightshade import Nightshade
 matplotlib.style.use('ggplot')
+matplotlib.rcParams['hatch.color'] = '#00000066'
 import numpy as np
 import sys
 
@@ -36,7 +37,7 @@ class Plot:
 
         if self.decorations:
             if centered is None:
-                self.ax.grid(linewidth=.5, color='black', alpha=0.25, linestyle='--')
+                self.ax.grid(True, visible=True, linewidth=.5, color='black', alpha=0.25, linestyle='--')
                 self.ax.set_xticks([-180, -160, -140, -120,-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100, 120,140, 160,180], crs=ccrs.PlateCarree())
                 self.ax.set_yticks([-80, -60,-40,-20, 0, 20, 40, 60,80], crs=ccrs.PlateCarree())
             else:

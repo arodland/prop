@@ -107,11 +107,11 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
         hatch = None
         blackout = maps['lof' + path] >= maps['mof' + path]
 
+    plt.draw_mofstyle(contour, lat_steps=contour.shape[0], lon_steps=contour.shape[1])
     if hatch is not None:
         plt.draw_longpath_hatches(hatch, lat_steps=hatch.shape[0], lon_steps=hatch.shape[1])
     if blackout is not None:
         plt.draw_blackout(blackout, lat_steps=blackout.shape[0], lon_steps=blackout.shape[1])
-    plt.draw_mofstyle(contour, lat_steps=contour.shape[0], lon_steps=contour.shape[1])
     plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
