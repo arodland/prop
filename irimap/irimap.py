@@ -90,7 +90,7 @@ def generate():
     sfi = None
 
     with con.cursor() as cur:
-        cur.execute('select ssn, sfi from essn where run_id=%s and series=%s order by time desc limit 1', (run_id, series))
+        cur.execute('select ssn, sfi from essn where run_id=%s and series=%s order by time desc nulls last limit 1', (run_id, series))
         ssn, sfi = cur.fetchone()
 
     dataset = generate_map(ssn, sfi, tm)
