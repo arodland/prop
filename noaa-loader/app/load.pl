@@ -6,6 +6,7 @@ use Data::SAO4;
 use Data::Dumper;
 use DBI;
 use Time::HiRes 'time';
+use Net::Statsd::Client;
 
 my $dbh = DBI->connect(
   "dbi:Pg:dbname=$ENV{DB_NAME};host=$ENV{DB_HOST}",
@@ -14,6 +15,10 @@ my $dbh = DBI->connect(
   {
     RaiseError => 1,
   }
+);
+
+my $statsd = Net::Statsd::Client->new(
+  host => $ENV{STATSD_HOST},
 );
 
 warn "Input file: ", $ARGV[0], "\n";
@@ -100,5 +105,10 @@ my $sql = "INSERT INTO measurement (". join(", ", @cols) .") VALUES (". join(", 
 $dbh->do($sql, undef, @vals);
 
 my $latency = sprintf "%.2f", (time() - $ts->{epoch});
+
+$statsd->increment('prop.noaa_loader.loaded.total');
+$statsd->increment("prop.noaa_loader.loaded.station.$code");
+$statsd->timing_ms("prop.noaa_loader.latency.overall", $latency * 1000);
+$statsd->timing_ms("prop.noaa_loader.latency.station.$code", $latency * 1000);
 
 debug "Latency: $latency";

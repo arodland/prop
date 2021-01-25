@@ -2,9 +2,13 @@ import sys
 import os
 import time
 import psycopg2
+from statsd import StatsClient
 
 cwd = os.getcwd()
 
+statsd = StatsClient(host=os.getenv('STATSD_HOST'))
+
+@statsd.timer('prop.giro_loader.get_data')
 def get_data(s, n=1):
 
     #import sys
@@ -108,6 +112,8 @@ def get_data(s, n=1):
 
     stationdata = stationdata[['station_id', 'time','cs','fof2','mufd','foes','foe','hmf2','tec']]
     stationdata = stationdata.assign(source='giro')
+
+    statsd.incr('prop.giro_loader.rows', len(stationdata))
 
     with engine.connect() as conn:
         with conn.begin():
