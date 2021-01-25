@@ -1,9 +1,29 @@
 	<header>
-		<nav>
-			<a href="/">MUF</a>
-			<a href="/fof2/">foF2</a>
-			<a href="/stations/">Data</a>
-      <a href="/essn/">eSSN</a>
-      <a href="/about/">About</a>
+		<nav class="ui menu">
+      <!--#if expr="%{REQUEST_URI} =~ m#^/(index\.html)?$# " -->
+			<a class="item active" href="/">MUF</a>
+      <!--#else -->
+			<a class="item" href="/">MUF</a>
+      <!--#endif -->
+      <!--#if expr="%{REQUEST_URI} -strmatch '/fof2/*'" -->
+			<a class="item active" href="/fof2/">foF2</a>
+      <!--#else -->
+			<a class="item" href="/fof2/">foF2</a>
+      <!--#endif -->
+      <!--#if expr="%{REQUEST_URI} -strmatch '/stations/*'" -->
+			<a class="item active" href="/stations/">Data</a>
+      <!--#else -->
+			<a class="item" href="/stations/">Data</a>
+      <!--#endif -->
+      <!--#if expr="%{REQUEST_URI} -strmatch '/essn/*'" -->
+      <a class="item active" href="/essn/">eSSN</a>
+      <!--#else -->
+      <a class="item" href="/essn/">eSSN</a>
+      <!--#endif -->
+      <!--#if expr="%{REQUEST_URI} -strmatch '/about/*'" -->
+      <a class="item active" href="/about/">About</a>
+      <!--#else -->
+      <a class="item" href="/about/">About</a>
+      <!--#endif -->
 		</nav>
 	</header>
