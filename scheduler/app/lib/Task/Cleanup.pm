@@ -9,7 +9,18 @@ sub register {
       my ($job, %args) = @_;
       my $db = $app->pg->db;
 
-      my $runs = $db->query(q{select id from runs where state in ('created', 'finished') and started < now() - interval '24 hours' order by started asc limit 10});
+      my $runs = $db->query(q{select id from runs where state='archived' and started < now() - interval '14 days' order by started asc limit 50});
+
+      while (my $run = $runs->hash) {
+        eval {
+          delete_run($db, $run->{id});
+        };
+        if ($@) {
+          $app->log->warn("$@ deleting run $run->{id}");
+        }
+      }
+
+      $runs = $db->query(q{select id from runs where state in ('created', 'finished') and started < now() - interval '24 hours' order by started asc limit 10});
 
       while (my $run = $runs->hash) {
         eval {
@@ -20,16 +31,6 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id from runs where state='archived' and started < now() - interval '6 months' order by started asc limit 10});
-
-      while (my $run = $runs->hash) {
-        eval {
-          delete_run($db, $run->{id});
-        };
-        if ($@) {
-          $app->log->warn("$@ deleting run $run->{id}");
-        }
-      }
   });
 }
 
