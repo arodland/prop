@@ -9,6 +9,7 @@ from sqlalchemy import and_, text
 import urllib.request
 import maidenhead
 from pymemcache.client.base import Client as MemcacheClient
+import re
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -294,6 +295,12 @@ def latest_run():
 
 def maidenhead_to_latlon(grid):
     grid = grid.strip()
+
+    m = re.search(r'^([+-]?[0-9.]+?),([+-]?[0-9.]+)$', grid)
+    if m:
+        lat = float(m.group(1))
+        lon = float(m.group(2))
+        return lat, lon
 
     if len(grid) < 4:
         grid += "55"
