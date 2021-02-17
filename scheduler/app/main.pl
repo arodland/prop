@@ -126,6 +126,7 @@ sub queue_job {
       target => [ @pred_times ],
     ],
     {
+      parents => [ $essn_24h ],
       attempts => 2,
       priority => 2,
     },

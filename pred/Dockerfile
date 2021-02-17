@@ -1,6 +1,6 @@
 FROM continuumio/miniconda3
 
-RUN apt-get update && apt-get -y install unzip build-essential dumb-init
+RUN apt-get update && apt-get -y install unzip build-essential dumb-init libgfortran5
 
 WORKDIR /
 
@@ -8,6 +8,8 @@ RUN conda create -y -q -n my_cartopy_env -c conda-forge python=3.7 statsmodels p
 
 ENV PATH /opt/conda/envs/my_cartopy_env/bin:$PATH
 ENV PYTHON_EGG_CACHE=/tmp/egg-cache
+
+COPY --from=iri2016 /build/ /build/
 
 RUN echo "conda activate my_cartopy_env" >> ~/.bashrc
 

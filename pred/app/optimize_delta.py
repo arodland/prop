@@ -1,0 +1,208 @@
+import os
+import urllib.request, json
+import pandas as pd
+import numpy as np
+import george
+from kernel import kernel
+from cs import cs_to_stdev, stdev_to_cs
+import scipy.optimize as op
+from multiprocessing import Pool
+import subprocess
+
+from pandas.io.json import json_normalize
+
+# Dourbes, Boulder, Hermanus, Roquetes, Wallops, Grahamstown
+stations = [12, 11, 26, 3, 61, 25]
+points_per_station = 10000
+
+def get_data(url=os.getenv("HISTORY_URI")):
+    with urllib.request.urlopen(url) as res:
+        data = json.loads(res.read().decode())
+
+    return data
+
+def make_dataset(station):
+    url = 'http://localhost:5502/mixscale.json?station=%d&points=%d' % (station, points_per_station)
+    data = get_data(url)
+    s = data[0]
+
+    x, y_fof2, y_mufd, y_hmf2, sigma, cslist = [], [], [], [], [], []
+    last_tm = None
+
+    iri = subprocess.Popen(
+            ['/build/iri_opt'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+        )
+
+
+    for pt in s['history']:
+        tm = (pd.to_datetime(pt[0]) - pd.Timestamp("1970-01-01")) // pd.Timedelta("1s")
+        cs = pt[1]
+        iritime = pd.to_datetime(pt[0]).strftime('%Y %m %d %H %M %S')
+
+        if cs < 10 and cs != -1:
+            continue
+
+        sd = cs_to_stdev(cs, adj100=True)
+        fof2, mufd, hmf2 = pt[2:5]
+
+        iri.stdin.write("%f %f %f %s\n" % (s['latitude'], s['longitude'], -100.0, iritime))
+        iri.stdin.flush()
+        iridata = [float(x) for x in iri.stdout.readline().split()]
+
+        iri_fof2, iri_mufd, iri_hmf2 = iridata[3], iridata[5], iridata[6]
+
+        x.append(tm / 86400.)
+        y_fof2.append(np.log(fof2) - np.log(iri_fof2))
+        y_mufd.append(np.log(mufd) - np.log(iri_mufd))
+        y_hmf2.append(np.log(hmf2) - np.log(iri_hmf2))
+        sigma.append(sd)
+        cslist.append(cs)
+        last_tm = tm
+
+    iri.stdin.close()
+    iri.wait()
+
+    ds = {}
+    ds['station_id'] = s['id']
+    ds['latitude'] = s['latitude']
+    ds['longitude'] = s['longitude']
+
+    ds['x'] = np.array(x)
+    ds['last_tm'] = last_tm
+    ds['y_fof2'] = np.array(y_fof2)
+    ds['mean_fof2'] = np.mean(ds['y_fof2'])
+    ds['y_fof2'] -= ds['mean_fof2']
+    ds['y_mufd'] = np.array(y_mufd)
+    ds['mean_mufd'] = np.mean(ds['y_mufd'])
+    ds['y_mufd'] -= ds['mean_mufd']
+    ds['y_hmf2'] = np.array(y_hmf2)
+    ds['mean_hmf2'] = np.mean(ds['y_hmf2'])
+    ds['y_hmf2'] -= ds['mean_hmf2']
+    ds['sigma'] = np.array(sigma)
+    ds['cs'] = np.array(cslist)
+
+    ds['gp'] = george.GP(kernel)
+    ds['gp'].compute(ds['x'], ds['sigma'] + 1e-3)
+
+    return ds
+
+iter, fev, grev, best = 0, 0, 0, 999
+datasets = []
+
+
+def loss(x):
+    (i, p) = x
+    ds = datasets[i]
+    ret = 0
+    ds['gp'].set_parameter_vector(p)
+    for metric in ('y_fof2', 'y_mufd', 'y_hmf2'):
+        ll = ds['gp'].log_likelihood(ds[metric], quiet=True)
+        ll = -ll if np.isfinite(ll) else 1e25
+        ret += ll
+
+    return ret
+
+def nll(p):
+    global fev
+    global best
+    fev = fev + 1
+
+    losses = [l for l in pool.imap_unordered(loss, [(i, p) for i in range(len(datasets))] )]
+    lsum = sum(losses)
+
+    if lsum < best:
+        best = lsum
+    return lsum
+
+def grad(x):
+    (i, p) = x
+    ds = datasets[i]
+    ret = 0
+    ds['gp'].set_parameter_vector(p)
+    for metric in ('y_fof2', 'y_mufd', 'y_hmf2'):
+        ret -= ds['gp'].grad_log_likelihood(ds[metric], quiet=True)
+
+    return ret
+
+def grad_nll(p):
+    global grev
+    grev = grev + 1
+
+    gs = 0
+    for g in pool.imap_unordered(grad, [(i, p) for i in range(len(datasets))] ):
+        gs += g
+
+    return gs
+
+def cb(p):
+    global iter
+    iter = iter + 1
+    print("# iter=", iter, "fev=", fev, "grev=", grev, "best=", best, "p=", p)
+
+if __name__=='__main__':
+    # One pool to fetch the data...
+    with Pool(processes=6) as p:
+        datasets = [ d for d in p.imap(make_dataset, stations) ]
+
+    # And a new one forked afterwards which has the data as globals
+    pool = Pool(processes=6)
+
+#    p0 = datasets[0]['gp'].get_parameter_vector()
+    p0 = [-4.37349251, 6.85249743, 8.39899972, -5.87713964, 24.63113767, 7.15679529, -7.07599794, -6.38282154, 1.49529993, -5.36933685, 17.90335082, -4.6262334]
+    print("# Init: ", p0)
+
+    opt_result = op.minimize(nll, p0, jac=grad_nll, method='L-BFGS-B', callback=cb, options={'maxiter': 100})
+    print("# RESULT ", opt_result.x)
+
+    with open('/out/plot-kernel.txt', 'w') as f:
+        kernel.set_parameter_vector(opt_result.x)
+        x = np.linspace(0, 30, 3000)
+        y = kernel.get_value(np.atleast_2d(x).T)
+
+        for i in range(len(x)):
+            print("%g\t%g" % (x[i], y[0][i]), file=f)
+
+    for ds in datasets:
+        with open("/out/plot-%d.txt" % (ds['station_id']), 'w') as f:
+            tm = np.around(ds['x'] * 86400)
+            fof2 = np.exp(ds['y_fof2'] + ds['mean_fof2'])
+            hmf2 = np.exp(ds['y_hmf2'] + ds['mean_hmf2'])
+            mufd = np.exp(ds['y_mufd'] + ds['mean_mufd'])
+            sd = ds['sigma']
+            cs = ds['cs']
+
+            for i in range(len(tm)):
+                print("%d\t%f\t%f\t%f\t%f\t%d" % (tm[i], fof2[i], mufd[i], hmf2[i], sd[i], cs[i]), file=f)
+
+            print("", file=f)
+
+            ds['gp'].set_parameter_vector(opt_result.x)
+            ds['gp'].compute(ds['x'], ds['sigma'] + 1e-3)
+
+            tm = np.array(range(ds['last_tm'] - (86400 * 2), ds['last_tm'] + (86400 * 7) + 1, 300))
+
+            pred_fof2, sd_fof2 = ds['gp'].predict(ds['y_fof2'], tm / 86400., return_var=True)
+            pred_fof2 += ds['mean_fof2']
+            sd_fof2 = np.sqrt(sd_fof2)
+            pred_mufd, sd_mufd = ds['gp'].predict(ds['y_mufd'], tm / 86400., return_var=True)
+            pred_mufd += ds['mean_mufd']
+            sd_mufd = np.sqrt(sd_mufd)
+            pred_hmf2, sd_hmf2 = ds['gp'].predict(ds['y_hmf2'], tm / 86400., return_var=True)
+            pred_hmf2 += ds['mean_hmf2']
+            sd_hmf2 = np.sqrt(sd_hmf2)
+
+            for i in range(len(tm)):
+                print("%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%d" % (
+                    tm[i],
+                    np.exp(pred_fof2[i]), np.exp(pred_fof2[i]-sd_fof2[i]), np.exp(pred_fof2[i]+sd_fof2[i]),
+                    np.exp(pred_mufd[i]), np.exp(pred_mufd[i]-sd_mufd[i]), np.exp(pred_mufd[i]+sd_mufd[i]),
+                    np.exp(pred_hmf2[i]), np.exp(pred_hmf2[i]-sd_hmf2[i]), np.exp(pred_hmf2[i]+sd_hmf2[i]),
+                    sd_mufd[i], stdev_to_cs(sd_mufd[i])
+                ), file=f)
+
+    print("# learned parameters = ", opt_result.x)
+    kernel.set_parameter_vector(opt_result.x)
+    print("# learned kernel = ", kernel)

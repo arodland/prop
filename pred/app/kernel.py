@@ -13,3 +13,8 @@ kernel = 0.197**2 * ExpSquaredKernel(2128) * ExpSine2Kernel(gamma=13.332, log_pe
 
 kernel.freeze_parameter('k1:k1:k1:k2:log_period')
 kernel.freeze_parameter('k1:k1:k2:k2:k1:log_period')
+
+delta_kernel = 0.108**2 * ExpSquaredKernel(972) * ExpSine2Kernel(gamma=23.548, log_period=0.0) + 0.0421**2 * ExpSquaredKernel(1e6) * (ExpSine2Kernel(gamma=2.270, log_period=np.log(0.5)) + ConstantKernel(np.log(0.000877))) + 0.0417**2 * ExpSquaredKernel(3.233) + 0.0737**2 * RationalQuadraticKernel(metric=0.00436, log_alpha=17.903)
+
+delta_kernel.freeze_parameter('k1:k1:k1:k2:log_period')
+delta_kernel.freeze_parameter('k1:k1:k2:k2:k1:log_period')
