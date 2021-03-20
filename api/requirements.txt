@@ -8,7 +8,7 @@ flask-jsondash==6.2.3
 flask-marshmallow==0.9.0
 Flask-SQLAlchemy==2.3.2
 itsdangerous==1.1.0
-Jinja2==2.10.1
+Jinja2==2.11.3
 kiwisolver==1.0.1
 maidenhead==1.5.0
 MarkupSafe==1.1.0
