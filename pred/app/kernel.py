@@ -14,7 +14,18 @@ kernel = 0.197**2 * ExpSquaredKernel(2128) * ExpSine2Kernel(gamma=13.332, log_pe
 kernel.freeze_parameter('k1:k1:k1:k2:log_period')
 kernel.freeze_parameter('k1:k1:k2:k2:k1:log_period')
 
-delta_kernel = 0.108**2 * ExpSquaredKernel(972) * ExpSine2Kernel(gamma=23.548, log_period=0.0) + 0.0421**2 * ExpSquaredKernel(1e6) * (ExpSine2Kernel(gamma=2.270, log_period=np.log(0.5)) + ConstantKernel(np.log(0.000877))) + 0.0417**2 * ExpSquaredKernel(3.233) + 0.0737**2 * RationalQuadraticKernel(metric=0.00436, log_alpha=17.903)
+# delta_kernel = 0.108**2 * ExpSquaredKernel(972) * ExpSine2Kernel(gamma=23.548, log_period=0.0) + 0.0421**2 * ExpSquaredKernel(1e6) * (ExpSine2Kernel(gamma=2.270, log_period=np.log(0.5)) + ConstantKernel(np.log(0.000877))) + 0.0417**2 * ExpSquaredKernel(3.233) + 0.0737**2 * RationalQuadraticKernel(metric=0.00436, log_alpha=17.903)
 
-delta_kernel.freeze_parameter('k1:k1:k1:k2:log_period')
-delta_kernel.freeze_parameter('k1:k1:k2:k2:k1:log_period')
+# delta_kernel = 0.109**2 * ExpSquaredKernel(689) * ExpSine2Kernel(gamma=22.638, log_period=0.0) + 0.00554**2 * ExpSquaredKernel(1e6) * (ExpSine2Kernel(gamma=5.667, log_period=np.log(0.5)) + ConstantKernel(np.log(0.000845))) + 0.0483**2 * ExpSquaredKernel(2.788) + 0.0757**2 * RationalQuadraticKernel(metric=0.00424, log_alpha=17.903) # 2021-04-04
+
+# delta_kernel = 0.109**2 * ExpSquaredKernel(689) * ExpSine2Kernel(gamma=22.638, log_period=0.0) + 0.00554**2 * ExpSquaredKernel(1e6) * (ExpSine2Kernel(gamma=5.667, log_period=np.log(0.5)) + ConstantKernel(np.log(0.000845))) + 0.0483**2 * ExpSquaredKernel(2.788) + 0.0757**2 * RationalQuadraticKernel(metric=0.00424, log_alpha=17.903) # 2021-04-05
+
+# delta_kernel = 0.109**2 * ExpSquaredKernel(689) * ExpSine2Kernel(gamma=22.638, log_period=0.0) + 0.0483**2 * ExpSquaredKernel(2.788) + 0.0757**2 * RationalQuadraticKernel(metric=0.00424, log_alpha=17.903) # 2021-04-05.2
+
+# delta_kernel = 0.0917**2 * ExpSquaredKernel(611) * ExpSine2Kernel(gamma=30.976, log_period=0.0) + 0.0813**2 * ExpSquaredKernel(10.105) + 0.100**2 * RationalQuadraticKernel(metric=0.00175, log_alpha=-1.106) + ConstantKernel(np.log(0.04)) # 2021-04-05.3
+
+delta_kernel = 0.0971**2 * ExpSquaredKernel(611) * ExpSine2Kernel(gamma=29.696, log_period=0.0) + 0.0444**2 * ExpSquaredKernel(8.135) + 0.0928**2 * RationalQuadraticKernel(metric=0.00182, log_alpha=-0.700) + ConstantKernel(np.log(0.00162)) # 2021-04-06
+
+for param in delta_kernel.get_parameter_names():
+    if param.endswith(':log_period'):
+        delta_kernel.freeze_parameter(param)
