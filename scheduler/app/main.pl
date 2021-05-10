@@ -65,6 +65,19 @@ sub make_maps {
 
   my @jobs;
 
+  my %file_formats_by_format = (
+    normal => [
+      'svg',
+      'station_json',
+    ],
+    bare => [
+      'jpg',
+    ],
+    overlay => [
+      'svg',
+    ],
+  );
+
   for my $metric (qw(mufd fof2)) {
     for my $format (qw(normal bare)) {
       push @jobs, app->minion->enqueue('rendersvg',
@@ -75,11 +88,7 @@ sub make_maps {
           name   => $args{name},
           format => $format,
           dots   => $args{dots},
-          file_format => (
-            $format eq 'bare'
-            ? ['jpg']
-            : ['svg','station_json']
-          ),
+          file_format => $file_formats_by_format{$format},
         ],
         {
           parents => $args{parents},
