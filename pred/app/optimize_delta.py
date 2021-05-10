@@ -3,7 +3,7 @@ import urllib.request, json
 import pandas as pd
 import numpy as np
 import george
-from kernel import kernel
+from kernel import delta_kernel
 from cs import cs_to_stdev, stdev_to_cs
 import scipy.optimize as op
 from multiprocessing import Pool
@@ -22,7 +22,7 @@ def get_data(url=os.getenv("HISTORY_URI")):
     return data
 
 def make_dataset(station):
-    url = 'http://localhost:5502/mixscale.json?station=%d&points=%d' % (station, points_per_station)
+    url = 'http://localhost:5502/mixscale.json?station=%d&points=%d&max_span=120' % (station, points_per_station)
     data = get_data(url)
     s = data[0]
 
@@ -84,7 +84,7 @@ def make_dataset(station):
     ds['sigma'] = np.array(sigma)
     ds['cs'] = np.array(cslist)
 
-    ds['gp'] = george.GP(kernel)
+    ds['gp'] = george.GP(delta_kernel)
     ds['gp'].compute(ds['x'], ds['sigma'] + 1e-3)
 
     return ds
@@ -150,17 +150,16 @@ if __name__=='__main__':
     # And a new one forked afterwards which has the data as globals
     pool = Pool(processes=6)
 
-#    p0 = datasets[0]['gp'].get_parameter_vector()
-    p0 = [-4.37349251, 6.85249743, 8.39899972, -5.87713964, 24.63113767, 7.15679529, -7.07599794, -6.38282154, 1.49529993, -5.36933685, 17.90335082, -4.6262334]
+    p0 = datasets[0]['gp'].get_parameter_vector()
     print("# Init: ", p0)
 
     opt_result = op.minimize(nll, p0, jac=grad_nll, method='L-BFGS-B', callback=cb, options={'maxiter': 100})
     print("# RESULT ", opt_result.x)
 
     with open('/out/plot-kernel.txt', 'w') as f:
-        kernel.set_parameter_vector(opt_result.x)
+        delta_kernel.set_parameter_vector(opt_result.x)
         x = np.linspace(0, 30, 3000)
-        y = kernel.get_value(np.atleast_2d(x).T)
+        y = delta_kernel.get_value(np.atleast_2d(x).T)
 
         for i in range(len(x)):
             print("%g\t%g" % (x[i], y[0][i]), file=f)
@@ -204,5 +203,5 @@ if __name__=='__main__':
                 ), file=f)
 
     print("# learned parameters = ", opt_result.x)
-    kernel.set_parameter_vector(opt_result.x)
-    print("# learned kernel = ", kernel)
+    delta_kernel.set_parameter_vector(opt_result.x)
+    print("# learned kernel = ", delta_kernel)
