@@ -60,7 +60,7 @@
 
       window.location = '#'+stationId;
 
-      var getHist = window.fetch('/api/history.json?days=2&station=' + encodeURIComponent(stationId)).then(function (response) {
+      var getHist = window.fetch('/api/history.json?days=6&station=' + encodeURIComponent(stationId)).then(function (response) {
         return response.json();
       }).then(function (data) {
         rows = data[0].history;
