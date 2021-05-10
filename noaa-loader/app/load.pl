@@ -82,6 +82,13 @@ my %map = (
 
 my $characteristics = $sao->scaled_characteristics;
 
+# These stations are sending M(D) mislabeled as MUF(D)
+if (($code =~ /^(?:MM168|SD266|KB548|MG560|TK356)$/) && 
+    defined $characteristics->{'MUF(D)'} && $characteristics->{'MUF(D)'} <= 4.2 && 
+    !defined $characteristics->{'M(D)'}) {
+  $characteristics->{'M(D)'} = delete $characteristics->{'MUF(D)'};
+}
+
 # Compute mufd from fof2 and md or fof2 and hmf2, if available
 # (pred can only work with stations that have fof2 + hmf2 + mufd, so it's worth trying to fill in)
 if (defined $characteristics->{'foF2'} && defined $characteristics->{'M(D)'} && !defined $characteristics->{'MUF(D)'}) {
