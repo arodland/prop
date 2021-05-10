@@ -2,18 +2,18 @@
 
 set -e
 
-podman-remote build --tag iri2016 iri2016
+podman -r build --tag iri2016 iri2016
 
-podman-remote build --tag prop-api api
-podman-remote build --tag prop-assimilate assimilate
-podman-remote build --tag prop-essn essn
-podman-remote build --tag prop-history history
-podman-remote build --tag irimap irimap
-podman-remote build --tag prop-pred pred
-podman-remote build --tag prop-renderer renderer
-podman-remote build --tag prop-scheduler scheduler
-podman-remote build --tag prop-storm storm
-podman-remote build --tag prop-raytrace raytrace
+podman -r build --tag prop-api api
+podman -r build --tag prop-assimilate assimilate
+podman -r build --tag prop-essn essn
+podman -r build --tag prop-history history
+podman -r build --tag irimap irimap
+podman -r build --tag prop-pred pred
+podman -r build --tag prop-renderer renderer
+podman -r build --tag prop-scheduler scheduler
+podman -r build --tag prop-storm storm
+podman -r build --tag prop-raytrace raytrace
 
-podman-remote build --tag noaa-loader noaa-loader
-podman-remote build --tag giro-loader giro-loader
+podman -r build --tag noaa-loader noaa-loader
+podman -r build --tag giro-loader giro-loader
