@@ -293,6 +293,39 @@ def get_latest_run():
 def latest_run():
     return jsonify(get_latest_run())
 
+@app.route("/available_maps.json", methods=['GET'])
+def available_maps_json():
+    past_hours = request.args.get('past_hours', '24')
+    future_hours = request.args.get('future_hours', '24')
+
+    with db.engine.connect() as conn:
+        sql = """select a1.run_id, a1.ts, a2.start, (case when a1.ts=a2.start then 'now' else ((a1.ts-a2.start+300)/3600)::int::text || 'h' end) as filesuffix 
+        from (
+            select max(a.run_id) as run_id, extract(epoch from a.time) as ts
+            from assimilated a
+            join runs r on a.run_id=r.id
+            where r.state='finished'
+            and a.time >= now() - (%s * interval '1 hour')
+            and a.time < now() + (%s * interval '1 hour')
+            group by a.time
+        ) a1
+        join (
+            select run_id, extract(epoch from min(time)) as start
+            from assimilated 
+            group by run_id
+        ) a2 
+        on a1.run_id=a2.run_id 
+        order by a1.ts asc"""
+
+        res = conn.execute(sql, (past_hours, future_hours))
+        rows = list(res.fetchall())
+
+        if len(rows) == 0:
+            return make_response('Not Found', 404)
+
+        rows = [ { 'run_id': row['run_id'], 'ts': row['ts'], 'start': row['start'], 'filesuffix': row['filesuffix'] } for row in rows ]
+        return jsonify(rows)
+
 def maidenhead_to_latlon(grid):
     grid = grid.strip()
 
