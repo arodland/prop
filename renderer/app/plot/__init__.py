@@ -15,11 +15,12 @@ turbo_colormap_data = [[0.18995,0.07176,0.23217],[0.19483,0.08339,0.26149],[0.19
 matplotlib.cm.register_cmap('turbo', cmap=ListedColormap(turbo_colormap_data))
 
 class Plot:
-    def __init__(self, metric_name, date, decorations=True, centered=None):
+    def __init__(self, metric_name, date, decorations=True, basemaps=True, alpha=0.35, centered=None):
         self.metric_name = metric_name
         self.date = date
         self.decorations = decorations
-        self.plotalpha = 0.35
+        self.basemaps = basemaps
+        self.plotalpha = alpha
 
         if centered is None:
             self.proj = ccrs.PlateCarree()
@@ -58,14 +59,15 @@ class Plot:
             self.ax.set_xmargin(0)
             self.ax.set_ymargin(0)
 
-        self.ax.add_feature(cartopy.feature.NaturalEarthFeature('physical', 'land', '110m',
-            edgecolor='face',
-            facecolor=np.array((0xdd,0xdd,0xcc))/256.,
-            zorder=-1
+        if basemaps:
+            self.ax.add_feature(cartopy.feature.NaturalEarthFeature('physical', 'land', '110m',
+                edgecolor='face',
+                facecolor=np.array((0xdd,0xdd,0xcc))/256.,
+                zorder=-1
+                )
             )
-        )
 
-        self.ax.add_feature(Nightshade(self.date, alpha=0.08))
+            self.ax.add_feature(Nightshade(self.date, alpha=0.08))
 
 
     def scale_common(self, cmap_name):

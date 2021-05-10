@@ -29,7 +29,10 @@ def filter_data(df, metric, ts):
 def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     tm = datetime.fromtimestamp(ts, timezone.utc)
 
-    plt = plot.Plot(metric, tm, decorations=(False if format=='bare' else True))
+    decorations = format not in ['bare', 'overlay']
+    basemaps = format not in ['overlay']
+
+    plt = plot.Plot(metric, tm, decorations=decorations, basemaps=basemaps)
     if metric == 'mufd':
         plt.scale_mufd()
     elif metric == 'fof2':
@@ -52,7 +55,7 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         dot_df = filter_data(dot_df, metric, ts)
         plt.draw_dots(dot_df, metric)
 
-    if format != 'bare':
+    if decorations:
         plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
 
     if 'svg' in file_formats:
