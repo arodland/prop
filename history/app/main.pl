@@ -141,8 +141,8 @@ sub dispatch_request {
       }
     ]
   },
-  'GET + /mixscale.json + ?station~&points~' => sub {
-    my ($self, $station_id, $max_points) = @_;
+  'GET + /mixscale.json + ?station~&points~&max_span~' => sub {
+    my ($self, $station_id, $max_points, $max_span) = @_;
     $max_points = 2000 unless defined $max_points;
 
     my $sql = ( defined($station_id) 
@@ -162,6 +162,14 @@ sub dispatch_request {
       $station->{$_} = 0 + $station->{$_} for qw(latitude longitude);
       my $measurements = $dbh->selectall_arrayref($sth2, {}, $station->{id});
       my $ts = [ map { $strp->parse_datetime($_->[0])->epoch } @$measurements ];
+      if (defined $max_span) {
+        my $secs = $max_span * 86400;
+        while ($ts->[-1] - $ts->[0] > $secs) {
+          shift @$ts;
+          shift @$measurements;
+        }
+      }
+
       my $span = $ts->[-1] - $ts->[0];
 
       while (@$measurements > $max_points) {
