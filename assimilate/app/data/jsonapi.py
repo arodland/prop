@@ -39,6 +39,7 @@ def get_data(url=os.getenv("METRICS_URI"), default_confidence=62):
     return df
 
 def filter(df, max_age=None, required_metrics=[], min_confidence=None):
+    df = df.drop(df[df['station.use_for_maps'] == False].index)
     if max_age is not None:
        df = df.drop(df[df.time < max_age].index)
 

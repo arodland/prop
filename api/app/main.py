@@ -28,6 +28,8 @@ class Station(db.Model):
     code = db.Column(db.String, unique=True)
     longitude = db.Column(db.Text)
     latitude = db.Column(db.Text)
+    use_for_essn = db.Column(db.Boolean)
+    use_for_maps = db.Column(db.Boolean)
     measurements = db.relationship('Measurement', backref='station')
 
     def __repr__(self):
@@ -94,7 +96,7 @@ measurements_schema = MeasurementSchema(many=True)
 class PredictionSchema(ma.ModelSchema):
     class Meta:
         model = Prediction
-    station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude']))
+    station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude', 'use_for_maps']))
 
 prediction_schema = PredictionSchema()
 predictions_schema = PredictionSchema(many=True)
