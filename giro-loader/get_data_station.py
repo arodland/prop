@@ -9,7 +9,7 @@ cwd = os.getcwd()
 statsd = StatsClient(host=os.getenv('STATSD_HOST'))
 
 @statsd.timer('prop.giro_loader.get_data')
-def get_data(s, n=1):
+def get_data(s, maxage=20):
 
     #import sys
     import ssl
@@ -65,7 +65,12 @@ def get_data(s, n=1):
         # Handle target environment that doesn't support HTTPS verification
         ssl._create_default_https_context = _create_unverified_https_context
 
-    fromDate = str((dt.datetime.now() - dt.timedelta(minutes=int(20))).strftime('%Y-%m-%dT%H:%M:%S'))
+    if maxage < 20:
+        maxage = 20
+    if maxage > 1440:
+        maxage = 1440
+
+    fromDate = str((dt.datetime.now() - dt.timedelta(minutes=int(maxage))).strftime('%Y-%m-%dT%H:%M:%S'))
     toDate = str((dt.datetime.now() + dt.timedelta(minutes=int(5))).strftime('%Y-%m-%dT%H:%M:%S'))
     urlfrom = '&fromDate=' + fromDate
     urlto = '&toDate=' + toDate
@@ -78,8 +83,7 @@ def get_data(s, n=1):
     ss = pd.Series(stationdf['id'])
     ss = int(ss)
     #only get records from sql that we're getting from didbase to save resources
-    since = datetime.now() - timedelta(days=n+1)
-    nn = n+2
+    since = datetime.now() - timedelta(days=2)
 
     #get data from GIRO, save to stationdata
     urlpt1 = "https://lgdc.uml.edu/common/DIDBGetValues?ursiCode="

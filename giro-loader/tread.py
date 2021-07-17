@@ -15,7 +15,6 @@ import psycopg2
 
 cwd = os.getcwd()
 
-days = int(sys.argv[1])
 threadcount = int(sys.argv[2])
 
 logging.basicConfig(
@@ -38,6 +37,7 @@ except:
 
 # lock to serialize console output
 lock = threading.Lock()
+maxage = None
 
 def do_work(item):
     #time.sleep(1) # pretend to do some lengthy work.
@@ -45,7 +45,7 @@ def do_work(item):
     logger.info ('start ' + item)
     logger.info('{} do_work item {}'.format(dt.datetime.now(), item))
     try:
-        get_data(item, days)
+        get_data(item, maxage)
     except Exception as e:
         logger.error(e)
 
@@ -59,6 +59,13 @@ def worker():
         do_work(item)
         q.task_done()
         logger.info('{} worker done w item {}'.format(dt.datetime.now(), item))
+
+with con.cursor() as cur:
+    cur.execute("select max(m.time) from measurement m where m.source='giro'")
+    (lasttime,) = cur.fetchone()
+    intervals = round((dt.datetime.now() - lasttime) / dt.timedelta(minutes = 15))
+    maxage = intervals * 15 + 5
+
 # Create the queue and thread pool.
 q = Queue()
 logger.info('{} ### creating queue with tread pool count {} ###'.format(dt.datetime.now(), threadcount))
