@@ -112,7 +112,6 @@ sub queue_job {
     ],
     {
       attempts => 2,
-      priority => 1,
     },
   );
 
@@ -138,7 +137,7 @@ sub queue_job {
     {
       parents => [ $essn_24h ],
       attempts => 2,
-      priority => 2,
+      queue => 'pred',
     },
   );
 
@@ -154,7 +153,6 @@ sub queue_job {
       {
         parents => [ $essn_24h ],
         attempts => 2,
-        priority => 2,
       },
     );
     my $assimilate = app->minion->enqueue('assimilate',
@@ -165,7 +163,7 @@ sub queue_job {
       {
         parents => [ $pred, $irimap ],
         attempts => 2,
-        priority => 3,
+        queue => 'assimilate',
       },
     );
     my @map_jobs = make_maps(
@@ -207,38 +205,60 @@ sub next_cleanup {
   return ($next, $wait);
 }
 
-my $child = fork;
-if (!defined $child) {
-  die "Couldn't fork: $!";
-}
+my @queue_workers = (
+  { 
+    queues => [ 'default' ],
+    jobs => 7,
+  },
+  {
+    queues => [ 'assimilate', 'pred' ],
+    jobs => 2,
+  },
+);
 
-if ($child) {
-  # Admin web and periodic job injector
-  my ($next, $wait) = next_run;
-  app->log->debug("First run in $wait seconds");
-  Mojo::IOLoop->timer($wait => sub { queue_job($next, 1) });
+my @worker_pids;
 
-  get '/run_now' => sub {
-    my $c = shift;
-    queue_job(time, 0);
-    $c->render(text => "OK\n");
-  };
+for my $worker_desc (@queue_workers) {
+  my $child = fork;
+  if (!defined $child) {
+    die "Couldn't fork: $!";
+  }
 
-  get '/cleanup_now' => sub {
-    my $c = shift;
-    app->minion->enqueue('cleanup');
-    $c->render(text => "OK\n");
-  };
-
-  app->start;
-} else {
-  app->minion->on(worker => sub { srand });
-  my $worker = app->minion->worker;
-  $worker->status->{dequeue_timeout} = 1;
-  $worker->status->{jobs} = 6;
-  $worker->status->{heartbeat_interval} = 30;
-  $worker->run;
-  END {
+  if (!$child) {
+    app->minion->on(worker => sub { srand });
+    my $worker = app->minion->worker;
+    $worker->status->{dequeue_timeout} = 1;
+    $worker->status->{jobs} = $worker_desc->{jobs};
+    $worker->status->{queues} = $worker_desc->{queues};
+    $worker->status->{heartbeat_interval} = 30;
+    $worker->run;
     $worker->unregister;
+    exit;
+  } else {
+    push @worker_pids, $child;
   }
 }
+
+# Admin web and periodic job injector
+my ($next, $wait) = next_run;
+app->log->debug("First run in $wait seconds");
+Mojo::IOLoop->timer($wait => sub { queue_job($next, 1) });
+
+get '/run_now' => sub {
+  my $c = shift;
+  queue_job(time, 0);
+  $c->render(text => "OK\n");
+};
+
+get '/cleanup_now' => sub {
+  my $c = shift;
+  app->minion->enqueue('cleanup');
+  $c->render(text => "OK\n");
+};
+
+$SIG{INT} = $SIG{TERM} = sub {
+  warn "Shutdown! @worker_pids\n";
+  kill 'TERM', @worker_pids if @worker_pids;
+};
+
+app->start;
