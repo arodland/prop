@@ -40,6 +40,9 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     else:
         plt.scale_generic()
 
+    if 'geojson' in file_formats:
+        plt.set_geojson(out_path + '.geojson')
+
     zi = dataset['/maps/' + metric][:]
     plt.draw_contour(zi)
 

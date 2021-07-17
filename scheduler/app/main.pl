@@ -69,6 +69,7 @@ sub make_maps {
     normal => [
       'svg',
       'station_json',
+      'geojson',
     ],
     bare => [
       'jpg',

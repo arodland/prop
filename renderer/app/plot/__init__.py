@@ -3,6 +3,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cartopy.feature
+import geojsoncontour
 from cartopy.feature.nightshade import Nightshade
 matplotlib.style.use('ggplot')
 matplotlib.rcParams['hatch.color'] = '#00000066'
@@ -21,6 +22,7 @@ class Plot:
         self.decorations = decorations
         self.basemaps = basemaps
         self.plotalpha = alpha
+        self.geojson = None
 
         if centered is None:
             self.proj = ccrs.PlateCarree()
@@ -104,6 +106,9 @@ class Plot:
         self.levels = [1.8, 3.5, 5.3, 7, 10.1, 14]
         self.norm = matplotlib.colors.LogNorm(1.5, 15, clip=False)
 
+    def set_geojson(self, filename):
+        self.geojson = filename
+
     def draw_contour(self, zi, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
         loni = np.linspace(lon_min, lon_max, lon_steps)
         lati = np.linspace(lat_min, lat_max, lat_steps)
@@ -129,6 +134,12 @@ class Plot:
                 transform=self.proj
                 )
 
+        if self.geojson:
+            geojsoncontour.contour_to_geojson(
+                contour=CS2,
+                geojson_filepath=self.geojson,
+            )
+
         prev = None
         levels = []
         for lev in CS2.levels:
@@ -151,7 +162,6 @@ class Plot:
                     )
             cbar.minorticks_off()
             cbar.add_lines(CS2)
-
 
     def draw_mofstyle(self, zi, lon_min=-180, lon_max=180, lon_steps=361, lat_min=-90, lat_max=90, lat_steps=181):
         loni = np.linspace(lon_min, lon_max, lon_steps)
