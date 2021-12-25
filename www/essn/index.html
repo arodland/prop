@@ -24,8 +24,11 @@
   <!--#include virtual="/nav-header.html" -->
   <div id="essn-chart">
   </div>
+  <label for="variable">Variable:</label><select id="variable"><option value="eSFI" selected>eSFI</option><option value="eSSN">eSSN</option></select><br>
   <script type="text/javascript">
     div = document.getElementById("essn-chart");
+    variable_select = document.getElementById("variable");
+    filter_select = document.getElementById("filter");
     xhr = new XMLHttpRequest();
     created = false;
     xhr.addEventListener('load', function(e) {
@@ -41,7 +44,7 @@
       var plots = [
         {
           'name': '6h',
-          '_series': 'eSFI',
+          '_series': 'eSFI_none',
           'type': 'scatter',
           'x': x_6h,
           'y': sfi_6h,
@@ -50,7 +53,7 @@
         },
         {
           'name': '24h',
-          '_series': 'eSFI',
+          '_series': 'eSFI_none',
           'type': 'scatter',
           'x': x_24h,
           'y': sfi_24h,
@@ -59,7 +62,7 @@
         },
         {
           'name': '6h',
-          '_series': 'eSSN',
+          '_series': 'eSSN_none',
           'type': 'scatter',
           'x': x_6h,
           'y': ssn_6h,
@@ -68,14 +71,14 @@
         },
         {
           'name': '24h',
-          '_series': 'eSSN',
+          '_series': 'eSSN_none',
           'type': 'scatter',
           'x': x_24h,
           'y': ssn_24h,
           'hovertemplate': '%{y:.2f}',
           'visible': false,
-        }
-      ]
+        },
+      ];
 
       var layout = {
         'title': 'eSFI',
@@ -131,20 +134,12 @@
 
       Plotly.react(div, plots, layout);
 
-      var mode = 'eSFI';
-
       if (!created) {
-        div.on('plotly_legenddoubleclick', function() {
+        var redraw = function(series, title) {
           var turnOn = [], turnOff = [];
 
-          if (mode == 'eSFI') {
-            mode = 'eSSN';
-          } else {
-            mode = 'eSFI';
-          }
-
           for (var i = 0 ; i < div.data.length ; i++) {
-            if (div.data[i]._series == mode) {
+            if (div.data[i]._series == series) {
               turnOn.push(i);
             } else {
               turnOff.push(i);
@@ -153,9 +148,16 @@
 
           Plotly.restyle(div, {'visible': true}, turnOn);
           Plotly.restyle(div, {'visible': false}, turnOff);
-          Plotly.relayout(div, {'title': mode } );
+          Plotly.relayout(div, {'title': title } );
+        };
+        var update = function() {
+          var mode = variable_select.value;
+          var filter = 'none';
+          redraw(mode + '_' + filter, mode);
           return false;
-        });
+        };
+
+        variable_select.onchange = update;
       }
 
       created = true;

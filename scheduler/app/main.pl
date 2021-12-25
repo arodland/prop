@@ -21,6 +21,7 @@ plugin 'Task::eSSN';
 plugin 'Task::Pred';
 plugin 'Task::IRIMap';
 plugin 'Task::Assimilate';
+plugin 'Task::BandQuality';
 plugin 'Task::Render';
 plugin 'Task::Cleanup';
 
@@ -173,8 +174,24 @@ sub queue_job {
       dots => $render->{dots},
       parents => [ $assimilate ],
     );
+
     push @html_deps, @map_jobs;
+
+    if ($render->{target_time} == $target_times[0]{target_time}) {
+      my $band_quality = app->minion->enqueue('band_quality',
+        [
+          run_id => $run_id,
+          target => $render->{target_time},
+        ],
+        {
+          parents => [ $assimilate ],
+          attempts => 2,
+        },
+      );
+      push @html_deps, $band_quality;
+    }
   }
+
 
   my $renderhtml = app->minion->enqueue('renderhtml',
     [
@@ -213,6 +230,10 @@ my @queue_workers = (
   {
     queues => [ 'assimilate', 'pred' ],
     jobs => 2,
+  },
+  {
+    queues => [ 'gcs_upload' ],
+    jobs => 8,
   },
 );
 

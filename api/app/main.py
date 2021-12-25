@@ -328,6 +328,32 @@ def available_maps_json():
         rows = [ { 'run_id': row['run_id'], 'ts': row['ts'], 'start': row['start'], 'filesuffix': row['filesuffix'] } for row in rows ]
         return jsonify(rows)
 
+@app.route("/band_quality.json", methods=['GET'])
+def band_quality_json():
+    days = request.args.get('days', 7)
+
+    cachekey = 'api;band_quality.json;' + str(days)
+    ret = memcache.get(cachekey)
+
+    if ret is None:
+        with db.engine.connect() as conn:
+            res = conn.execute(
+                text("select extract(epoch from time) as time, band, quality from band_quality where time >= now() - :days * interval '1 day' order by time asc").\
+                    bindparams(days=days).\
+                    columns(time=db.Numeric(asdecimal=False), band=db.Text, quality=db.Numeric(asdecimal=False))
+            )
+            rows = list(res.fetchall())
+            series = {}
+            for row in rows:
+                if series.get(row['band']) is None:
+                    series[row['band']] = []
+                series[row['band']].append( { 'time': round(row['time']), 'quality': row['quality'] })
+
+        ret = json.dumps(series)
+        memcache.set(cachekey, ret, 60)
+
+    return Response(ret, mimetype='application/json')
+
 def maidenhead_to_latlon(grid):
     grid = grid.strip()
 

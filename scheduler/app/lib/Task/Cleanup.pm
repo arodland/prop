@@ -1,6 +1,34 @@
 package Task::Cleanup;
 use Mojo::Base 'Mojolicious::Plugin';
 use Path::Tiny;
+use Mojolicious::Types;
+use Mojo::UserAgent;
+use Mojo::URL;
+use Mojo::Util qw(b64_encode b64_decode);
+use WWW::Google::Cloud::Auth::ServiceAccount;
+
+has 'auth' => sub {
+  WWW::Google::Cloud::Auth::ServiceAccount->new(
+    credentials_path => '/archiver.json',
+  )
+};
+
+has 'types' => sub {
+  Mojolicious::Types->new
+};
+
+has 'base_url' => sub {
+  Mojo::URL->new("https://storage.googleapis.com/upload/storage/v1/b/$ENV{ARCHIVE_BUCKET}/o/")
+};
+
+sub gcs_upload {
+  my ($self, $minion, %args) = @_;
+  $args{data} = b64_encode($args{data}) if defined $args{data};
+  $minion->enqueue('gcs_upload', [ %args ], {
+      attempts => 3,
+      queue => 'gcs_upload',
+  });
+}
 
 sub register {
   my ($self, $app) = @_;
@@ -13,7 +41,7 @@ sub register {
 
       while (my $run = $runs->hash) {
         eval {
-          delete_run($db, $run->{id});
+          $self->delete_run($app->minion, $db, $run->{id});
         };
         if ($@) {
           $app->log->warn("$@ deleting run $run->{id}");
@@ -24,7 +52,7 @@ sub register {
 
       while (my $run = $runs->hash) {
         eval {
-          archive_run($db, $run->{id});
+          $self->archive_run($app->minion, $db, $run->{id});
         };
         if ($@) {
           $app->log->warn("$@ archiving run $run->{id}");
@@ -32,10 +60,35 @@ sub register {
       }
 
   });
+
+  $app->minion->add_task(gcs_upload => sub {
+    my ($job, %args) = @_;
+    my $token = $self->auth->get_token;
+    my $ua = Mojo::UserAgent->new;
+    my $mime_type = $self->types->file_type($args{name});
+    my $url = $self->base_url->clone;
+    $args{name} =~ s{^/}{};
+
+    $url->query({
+        uploadType => 'media',
+        name => "prop-archive/$args{name}",
+      });
+
+    my $res = $ua->post(
+      $url,
+      {
+        'Content-Type' => $mime_type || 'application/octet-stream',
+        'Authorization' => "Bearer $token",
+      },
+      b64_decode($args{data}),
+    )->result;
+
+    $job->fail($res->to_string) unless $res->is_success;
+  });
 }
 
 sub archive_run {
-  my ($db, $run_id) = @_;
+  my ($self, $minion, $db, $run_id) = @_;
 
   my $archive_dir = path("/archive/$run_id");
   $archive_dir->mkpath;
@@ -51,6 +104,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
+    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", data => $map->{dataset});
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
@@ -61,6 +115,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
+    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", data => $map->{dataset});
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
   
@@ -72,16 +127,17 @@ sub archive_run {
 
     for my $file ($rendered_dir->children) {
       $file->copy($dest_dir);
+      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, data => $file->slurp_raw);
     }
     $rendered_dir->remove_tree;
   }
-  
+
   # run: update state to 'archived'
   $db->query("update runs set state=? where id=?", "archived", $run_id);
 }
 
 sub delete_run {
-  my ($db, $run_id) = @_;
+  my ($self, $minion, $db, $run_id) = @_;
   my $archive_dir = path("/archive/$run_id");
 
   # essn: leave alone (we can afford this, or manually delete...)

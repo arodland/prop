@@ -46,7 +46,9 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
     phi = np.arctan2(np.sin(half_hop), (1.0 + h_calc/r0 - np.cos(half_hop)))
     phi = np.clip(phi, constants.min_phi, constants.max_phi)
 
-    m9 = constants.m9_1 * np.power(constants.m9_2, khop) / np.cos(phi)
+    curv_corr = .9679 + 1.046 * np.clip(half_hop, .0785, .2354)
+
+    m9 = curv_corr * np.power(constants.m9_2, khop) / np.cos(phi)
 
     takeoff = np.arctan2(np.cos(half_hop) - (r0/(h_calc+r0)), np.sin(half_hop))
     takeoff_true = takeoff
@@ -98,7 +100,7 @@ def mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=False, h_min_flag
         'mof': cmof,
         'lof': clof,
         'm9': m9,
-        'takeoff': takeoff,
+        'takeoff': np.degrees(takeoff),
         'phi': phi,
         'khop': khop.astype(float),
         'half_hop': half_hop,

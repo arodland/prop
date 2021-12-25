@@ -2,3 +2,5 @@ requires 'Mojolicious::Lite';
 requires 'Minion' => '10.10';
 requires 'Mojo::Pg';
 requires 'Path::Tiny';
+requires 'WWW::Google::Cloud::Auth::ServiceAccount';
+requires 'LWP::Protocol::https';
