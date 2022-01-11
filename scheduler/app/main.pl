@@ -96,6 +96,7 @@ sub make_maps {
         {
           parents => $args{parents},
           attempts => 2,
+          expire => 18 * 60,
         }
       );
     }
@@ -114,6 +115,7 @@ sub queue_job {
     ],
     {
       attempts => 2,
+      expire => 18 * 60,
     },
   );
 
@@ -126,6 +128,9 @@ sub queue_job {
     [
       series => '6h',
     ],
+    {
+      expire => 18 * 60,
+    },
   );
 
   my @target_times = target_times($run_time);
@@ -140,6 +145,7 @@ sub queue_job {
       parents => [ $essn_24h ],
       attempts => 2,
       queue => 'pred',
+      expire => 18 * 60,
     },
   );
 
@@ -155,6 +161,7 @@ sub queue_job {
       {
         parents => [ $essn_24h ],
         attempts => 2,
+        expire => 18 * 60,
       },
     );
     my $assimilate = app->minion->enqueue('assimilate',
@@ -165,6 +172,7 @@ sub queue_job {
       {
         parents => [ $pred, $irimap ],
         attempts => 2,
+        expire => 18 * 60,
         queue => 'assimilate',
       },
     );
@@ -200,6 +208,7 @@ sub queue_job {
     ],
     {
       parents => [ @html_deps ],
+      expire => 18 * 60,
       attempts => 2,
     },
   );
