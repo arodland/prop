@@ -212,17 +212,6 @@ sub queue_job {
   }
 }
 
-sub next_cleanup {
-  my $INTERVAL = 3600; # 1 hour
-  my $LEAD = 780; # Run at :47
-
-  my $now = time;
-  my $prev = $now - (($now + $LEAD) % $INTERVAL);
-  my $next = $prev + $INTERVAL;
-  my $wait = $next - $now;
-  return ($next, $wait);
-}
-
 # Admin web and periodic job injector
 my ($next, $wait) = next_run;
 app->log->debug("First run in $wait seconds");
