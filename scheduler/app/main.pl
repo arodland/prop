@@ -222,44 +222,6 @@ sub next_cleanup {
   return ($next, $wait);
 }
 
-my @queue_workers = (
-  { 
-    queues => [ 'default' ],
-    jobs => 7,
-  },
-  {
-    queues => [ 'assimilate', 'pred' ],
-    jobs => 2,
-  },
-  {
-    queues => [ 'gcs_upload' ],
-    jobs => 8,
-  },
-);
-
-my @worker_pids;
-
-for my $worker_desc (@queue_workers) {
-  my $child = fork;
-  if (!defined $child) {
-    die "Couldn't fork: $!";
-  }
-
-  if (!$child) {
-    app->minion->on(worker => sub { srand });
-    my $worker = app->minion->worker;
-    $worker->status->{dequeue_timeout} = 1;
-    $worker->status->{jobs} = $worker_desc->{jobs};
-    $worker->status->{queues} = $worker_desc->{queues};
-    $worker->status->{heartbeat_interval} = 30;
-    $worker->run;
-    $worker->unregister;
-    exit;
-  } else {
-    push @worker_pids, $child;
-  }
-}
-
 # Admin web and periodic job injector
 my ($next, $wait) = next_run;
 app->log->debug("First run in $wait seconds");
@@ -275,11 +237,6 @@ get '/cleanup_now' => sub {
   my $c = shift;
   app->minion->enqueue('cleanup');
   $c->render(text => "OK\n");
-};
-
-$SIG{INT} = $SIG{TERM} = sub {
-  warn "Shutdown! @worker_pids\n";
-  kill 'TERM', @worker_pids if @worker_pids;
 };
 
 app->start;
