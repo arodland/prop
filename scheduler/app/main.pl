@@ -13,7 +13,8 @@ plugin 'Minion' => {
   Pg => app->pg,
 };
 
-app->minion->missing_after(120);
+app->minion->missing_after(3 * 60);
+app->minion->repair;
 
 plugin 'Minion::Admin';
 
