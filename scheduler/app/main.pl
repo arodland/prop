@@ -16,6 +16,19 @@ plugin 'Minion' => {
 app->minion->missing_after(3 * 60);
 app->minion->repair;
 
+app->minion->on(dequeue => sub {
+  my ($job) = @_;
+  warn "[$$] ", $job->id, " dequeued\n";
+  $job->on(finished => sub {
+    my ($job) = @_;
+    warn "[$$] ", $job->id, " finished\n";
+  });
+  $job->on(failed => sub {
+    my ($job) = @_;
+    warn "[$$] ", $job->id, " failed\n";
+  });
+});
+
 plugin 'Minion::Admin';
 
 plugin 'Task::eSSN';

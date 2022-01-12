@@ -69,6 +69,15 @@ sub register {
     my $url = $self->base_url->clone;
     $args{name} =~ s{^/}{};
 
+    my $data;
+    if (defined $args{disk_file}) {
+      $data = path($args{disk_file})->slurp_raw;
+    } elsif (defined $args{data}) {
+      $data = b64_decode($args{data});
+    } else {
+      die "no data found";
+    }
+
     $url->query({
         uploadType => 'media',
         name => "prop-archive/$args{name}",
@@ -80,7 +89,7 @@ sub register {
         'Content-Type' => $mime_type || 'application/octet-stream',
         'Authorization' => "Bearer $token",
       },
-      b64_decode($args{data}),
+      $data,
     )->result;
 
     $job->fail($res->to_string) unless $res->is_success;
@@ -104,7 +113,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", data => $map->{dataset});
+    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file");
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
@@ -115,7 +124,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", data => $map->{dataset});
+    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file");
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
   
@@ -126,8 +135,8 @@ sub archive_run {
     $dest_dir->mkpath;
 
     for my $file ($rendered_dir->children) {
-      $file->copy($dest_dir);
-      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, data => $file->slurp_raw);
+      my $target_file = $file->copy($dest_dir);
+      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file");
     }
     $rendered_dir->remove_tree;
   }
