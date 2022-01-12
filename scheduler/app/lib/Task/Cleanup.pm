@@ -135,6 +135,8 @@ sub archive_run {
     $dest_dir->mkpath;
 
     for my $file ($rendered_dir->children) {
+      next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
+
       my $target_file = $file->copy($dest_dir);
       $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file");
     }
