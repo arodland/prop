@@ -30,6 +30,8 @@ app->minion->on(dequeue => sub {
 });
 
 plugin 'Minion::Admin';
+plugin 'Minion::Notifier';
+plugin 'Minion::Statsd';
 
 plugin 'Task::eSSN';
 plugin 'Task::Pred';
