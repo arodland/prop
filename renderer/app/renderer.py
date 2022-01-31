@@ -75,6 +75,8 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         with open(out_path + '_station.json', 'w') as f:
             dot_df.to_json(f, orient='records')
 
+    plt.close()
+
 def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
     tm = datetime.fromtimestamp(ts, timezone.utc)
     plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
@@ -123,6 +125,7 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
     bio = io.BytesIO()
     plt.write(bio, format=file_format)
+    plt.close()
     return bio.getvalue()
 
 app = Flask(__name__)

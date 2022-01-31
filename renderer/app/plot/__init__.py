@@ -280,3 +280,6 @@ class Plot:
             plt.tight_layout(pad=0.0)
             plt.savefig(filename, format=format, dpi=256, bbox_inches='tight', pad_inches=0.0)
 
+
+    def close(self):
+        plt.close(self.fig)
