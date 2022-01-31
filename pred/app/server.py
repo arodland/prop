@@ -141,25 +141,26 @@ def generate():
                     )
                 )
 
-            with con.cursor() as cur:
-                cur.execute("""
-                insert into prediction_delta (run_id, station_id, time, cs, log_stdev, delta_fof2, delta_mufd, delta_hmf2) 
-                values (%s, %s, %s, %s, %s, %s, %s, %s)
-                on conflict (station_id, run_id, time) do update
-                set cs=excluded.cs, log_stdev=excluded.log_stdev,
-                delta_fof2=excluded.delta_fof2, delta_mufd=excluded.delta_mufd, delta_hmf2=excluded.delta_hmf2
-                """,
-                    (
-                        run_id,
-                        station['id'],
-                        times[i],
-                        stdev_to_cs(sd_mufd[i]),
-                        sd_mufd[i],
-                        delta_fof2,
-                        delta_mufd,
-                        delta_hmf2,
+            if False:
+                with con.cursor() as cur:
+                    cur.execute("""
+                    insert into prediction_delta (run_id, station_id, time, cs, log_stdev, delta_fof2, delta_mufd, delta_hmf2) 
+                    values (%s, %s, %s, %s, %s, %s, %s, %s)
+                    on conflict (station_id, run_id, time) do update
+                    set cs=excluded.cs, log_stdev=excluded.log_stdev,
+                    delta_fof2=excluded.delta_fof2, delta_mufd=excluded.delta_mufd, delta_hmf2=excluded.delta_hmf2
+                    """,
+                        (
+                            run_id,
+                            station['id'],
+                            times[i],
+                            stdev_to_cs(sd_mufd[i]),
+                            sd_mufd[i],
+                            delta_fof2,
+                            delta_mufd,
+                            delta_hmf2,
+                        )
                     )
-                )
 
         con.commit()
 
