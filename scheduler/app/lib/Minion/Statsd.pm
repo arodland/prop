@@ -11,6 +11,10 @@ sub register {
     my ($notifier, $job_id, $event) = @_;
     return unless $event eq 'finished' or $event eq 'failed';
     my $job = $notifier->minion->job($job_id);
+    if (!$job) {
+      warn "Got notification for job $job_id that can't be fetched";
+      return;
+    }
     my $task = $job->task;
     my %info = %{ $job->info };
     my $queue = $info{queue};
