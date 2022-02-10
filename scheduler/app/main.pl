@@ -127,6 +127,7 @@ sub queue_job {
   my $essn_24h = app->minion->enqueue('essn',
     [
       series => '24h',
+      num_holdouts => 1,
     ],
     {
       attempts => 2,
@@ -142,6 +143,7 @@ sub queue_job {
   my $essn_6h = app->minion->enqueue('essn',
     [
       series => '6h',
+      num_holdouts => 0,
     ],
     {
       expire => 18 * 60,

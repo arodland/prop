@@ -11,6 +11,7 @@ sub register {
         form => {
           series => $args{series},
           run_id => $job->id,
+          num_holdouts => $args{num_holdouts},
         },
       )->result;
       $res->is_success or die $res->error;
