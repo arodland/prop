@@ -144,7 +144,14 @@ def err(ssn, data, recency, now):
 
     return total / total_weight
 
-def generate_essn(run_id, series):
+def get_holdouts(run_id, num):
+    urllib.request.urlopen('http://localhost:%s/holdout' % os.getenv('API_PORT'), data=urllib.parse.urlencode({'run_id': str(run_id), 'num': str(num)}).encode('ascii'))
+    with urllib.request.urlopen('http://localhost:%s/holdout?run_id=%s' % (os.getenv('API_PORT'), run_id)) as res:
+        data = json.loads(res.read().decode())
+
+    return data
+
+def generate_essn(run_id, series, num_holdouts):
     now = datetime.utcnow()
     recency = True if series == '6h' else False
 
@@ -155,6 +162,11 @@ def generate_essn(run_id, series):
         data = json.loads(res.read().decode())
 
     data = [ station for station in data if station['use_for_essn'] == 1 ]
+
+    if num_holdouts > 0:
+        holdouts = get_holdouts(run_id, num_holdouts)
+        exclude_station_ids = [ row['station']['id'] for row in holdouts ]
+        data = [ station for station in data if station['id'] not in exclude_station_ids ]
 
     for station in data:
         # TODO: use the current time once IGRF13 is available
@@ -196,8 +208,9 @@ app = Flask(__name__)
 def generate():
     run_id = request.form.get('run_id', -1)
     series = request.form.get('series', '24h')
+    num_holdouts = int(request.form.get('num_holdouts', 0))
 
-    return jsonify(generate_essn(run_id, series))
+    return jsonify(generate_essn(run_id, series, num_holdouts))
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ESSN_PORT')))
