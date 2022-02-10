@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_file, make_response, Response
+from flask import Flask, request, jsonify, render_template, send_file, make_response, redirect, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from marshmallow import Schema, fields
@@ -76,6 +76,16 @@ class Prediction(db.Model):
     def __repr__(self):
         return '<Prediction %r>' % self.id
 
+class Holdout(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    run_id = db.Column(db.Integer)
+    station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
+    station = db.relationship('Station', foreign_keys=[station_id])
+    measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+    def __repr__(self):
+        return '<Holdout %r: %r %r %r>' % (self.id, self.run_id, self.station_id, self.measurement_id)
+
 #Generate marshmallow Schemas from your models using ModelSchema
 
 class StationSchema(ma.ModelSchema):
@@ -100,6 +110,16 @@ class PredictionSchema(ma.ModelSchema):
 
 prediction_schema = PredictionSchema()
 predictions_schema = PredictionSchema(many=True)
+
+class HoldoutSchema(ma.ModelSchema):
+    class Meta:
+        model = Holdout
+
+    station = fields.Nested(StationSchema(only=['id', 'code']))
+    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
+
+holdout_schema = HoldoutSchema()
+holdouts_schema = HoldoutSchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -424,6 +444,37 @@ def ptp_json():
         res = make_response(content)
         res.mimetype = 'application/json'
         return res
+
+def _get_holdout(run_id):
+    qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
+    return holdouts_schema.dump(qry)
+
+@app.route("/holdout", methods=['GET'])
+def get_holdout():
+    run_id = int(request.values.get('run_id'))
+    ho = _get_holdout(run_id)
+    return Response(json.dumps(ho.data), mimetype='application/json')
+
+@app.route("/holdout", methods=['POST'])
+def post_holdout():
+    run_id = int(request.form.get('run_id'))
+    num_ho = int(request.form.get('num', 1))
+
+    ho = _get_holdout(run_id)
+    num_ho = num_ho - len(ho.data)
+
+    with db.engine.connect() as conn:
+        res = conn.execute(
+            text("select m.id, m.station_id from measurement m join station s on s.id=m.station_id where s.use_for_essn=true and s.use_for_maps=true and m.time > now() - interval '30 minutes' and m.fof2 is not null and m.hmf2 is not null and m.mufd is not null order by random() limit :num").\
+                bindparams(num=num_ho)
+        )
+        for row in res:
+            (measurement_id, station_id) = row
+            res = conn.execute(
+                text("insert into holdout (run_id, station_id, measurement_id) values (:run_id, :station_id, :measurement_id)").\
+                    bindparams(run_id=run_id, station_id=station_id, measurement_id=measurement_id)
+            )
+    return Response('OK', 200)
 
 @app.route("/", methods=['GET'])
 def static_stations():
