@@ -1,6 +1,6 @@
-git+https://github.com/space-physics/igrf@fb02a51cadf559dd6422f21e0fcdf08cc0cbceca#egg=igrf
 psycopg2-binary==2.8.5
 scikit-learn==0.23.1
 scikit-optimize==0.7.4
 Flask==1.1.2
 uwsgi==2.0.18
+numpy==1.21.5

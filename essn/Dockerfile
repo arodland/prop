@@ -3,6 +3,7 @@ RUN apt-get update && apt-get install -y python3 python3-dateutil python3-xarray
 WORKDIR /src
 COPY requirements.txt ./
 RUN pip3 install -r requirements.txt
+RUN pip3 install 'git+https://github.com/space-physics/igrf@fb02a51cadf559dd6422f21e0fcdf08cc0cbceca#egg=igrf'
 COPY essn.py ./
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
