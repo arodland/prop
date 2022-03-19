@@ -28,6 +28,7 @@ jf(4:6) = .false.
 jf(21:23) = .false.
 jf(28:30) = .false.
 jf(33:36) = .false.
+jf(39) = .false.
 
 datadir1 = datadir
 call read_ig_rz
