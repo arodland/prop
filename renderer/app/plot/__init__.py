@@ -250,7 +250,8 @@ class Plot:
     def draw_dot(self, lon, lat, text, color, alpha):
         self.ax.text(lon, lat, text,
             fontsize=9,
-            ha='left',
+            ha='center',
+            va='center',
             transform=ccrs.PlateCarree(),
             alpha=alpha,
             bbox={
