@@ -86,6 +86,15 @@ class Holdout(db.Model):
     def __repr__(self):
         return '<Holdout %r: %r %r %r>' % (self.id, self.run_id, self.station_id, self.measurement_id)
 
+class HoldoutEval(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    model = db.Column(db.Text)
+    fof2 = db.Column(db.Numeric(asdecimal=False))
+    mufd = db.Column(db.Numeric(asdecimal=False))
+    hmf2 = db.Column(db.Numeric(asdecimal=False))
+
 #Generate marshmallow Schemas from your models using ModelSchema
 
 class StationSchema(ma.ModelSchema):
@@ -115,11 +124,19 @@ class HoldoutSchema(ma.ModelSchema):
     class Meta:
         model = Holdout
 
-    station = fields.Nested(StationSchema(only=['id', 'code']))
+    station = fields.Nested(StationSchema(only=['id', 'code', 'latitude', 'longitude']))
     measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
 
 holdout_schema = HoldoutSchema()
 holdouts_schema = HoldoutSchema(many=True)
+
+class HoldoutEvalSchema(ma.ModelSchema):
+    class Meta:
+        model = HoldoutEval
+
+    holdout = fields.Nested(HoldoutSchema)
+
+holdout_evals_schema = HoldoutEvalSchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -445,36 +462,61 @@ def ptp_json():
         res.mimetype = 'application/json'
         return res
 
-def _get_holdout(run_id):
-    qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
-    return holdouts_schema.dump(qry)
-
 @app.route("/holdout", methods=['GET'])
 def get_holdout():
     run_id = int(request.values.get('run_id'))
-    ho = _get_holdout(run_id)
+    qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
+    ho = holdouts_schema.dump(qry)
     return Response(json.dumps(ho.data), mimetype='application/json')
 
 @app.route("/holdout", methods=['POST'])
 def post_holdout():
-    run_id = int(request.form.get('run_id'))
     num_ho = int(request.form.get('num', 1))
-
-    ho = _get_holdout(run_id)
-    num_ho = num_ho - len(ho.data)
+    ret = []
 
     with db.engine.connect() as conn:
         res = conn.execute(
-            text("select m.id, m.station_id from measurement m join station s on s.id=m.station_id where s.use_for_essn=true and s.use_for_maps=true and m.time > now() - interval '30 minutes' and m.fof2 is not null and m.hmf2 is not null and m.mufd is not null order by random() limit :num").\
-                bindparams(num=num_ho)
+            text("select m.id as id, m.station_id as station_id, extract(epoch from m.time) as time from measurement m join station s on s.id=m.station_id where s.use_for_essn=true and s.use_for_maps=true and m.time > now() - interval '30 minutes' and m.fof2 is not null and m.hmf2 is not null and m.mufd is not null and (m.cs >= 75 or m.cs = -1) and m.station_id<>67 order by random() limit :num").\
+                bindparams(num=num_ho).\
+                columns(id=db.Numeric(asdecimal=False), station_id=db.Numeric(asdecimal=False), time=db.Numeric(asdecimal=False))
         )
         for row in res:
-            (measurement_id, station_id) = row
+            (measurement_id, station_id, meas_time) = row
             res = conn.execute(
-                text("insert into holdout (run_id, station_id, measurement_id) values (:run_id, :station_id, :measurement_id)").\
-                    bindparams(run_id=run_id, station_id=station_id, measurement_id=measurement_id)
+                text("insert into holdout (station_id, measurement_id) values (:station_id, :measurement_id) returning id").\
+                    bindparams(station_id=station_id, measurement_id=measurement_id)
             )
-    return Response('OK', 200)
+            (inserted_id,) = res.fetchone()
+            ret.append({ 'holdout': inserted_id, 'ts': meas_time })
+
+    return jsonify(ret)
+
+@app.route("/holdout_eval", methods=['GET'])
+def get_holdout_eval():
+    qry = db.session.query(HoldoutEval)
+    dump = holdout_evals_schema.dump(qry)
+
+    modelmap = {
+        'iri': '1-IRI',
+        'irimap': '2-IRI+eSSN',
+        'assimilated': '3-Full',
+    }
+
+    for row in dump.data:
+        row['holdout']['station']['latitude'] = float(row['holdout']['station']['latitude'])
+        row['holdout']['station']['longitude'] = float(row['holdout']['station']['longitude'])
+
+    ret = [ {
+        'holdout_id': row['holdout']['id'],
+        'time': row['holdout']['measurement']['time'],
+        'station': row['holdout']['station'],
+        'model': modelmap.get(row['model'], 'unk'),
+        'delta_fof2': row['fof2'] - row['holdout']['measurement']['fof2'],
+        'delta_mufd': row['mufd'] - row['holdout']['measurement']['mufd'],
+        'delta_hmf2': row['hmf2'] - row['holdout']['measurement']['hmf2'],
+    } for row in dump.data ]
+
+    return Response(json.dumps(ret), mimetype='application/json')
 
 @app.route("/", methods=['GET'])
 def static_stations():
