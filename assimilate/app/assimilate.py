@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import numpy as np
 import h5py
 
-from data import jsonapi, hdf5
+from data import json, jsonapi, hdf5
 from models import spline, gp3d, combinators
 
 import psycopg2
@@ -22,10 +22,25 @@ def get_pred(run_id, ts):
 def get_irimap(run_id, ts):
     return hdf5.get_data('http://localhost:%s/irimap.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
-def assimilate(run_id, ts):
+def get_holdouts(run_id):
+    return json.get_data('http://localhost:%s/holdout?run_id=%d' % (os.getenv('API_PORT'), run_id))
+
+def filter_holdouts(df, holdouts):
+    if len(holdouts):
+        holdout_station_ids = [ row['station']['id'] for row in holdouts ]
+        for ii in holdout_station_ids:
+            df = df.drop(df[df['station.id'] == ii].index)
+
+    return df
+
+def assimilate(run_id, ts, holdout):
     df_cur = get_current()
     df_pred = get_pred(run_id, ts)
     irimap = get_irimap(run_id, ts)
+
+    if holdout:
+        holdouts = get_holdouts(run_id)
+        df_pred = filter_holdouts(df_pred, holdouts)
 
     bio = io.BytesIO()
     h5 = h5py.File(bio, 'w')
@@ -48,7 +63,6 @@ def assimilate(run_id, ts):
 
     for metric in ["fof2", "hmf2"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
-
 
         irimodel = spline.Spline(irimap['/maps/' + metric])
         pred = irimodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
@@ -102,10 +116,11 @@ def generate():
 
     run_id = int(request.form.get('run_id', -1))
     tgt = int(request.form.get('target', None))
+    holdout = bool(request.form.get('holdout', False))
 
     tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
 
-    dataset = assimilate(run_id, tgt)
+    dataset = assimilate(run_id, tgt, holdout)
 
     with con.cursor() as cur:
         cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
