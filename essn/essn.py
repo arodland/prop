@@ -144,8 +144,7 @@ def err(ssn, data, recency, now):
 
     return total / total_weight
 
-def get_holdouts(run_id, num):
-    urllib.request.urlopen('http://localhost:%s/holdout' % os.getenv('API_PORT'), data=urllib.parse.urlencode({'run_id': str(run_id), 'num': str(num)}).encode('ascii'))
+def get_holdouts(run_id):
     with urllib.request.urlopen('http://localhost:%s/holdout?run_id=%s' % (os.getenv('API_PORT'), run_id)) as res:
         data = json.loads(res.read().decode())
 
@@ -163,8 +162,14 @@ def generate_essn(run_id, series, num_holdouts):
 
     data = [ station for station in data if station['use_for_essn'] == 1 ]
 
-    if num_holdouts > 0:
-        holdouts = get_holdouts(run_id, num_holdouts)
+    for holdout_id in holdout_ids:
+        cur = con.cursor()
+        cur.execute('UPDATE holdout SET run_id=%s WHERE id=%s', (run_id, holdout_id))
+        con.commit()
+        cur.close()
+
+    if len(holdout_ids):
+        holdouts = get_holdouts(run_id)
         exclude_station_ids = [ row['station']['id'] for row in holdouts ]
         data = [ station for station in data if station['id'] not in exclude_station_ids ]
 
@@ -208,9 +213,9 @@ app = Flask(__name__)
 def generate():
     run_id = request.form.get('run_id', -1)
     series = request.form.get('series', '24h')
-    num_holdouts = int(request.form.get('num_holdouts', 0))
+    holdouts = request.form.getlist('holdouts')
 
-    return jsonify(generate_essn(run_id, series, num_holdouts))
+    return jsonify(generate_essn(run_id, series, holdouts))
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ESSN_PORT')))
