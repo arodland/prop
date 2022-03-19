@@ -3,4 +3,4 @@ scikit-learn==0.23.1
 scikit-optimize==0.7.4
 Flask==1.1.2
 uwsgi==2.0.18
-numpy==1.21.5
+itsdangerous==2.0.1
