@@ -3,3 +3,4 @@ psycopg2-binary==2.8.5
 h5py==2.10.0
 Flask==1.1.2
 uwsgi==2.0.18
+itsdangerous==2.0.1
