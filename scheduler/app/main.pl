@@ -2,6 +2,7 @@
 use Mojolicious::Lite;
 use Mojo::IOLoop;
 use Mojo::Pg;
+use Mojo::UserAgent;
 
 app->secrets([$ENV{MOJO_SECRET}]);
 
@@ -40,6 +41,7 @@ plugin 'Task::Assimilate';
 plugin 'Task::BandQuality';
 plugin 'Task::Render';
 plugin 'Task::Cleanup';
+plugin 'Task::HoldoutEvaluate';
 
 sub next_run {
   my $INTERVAL = 900; # 15 minutes
@@ -124,10 +126,19 @@ sub make_maps {
 sub queue_job {
   my ($run_time, $resched) = @_;
 
+  my $num_holdouts = 1;
+
+  my $holdouts = eval { 
+    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { num => $num_holdouts })->result->json 
+  } || [];
+
+  my @holdout_ids = map $_->{holdout}, @$holdouts;
+  my @holdout_times = map $_->{ts}, @$holdouts;
+
   my $essn_24h = app->minion->enqueue('essn',
     [
       series => '24h',
-      num_holdouts => 1,
+      holdouts => [ @holdout_ids ],
     ],
     {
       attempts => 2,
@@ -143,7 +154,6 @@ sub queue_job {
   my $essn_6h = app->minion->enqueue('essn',
     [
       series => '6h',
-      num_holdouts => 0,
     ],
     {
       expire => 18 * 60,
@@ -152,6 +162,10 @@ sub queue_job {
 
   my @target_times = target_times($run_time);
   my @pred_times = pred_times($run_time);
+
+  for my $holdout_time (@holdout_times) {
+    push @pred_times, $holdout_time unless grep { $_ == $holdout_time} @pred_times;
+  }
 
   my $pred = app->minion->enqueue('pred',
     [
@@ -218,7 +232,6 @@ sub queue_job {
     }
   }
 
-
   my $renderhtml = app->minion->enqueue('renderhtml',
     [
       run_id => $run_id,
@@ -227,6 +240,47 @@ sub queue_job {
       parents => [ @html_deps ],
       expire => 18 * 60,
       attempts => 2,
+    },
+  );
+
+  my @holdout_deps;
+  for my $holdout_time (@holdout_times) {
+    my $irimap = app->minion->enqueue('irimap',
+      [
+        run_id => $run_id,
+        target => $holdout_time,
+        series => '24h',
+      ],
+      {
+        parents => [ $essn_24h ],
+        attempts => 2,
+        expire => 18 * 60,
+      },
+    );
+    my $assimilate = app->minion->enqueue('assimilate',
+      [
+        run_id => $run_id,
+        target => $holdout_time,
+        holdout => 1,
+      ],
+      {
+        parents => [ $pred, $irimap ],
+        attempts => 2,
+        expire => 18 * 60,
+        queue => 'assimilate',
+      },
+    );
+    push @holdout_deps, $assimilate;
+  }
+
+  my $holdout_eval = app->minion->enqueue('holdout_evaluate',
+    [
+      run_id => $run_id,
+    ],
+    {
+      parents => [ @holdout_deps ],
+      attempts => 2,
+      expire => 3 * 60 * 60,
     },
   );
 
