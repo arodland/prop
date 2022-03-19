@@ -346,11 +346,14 @@ def available_maps_json():
             where r.state='finished'
             and a.time >= now() - (%s * interval '1 hour')
             and a.time < now() + (%s * interval '1 hour')
+            and a.time >= r.started
             group by a.time
         ) a1
         join (
-            select run_id, extract(epoch from min(time)) as start
-            from assimilated 
+            select a.run_id, extract(epoch from min(a.time)) as start
+            from assimilated a
+            join runs r on a.run_id=r.id
+            where a.time >= r.started
             group by run_id
         ) a2 
         on a1.run_id=a2.run_id 
@@ -362,7 +365,7 @@ def available_maps_json():
         if len(rows) == 0:
             return make_response('Not Found', 404)
 
-        rows = [ { 'run_id': row['run_id'], 'ts': row['ts'], 'start': row['start'], 'filesuffix': row['filesuffix'] } for row in rows ]
+        rows = [ { 'run_id': int(row['run_id']), 'ts': float(row['ts']), 'start': float(row['start']), 'filesuffix': str(row['filesuffix']) } for row in rows if row['filesuffix'] != '0h' ]
         return jsonify(rows)
 
 @app.route("/band_quality.json", methods=['GET'])
