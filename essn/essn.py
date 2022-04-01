@@ -150,7 +150,7 @@ def get_holdouts(run_id):
 
     return data
 
-def generate_essn(run_id, series, num_holdouts):
+def generate_essn(run_id, series, holdout_ids):
     now = datetime.utcnow()
     recency = True if series == '6h' else False
 
