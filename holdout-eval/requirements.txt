@@ -1,0 +1,7 @@
+psycopg2-binary==2.8.5
+Flask==1.1.2
+uwsgi==2.0.18
+h5py==2.10.0
+itsdangerous==2.0.1
+Jinja2==3.0.3
+Werkzeug==1.0.1
