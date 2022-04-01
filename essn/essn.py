@@ -4,6 +4,7 @@ import json
 import numpy as np
 import os
 import re
+import math
 from scipy.optimize import minimize_scalar
 
 import subprocess
@@ -86,7 +87,7 @@ def get_pred(params):
                 #  0    1    2     3    4    5     6     7 
 
 def station_err(x):
-    station, ssn, recency, now = x
+    station, ssn, recency, linear, now = x
 
     station_total = 0.0
     station_tw = 0.0
@@ -109,10 +110,16 @@ def station_err(x):
         fof2_pred, hmf2_pred, mufd_pred = pred[3], pred[6], pred[5]
         stdev = cs_to_stdev(cs)
 
-        err = 0.6 * np.abs(np.log(fof2_pred) - np.log(fof2)) / 0.34873
-        err += 0.3 * np.abs(np.log(mufd_pred) - np.log(mufd)) / 0.37516
-        err += 0.1 * np.abs(np.log(hmf2_pred) - np.log(hmf2)) / 0.18405
-        err /= stdev
+        if linear:
+            err = 0.6 * ((fof2_pred - fof2) / 2.022)**2
+            err += 0.3 * ((mufd_pred - mufd) / 6.702)**2
+            err += 0.1 * ((hmf2_pred - hmf2) / 52.46)**2
+            err /= math.exp(stdev)
+        else:
+            err = 0.6 * np.abs(np.log(fof2_pred) - np.log(fof2)) / 0.34873
+            err += 0.3 * np.abs(np.log(mufd_pred) - np.log(mufd)) / 0.37516
+            err += 0.1 * np.abs(np.log(hmf2_pred) - np.log(hmf2)) / 0.18405
+            err /= stdev
 
         sw = station_weight(station, tm)
         rw = recency_weight(tm, now, recency)
@@ -128,7 +135,7 @@ def station_err(x):
         return (0,0)
 
 
-def err(ssn, data, recency, now):
+def err(ssn, data, recency, linear, now):
     global pred_pool
 
     total = 0.0
@@ -137,7 +144,7 @@ def err(ssn, data, recency, now):
     if pred_pool is None:
         pred_pool = multiprocessing.Pool(16)
 
-    results = pred_pool.imap_unordered(station_err, [ (station, ssn, recency, now) for station in data ])
+    results = pred_pool.imap_unordered(station_err, [ (station, ssn, recency, linear, now) for station in data ])
     for result in results:
         total += result[0]
         total_weight += result[1]
@@ -152,7 +159,8 @@ def get_holdouts(run_id):
 
 def generate_essn(run_id, series, holdout_ids):
     now = datetime.utcnow()
-    recency = True if series == '6h' else False
+    recency = True if series.startswith('6h') else False
+    linear = True if series.endswith('_linear') else False
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg2.connect(dsn)
@@ -190,7 +198,7 @@ def generate_essn(run_id, series, holdout_ids):
             record.append(datetime.strftime(record[5], '%Y %m %d %H %M %S'))
 
 
-    res = minimize_scalar(err, args=(data, recency, now), bounds=(-20.0, 200.0), method='Bounded', options={'xatol':0.01, 'maxiter': 1000})
+    res = minimize_scalar(err, args=(data, recency, linear, now), bounds=(-20.0, 200.0), method='Bounded', options={'xatol':0.01, 'maxiter': 1000})
     ssn = res.x
     sfi = 63.75 + ssn * (0.728 + ssn*0.000089)
 
