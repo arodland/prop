@@ -48,7 +48,7 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id from runs where state in ('created', 'finished') and started < now() - interval '24 hours' order by started asc limit 10});
+      $runs = $db->query(q{select id from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
 
       while (my $run = $runs->hash) {
         eval {
