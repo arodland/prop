@@ -1,4 +1,4 @@
-FROM python:latest
+FROM python:3.9
 RUN apt-get update && apt-get install -y dumb-init
 ENV STATIC_INDEX 1
 

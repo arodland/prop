@@ -6,9 +6,10 @@ PartOf=kc2gprop.target
 [Service]
 StateDirectory=prop-postgres
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
-ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --env-file /etc/kc2gprop/postgres.env --mount type=bind,src=/var/lib/prop-postgres,dst=/var/lib/postgresql/data postgres:12 postgres
-ExecStop=/usr/bin/podman stop %N
-KillMode=process
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --cgroups=no-conmon --env-file /etc/kc2gprop/postgres.env --mount type=bind,src=/var/lib/prop-postgres,dst=/var/lib/postgresql/data --mount type=bind,src=/storage/backup,dst=/backup postgres:14 postgres
+ExecStop=/usr/bin/podman stop --ignore --cidfile %t/%N-cid -t 10
+ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/%N-cid
+KillMode=mixed
 Restart=on-failure
 [Install]
 WantedBy=kc2gprop.target

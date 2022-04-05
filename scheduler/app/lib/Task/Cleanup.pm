@@ -113,7 +113,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file");
+    #    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file");
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
@@ -124,7 +124,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file");
+    # $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file");
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
   
@@ -138,7 +138,7 @@ sub archive_run {
       next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
 
       my $target_file = $file->copy($dest_dir);
-      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file");
+      # $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file");
     }
     $rendered_dir->remove_tree;
   }

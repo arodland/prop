@@ -5,9 +5,10 @@ After=prop-api.service prop-podman-pod.service prop-postgres.service
 PartOf=kc2gprop.target
 [Service]
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
-ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-assimilate
-ExecStop=/usr/bin/podman stop %N
-KillMode=process
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --cgroups=no-conmon --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env prop-assimilate
+ExecStop=/usr/bin/podman stop --ignore --cidfile %t/%N-cid -t 10
+ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/%N-cid
+KillMode=mixed
 Restart=on-failure
 [Install]
 WantedBy=kc2gprop.target

@@ -1,5 +1,7 @@
-FROM python:latest
-RUN apt-get update && apt-get install -y dumb-init python3-dev
+FROM python:3.9
+RUN apt-get update && apt-get install -y dumb-init python3-dev libhdf5-dev
+
+RUN pip3 install numpy==1.21.5
 
 COPY requirements.txt /tmp/
 RUN pip3 install -r /tmp/requirements.txt

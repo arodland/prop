@@ -217,21 +217,7 @@ sub queue_job {
 
     push @html_deps, @map_jobs;
 
-    if ($render->{target_time} == $target_times[0]{target_time}) {
-      my $band_quality = app->minion->enqueue('band_quality',
-        [
-          run_id => $run_id,
-          target => $render->{target_time},
-        ],
-        {
-          parents => [ $assimilate ],
-          attempts => 2,
-        },
-      );
-      push @html_deps, $band_quality;
-    }
   }
-
   my $renderhtml = app->minion->enqueue('renderhtml',
     [
       run_id => $run_id,

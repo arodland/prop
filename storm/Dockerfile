@@ -1,4 +1,4 @@
-FROM python:latest
+FROM python:3.7
 RUN apt-get update && apt-get install -y dumb-init
 
 COPY requirements.txt /tmp/

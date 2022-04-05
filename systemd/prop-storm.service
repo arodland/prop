@@ -3,4 +3,4 @@ Description=Prop Kp modelling
 [Service]
 Type=oneshot
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
-ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pod --cidfile /%t/%N-cid --user 1001 --mount type=bind,src=/home/prop/iri-index,dst=/iri-index prop-storm
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pod --cidfile /%t/%N-cid --cgroups=no-conmon --user 1001 --mount type=bind,src=/home/prop/iri-index,dst=/iri-index prop-storm
