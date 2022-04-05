@@ -18,4 +18,4 @@ COPY app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 WORKDIR /app
-CMD uwsgi --http :${ASSIMILATE_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi assimilate:app --processes 4
+CMD uwsgi --http :${ASSIMILATE_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi assimilate:app --processes 8

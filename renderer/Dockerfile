@@ -23,4 +23,4 @@ COPY app /app
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 WORKDIR /app
 ENV HOME=/
-CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 16
+CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 32
