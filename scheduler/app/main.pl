@@ -43,13 +43,19 @@ plugin 'Task::Render';
 plugin 'Task::Cleanup';
 plugin 'Task::HoldoutEvaluate';
 
-sub next_run {
+sub prev_next {
   my $INTERVAL = 900; # 15 minutes
   my $LEAD = 300; # Run 5 minutes early, e.g. :10, :25, :40, :55
 
   my $now = time;
   my $prev = $now - (($now + $LEAD) % $INTERVAL);
   my $next = $prev + $INTERVAL;
+
+  return ($prev, $next, $now);
+}
+
+sub next_run {
+  my ($prev, $next, $now) = prev_next();
   my $wait = $next - $now;
   return ($next, $wait);
 }
@@ -217,6 +223,19 @@ sub queue_job {
 
     push @html_deps, @map_jobs;
 
+    if ($render->{target_time} == $target_times[0]{target_time}) {
+      my $band_quality = app->minion->enqueue('band_quality',
+        [
+          run_id => $run_id,
+          target => $render->{target_time},
+        ],
+        {
+          parents => [ $assimilate ],
+          attempts => 2,
+        },
+      );
+      push @html_deps, $band_quality;
+    }
   }
   my $renderhtml = app->minion->enqueue('renderhtml',
     [
@@ -282,6 +301,20 @@ sub queue_job {
 my ($next, $wait) = next_run;
 app->log->debug("First run in $wait seconds");
 Mojo::IOLoop->timer($wait => sub { queue_job($next, 1) });
+
+get '/run_prev' => sub {
+  my $c = shift;
+  my ($prev, $next, undef) = prev_next();
+  queue_job($prev, 0);
+  $c->render(text => "OK\n");
+};
+
+get '/run_next' => sub {
+  my $c = shift;
+  my ($prev, $next, undef) = prev_next();
+  queue_job($next, 0);
+  $c->render(text => "OK\n");
+};
 
 get '/run_now' => sub {
   my $c = shift;
