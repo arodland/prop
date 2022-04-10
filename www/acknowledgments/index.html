@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="refresh" content="300">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" type="text/css" href="/static/style.css" />
+    <title>MUF(3000km)</title>
+    <style type="text/css">
+    .credits-column {
+      width: 25%;
+      float: left;
+      margin: 0;
+      font-size: 130%;
+    }
+    .credits-row:after {
+      content: "";
+      display: table;
+      clear: both;
+    }
+    .credits-logo {
+      width: 80%;
+      height: 10em;
+      text-align: center;
+      margin: 0 auto;
+    }
+    .credits-logo img {
+      width: 100%;
+      height: 100%;
+      object-position: center bottom;
+      object-fit: contain;
+      display: block;
+    }
+    .credits-column h3 {
+      text-align: center;
+      margin: 1em auto 0 auto;
+    }
+    .credits-column p {
+      margin: 1em;
+    }
+    @media screen and (max-width: 1400px) {
+      .credits-column {
+        width: 50%;
+      }
+    }
+    @media screen and (max-width: 700px) {
+      .credits-column {
+        width: 100%;
+      }
+    }
+  </style>
+
+	</head>
+	<body>
+  <!--#include virtual="/nav-header.html" -->
+  <div class="credits-row">
+    <div class="credits-column">
+      <div class="credits-logo"><img src="/static/giro-logo.png"></div>
+      <h3>GIRO</h3>
+      <p>Part of the ionosonde data that feeds this site is provided by the <a href="https://giro.uml.edu/">Global Ionospheric Radio Observatory</a> who have graciously offered free access for that purpose. Thanks are given to all of the <a href="https://giro.uml.edu/didbase/acknowledgements.htm">ionosonde stations participating in that network</a>.</p>
+    </div>
+    <div class="credits-column">
+      <div class="credits-logo"><img src="/static/noaa-logo.jpg"></div>
+      <h3>NOAA NCEI</h3>
+      <p>Part of the ionosonde data that feeds this site is provided by the <a href="https://www.ngdc.noaa.gov/stp/iono/ionohome.html">NOAA National Centers for Environmental Information</a>, a department of the United States government. Thanks are given to all of the ionosonde stations participating in that network.</p>
+    </div>
+    <div class="credits-column">
+      <div class="credits-logo"><img src="/static/wwrof-logo.jpg"></div>
+      <h3>WWROF</h3>
+      <p>The <a href="https://wwrof.org/">World Wide Radio Operators Foundation</a> is a foundation created by amateur radio operators in 2009 to advance the state of the art in radio operating. In March 2022, WWROF funded a $10,000 grant to purchase a new server to run the numerical models and host the prop.kc2g.com website.</p>
+    </div>
+    <div class="credits-column">
+      <div class="credits-logo"><img src="/static/osi-logo.png"></div>
+      <h3>Open Source</h3>
+      <p>
+      This site began as a fork of Matt Smith AF7TI's "giroapp" and "giroviz", for which we are grateful, and <a href="https://github.com/arodland/prop/">all of the code for the site</a> is provided under open-source licenses.
+      </p>
+      <p>
+      In addition, the site would never have been possible without dozens of other open-source projects, including <a href="https://www.python.org/">Python</a>, <a href="https://www.perl.org/">Perl</a>, <a href="https://www.scipy.org">NumPy, SciPy, pandas, matplotlib</a>, <a href="https://scitools.org.uk/cartopy/">cartopy</a>, <a href="https://george.readthedocs.io/en/latest/">george</a>, <a href="https://flask.palletsprojects.com/">Flask</a>, <a href="https://irimodel.org/">IRI-2016</a>, <a href="https://www.ngdc.noaa.gov/IAGA/vmod/">IGRF-13</a>, <a href="https://www.ngdc.noaa.gov/geomag/WMM/">WMM2020</a>, the space-physics packages <a href="https://github.com/space-physics/iri2016">iri2016</a>, <a href="https://github.com/space-physics/igrf">igrf</a>, and <a href="https://github.com/space-physics/wmm2020">wmm2020</a>, <a href="https://www.mojolicious.org/">Mojolicious, Minion</a>, <a href="https://www.postgresql.org/">PostgreSQL</a>, and many more.</p>
+    </div>
+  </div>
+  </body>
+</html>

@@ -1,29 +1,35 @@
 	<header>
 		<nav class="ui menu">
-      <!--#if expr="%{REQUEST_URI} =~ m#^/(index\.html)?$# " -->
+      <!--#if expr="v('REQUEST_URI') =~ m#^/(index\.html)?$# " -->
 			<a class="item active" href="/">MUF</a>
       <!--#else -->
 			<a class="item" href="/">MUF</a>
       <!--#endif -->
-      <!--#if expr="%{REQUEST_URI} -strmatch '/fof2/*'" -->
+      <!--#if expr="v('REQUEST_URI') -strmatch '/fof2/*'" -->
 			<a class="item active" href="/fof2/">foF2</a>
       <!--#else -->
 			<a class="item" href="/fof2/">foF2</a>
       <!--#endif -->
-      <!--#if expr="%{REQUEST_URI} -strmatch '/stations/*'" -->
+      <!--#if expr="v('REQUEST_URI') -strmatch '/stations/*'" -->
 			<a class="item active" href="/stations/">Data</a>
       <!--#else -->
 			<a class="item" href="/stations/">Data</a>
       <!--#endif -->
-      <!--#if expr="%{REQUEST_URI} -strmatch '/essn/*'" -->
+      <!--#if expr="v('REQUEST_URI') -strmatch '/essn/*'" -->
       <a class="item active" href="/essn/">eSSN</a>
       <!--#else -->
       <a class="item" href="/essn/">eSSN</a>
       <!--#endif -->
-      <!--#if expr="%{REQUEST_URI} -strmatch '/about/*'" -->
+      <!--#if expr="v('REQUEST_URI') -strmatch '/about/*'" -->
       <a class="item active" href="/about/">About</a>
       <!--#else -->
       <a class="item" href="/about/">About</a>
       <!--#endif -->
+      <!--#if expr="v('REQUEST_URI') -strmatch '/acknowledgments/*'" -->
+      <a class="item active" href="/acknowledgments/">Acknowledgments</a>
+      <!--#else -->
+      <a class="item" href="/acknowledgments/">Acknowledgments</a>
+      <!--#endif -->
 		</nav>
 	</header>
+  <div style="display:none"><!--#echo var="REQUEST_URI" --></div>

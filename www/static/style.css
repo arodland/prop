@@ -48,3 +48,11 @@ img.big {
 footer {
   text-align: right;
 }
+
+.popover {
+  position: absolute;
+  z-index: 100;
+  border: 1px solid black;
+  background-color: white;
+  padding: 0.35em;
+}
