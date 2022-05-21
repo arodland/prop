@@ -95,6 +95,19 @@ class HoldoutEval(db.Model):
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
 
+class PredEval(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    model = db.Column(db.Text)
+    time = db.Column(db.DateTime)
+    hours_ahead = db.Column(db.Integer)
+    fof2 = db.Column(db.Numeric(asdecimal=False))
+    mufd = db.Column(db.Numeric(asdecimal=False))
+    hmf2 = db.Column(db.Numeric(asdecimal=False))
+    measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+
 #Generate marshmallow Schemas from your models using ModelSchema
 
 class StationSchema(ma.ModelSchema):
@@ -137,6 +150,16 @@ class HoldoutEvalSchema(ma.ModelSchema):
     holdout = fields.Nested(HoldoutSchema)
 
 holdout_evals_schema = HoldoutEvalSchema(many=True)
+
+class PredEvalSchema(ma.ModelSchema):
+    class Meta:
+        model = PredEval
+
+    holdout = fields.Nested(HoldoutSchema)
+    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
+
+pred_eval_schema = PredEvalSchema()
+pred_evals_schema = PredEvalSchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -517,7 +540,43 @@ def get_holdout_eval():
         'delta_fof2': row['fof2'] - row['holdout']['measurement']['fof2'],
         'delta_mufd': row['mufd'] - row['holdout']['measurement']['mufd'],
         'delta_hmf2': row['hmf2'] - row['holdout']['measurement']['hmf2'],
+        'true_fof2': row['holdout']['measurement']['fof2'],
+        'true_mufd': row['holdout']['measurement']['mufd'],
+        'true_hmf2': row['holdout']['measurement']['hmf2'],
     } for row in dump.data ]
+
+    return Response(json.dumps(ret), mimetype='application/json')
+
+@app.route("/pred_eval", methods=['GET'])
+def get_pred_eval():
+    qry = db.session.query(PredEval)
+    dump = pred_evals_schema.dump(qry)
+
+    modelmap = {
+        'iri': '1-IRI',
+        'irimap': '2-IRI+eSSN',
+        'assimilated': '3-Full',
+    }
+
+    for row in dump.data:
+        row['holdout']['station']['latitude'] = float(row['holdout']['station']['latitude'])
+        row['holdout']['station']['longitude'] = float(row['holdout']['station']['longitude'])
+
+    ret = [ {
+        'pred_eval_id': row['id'],
+        'holdout_id': row['holdout']['id'],
+        'data_time': row['holdout']['measurement']['time'],
+        'time': row['time'],
+        'station': row['holdout']['station'],
+        'model': modelmap.get(row['model'], 'unk'),
+        'hours_ahead': row['hours_ahead'],
+        'delta_fof2': row['fof2'] - row['holdout']['measurement']['fof2'],
+        'delta_mufd': row['mufd'] - row['holdout']['measurement']['mufd'],
+        'delta_hmf2': row['hmf2'] - row['holdout']['measurement']['hmf2'],
+        'true_fof2': row['holdout']['measurement']['fof2'],
+        'true_mufd': row['holdout']['measurement']['mufd'],
+        'true_hmf2': row['holdout']['measurement']['hmf2'],
+    } for row in dump.data if row['measurement'] is not None ]
 
     return Response(json.dumps(ret), mimetype='application/json')
 
