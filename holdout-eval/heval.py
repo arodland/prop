@@ -122,7 +122,8 @@ def match_pred_measurements(con):
         join holdout h on pe.holdout_id=h.id
         join measurement m on m.time between pe.time - interval '8 minutes' and pe.time + interval '8 minutes'
         and m.station_id=h.station_id
-        where pe.measurement_id is null"""
+        where pe.measurement_id is null
+        and pe.time <= now() - interval '2 hours'"""
         cur.execute(sql)
         rows = list(cur.fetchall())
         rows.sort(key=lambda row: int(row[3]))
