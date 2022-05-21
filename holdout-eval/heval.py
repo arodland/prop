@@ -27,8 +27,7 @@ def get_holdouts(run_id):
 
     return data
 
-def get_iri(holdout):
-    tm = holdout['measurement']['tm']
+def get_iri(holdout, tm):
 
     iri = subprocess.Popen(
             ['/build/iri2016_driver', str(tm.year), str(tm.month), str(tm.day), str(tm.hour), str(tm.minute), str(tm.second), str(holdout['station']['latitude']), str(holdout['station']['longitude']), '0', '0', '0'],
@@ -71,9 +70,9 @@ def get_irimap(ds, holdout):
 
     return ret
 
-def get_all(run_id, holdout):
-    irimap = read_h5('http://localhost:%s/irimap.h5?run_id=%s&ts=%d' % (os.getenv('API_PORT'), run_id, holdout['measurement']['tm'].timestamp()))
-    assimilated = read_h5('http://localhost:%s/assimilated.h5?run_id=%s&ts=%d' % (os.getenv('API_PORT'), run_id, holdout['measurement']['tm'].timestamp()))
+def get_all(run_id, holdout, tm):
+    irimap = read_h5('http://localhost:%s/irimap.h5?run_id=%s&ts=%d' % (os.getenv('API_PORT'), run_id, tm.timestamp()))
+    assimilated = read_h5('http://localhost:%s/assimilated.h5?run_id=%s&ts=%d' % (os.getenv('API_PORT'), run_id, tm.timestamp()))
 
     meas = holdout['measurement']
 
@@ -81,7 +80,7 @@ def get_all(run_id, holdout):
         'station': holdout['station']['code'],
         'holdout_id': holdout['id'],
         'holdout': { 'fof2': meas['fof2'], 'mufd': meas['mufd'], 'hmf2': meas['hmf2'] },
-        'iri': get_iri(holdout),
+        'iri': get_iri(holdout, tm),
         'irimap': get_irimap(irimap, holdout),
         'assimilated': get_irimap(assimilated, holdout),
     }
@@ -91,7 +90,7 @@ app = Flask(__name__)
 def generate():
     run_id = request.form.get('run_id')
     holdouts = get_holdouts(run_id)
-    out = [ get_all(run_id, holdout) for holdout in holdouts ]
+    out = [ get_all(run_id, holdout, holdout['measurement']['tm']) for holdout in holdouts ]
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg2.connect(dsn)
