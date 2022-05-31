@@ -206,6 +206,7 @@ sub queue_job {
       [
         run_id => $run_id,
         target => $render->{target_time},
+        holdout => 1,
       ],
       {
         parents => [ $pred, $irimap ],
