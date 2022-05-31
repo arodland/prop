@@ -279,16 +279,18 @@ sub queue_job {
     push @holdout_deps, $assimilate;
   }
 
-  my $holdout_eval = app->minion->enqueue('holdout_evaluate',
-    [
-      run_id => $run_id,
-    ],
-    {
-      parents => [ @holdout_deps ],
-      attempts => 2,
-      expire => 3 * 60 * 60,
-    },
-  );
+  if (@$holdouts) {
+    my $holdout_eval = app->minion->enqueue('holdout_evaluate',
+      [
+        run_id => $run_id,
+      ],
+      {
+        parents => [ @holdout_deps ],
+        attempts => 2,
+        expire => 3 * 60 * 60,
+      },
+    );
+  }
 
   app->minion->enqueue('cleanup');
 
