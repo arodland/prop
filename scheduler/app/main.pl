@@ -187,6 +187,7 @@ sub queue_job {
   );
 
   my @html_deps;
+  my @holdout_deps;
 
   for my $render (@target_times) {
     my $irimap = app->minion->enqueue('irimap',
@@ -222,6 +223,7 @@ sub queue_job {
     );
 
     push @html_deps, @map_jobs;
+    push @holdout_deps, @map_jobs;
 
     if ($render->{target_time} == $target_times[0]{target_time}) {
       my $band_quality = app->minion->enqueue('band_quality',
@@ -248,7 +250,6 @@ sub queue_job {
     },
   );
 
-  my @holdout_deps;
   for my $holdout_time (@holdout_times) {
     my $irimap = app->minion->enqueue('irimap',
       [
