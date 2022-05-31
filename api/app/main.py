@@ -570,12 +570,12 @@ def get_pred_eval():
         'station': row['holdout']['station'],
         'model': modelmap.get(row['model'], 'unk'),
         'hours_ahead': row['hours_ahead'],
-        'delta_fof2': row['fof2'] - row['holdout']['measurement']['fof2'],
-        'delta_mufd': row['mufd'] - row['holdout']['measurement']['mufd'],
-        'delta_hmf2': row['hmf2'] - row['holdout']['measurement']['hmf2'],
-        'true_fof2': row['holdout']['measurement']['fof2'],
-        'true_mufd': row['holdout']['measurement']['mufd'],
-        'true_hmf2': row['holdout']['measurement']['hmf2'],
+        'delta_fof2': row['fof2'] - row['measurement']['fof2'],
+        'delta_mufd': row['mufd'] - row['measurement']['mufd'],
+        'delta_hmf2': row['hmf2'] - row['measurement']['hmf2'],
+        'true_fof2': row['measurement']['fof2'],
+        'true_mufd': row['measurement']['mufd'],
+        'true_hmf2': row['measurement']['hmf2'],
     } for row in dump.data if row['measurement'] is not None ]
 
     return Response(json.dumps(ret), mimetype='application/json')
