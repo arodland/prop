@@ -82,7 +82,7 @@ class Holdout(db.Model):
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station = db.relationship('Station', foreign_keys=[station_id])
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
     def __repr__(self):
         return '<Holdout %r: %r %r %r>' % (self.id, self.run_id, self.station_id, self.measurement_id)
 
@@ -98,7 +98,7 @@ class HoldoutEval(db.Model):
 class PredEval(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
     model = db.Column(db.Text)
     time = db.Column(db.DateTime)
     hours_ahead = db.Column(db.Integer)
@@ -106,12 +106,12 @@ class PredEval(db.Model):
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
 
 class PredEvalMay(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
     model = db.Column(db.Text)
     time = db.Column(db.DateTime)
     hours_ahead = db.Column(db.Integer)
@@ -119,7 +119,7 @@ class PredEvalMay(db.Model):
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
 
 #Generate marshmallow Schemas from your models using ModelSchema
 
