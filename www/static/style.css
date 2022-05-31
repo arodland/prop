@@ -56,3 +56,9 @@ footer {
   background-color: white;
   padding: 0.35em;
 }
+
+@media screen and (max-width: 800px) {
+  #acknowledgments-nav {
+    display: none;
+  }
+}
