@@ -76,7 +76,7 @@ for i in range(threadcount):
 
 # stuff work items on the queue.
 start = time.perf_counter()
-stationdf = pd.read_sql('Select code from station where giro=true order by random()', con)
+stationdf = pd.read_sql("select code from station where giro=true or giro_optional=true and id not in (select distinct station_id from measurement where source='noaa' and time > now() - interval '3 hours') order by random()", con)
 stationdf = pd.Series(stationdf['code'].values)
 for item in stationdf:
     q.put(item)
