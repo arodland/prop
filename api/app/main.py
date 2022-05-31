@@ -108,6 +108,19 @@ class PredEval(db.Model):
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
     measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
 
+class PredEvalMay(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    model = db.Column(db.Text)
+    time = db.Column(db.DateTime)
+    hours_ahead = db.Column(db.Integer)
+    fof2 = db.Column(db.Numeric(asdecimal=False))
+    mufd = db.Column(db.Numeric(asdecimal=False))
+    hmf2 = db.Column(db.Numeric(asdecimal=False))
+    measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id])
+
 #Generate marshmallow Schemas from your models using ModelSchema
 
 class StationSchema(ma.ModelSchema):
@@ -160,6 +173,16 @@ class PredEvalSchema(ma.ModelSchema):
 
 pred_eval_schema = PredEvalSchema()
 pred_evals_schema = PredEvalSchema(many=True)
+
+class PredEvalMaySchema(ma.ModelSchema):
+    class Meta:
+        model = PredEvalMay
+
+    holdout = fields.Nested(HoldoutSchema)
+    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
+
+pred_eval_may_schema = PredEvalMaySchema()
+pred_eval_mays_schema = PredEvalMaySchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -549,8 +572,14 @@ def get_holdout_eval():
 
 @app.route("/pred_eval", methods=['GET'])
 def get_pred_eval():
-    qry = db.session.query(PredEval)
-    dump = pred_evals_schema.dump(qry)
+    dataset = request.args.get('dataset', 'new')
+    if dataset == 'may':
+        qry = db.session.query(PredEvalMay)
+        dump = pred_eval_mays_schema.dump(qry)
+    else:
+        qry = db.session.query(PredEval)
+        dump = pred_evals_schema.dump(qry)
+
 
     modelmap = {
         'iri': '1-IRI',
