@@ -1,5 +1,5 @@
 h5py==2.10.0
-numpy==1.18.4
+numpy==1.22.0
 cython
 Flask==1.1.2
 numba==0.52.0
