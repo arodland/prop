@@ -132,9 +132,9 @@ sub make_maps {
 sub queue_job {
   my ($run_time, $resched) = @_;
 
-  my $num_holdouts = 1;
+  my $num_holdouts = 0;
 
-  my $holdouts = eval { 
+  my $holdouts = $num_holdouts && eval { 
     Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { num => $num_holdouts })->result->json 
   } || [];
 
