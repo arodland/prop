@@ -80,16 +80,18 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
 def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
     tm = datetime.fromtimestamp(ts, timezone.utc)
     plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
-    maps = { name: dataset['/maps/' + name][:] for name in ('mof_sp', 'mof_lp', 'lof_sp', 'lof_lp') }
+    maps = { name: dataset['/maps/' + name][:] for name in dataset['/maps'].keys() }
 
-    if metric.startswith('mof_'):
+    if metric.startswith('mof_') or metric.startswith('muf_'):
         plt.scale_mufd('turbo')
-    elif metric.startswith('lof_'):
+    elif metric.startswith('lof_') or metric.startswith('luf_'):
         plt.scale_fof2('turbo')
+    elif metric == 'ratio':
+        plt.scale_ratio('viridis')
     else:
         plt.scale_generic('turbo')
 
-    if metric.endswith('_combined'):
+    if metric in ['mof_combined', 'lof_combined']:
         base_metric = metric[:len(metric)-9]
         sp = maps[base_metric + '_sp']
         sp_valid = maps['mof_sp'] > maps['lof_sp']
@@ -108,12 +110,36 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
         contour[lp_valid] = lp[lp_valid]
         hatch = lp_valid
         blackout = ~(sp_valid | lp_valid)
+    elif metric in ['muf_combined', 'luf_combined']:
+        base_metric = metric[:len(metric)-9]
+        sp = maps[base_metric + '_sp']
+        sp_valid = maps['muf_sp'] > maps['luf_sp']
 
+        lp = maps[base_metric + '_lp']
+        lp_valid = maps['muf_lp'] > 2 * maps['luf_lp']
+
+        if base_metric == 'muf':
+            lp_valid = lp_valid & (lp > sp)
+            sp_valid = sp_valid & ~lp_valid
+        else:
+            lp_valid = lp_valid & (lp < sp)
+            sp_valid = sp_valid & ~lp_valid
+
+        contour = sp
+        contour[lp_valid] = lp[lp_valid]
+        hatch = lp_valid
+        blackout = ~(sp_valid | lp_valid)
     else:
-        path = metric[len(metric)-3:]
         contour = maps[metric]
         hatch = None
-        blackout = maps['lof' + path] >= maps['mof' + path]
+        if metric.startswith('mof_') or metric.startswith('lof_'):
+            path = metric[len(metric)-3:]
+            blackout = maps['lof' + path] >= maps['mof' + path]
+        elif metric.startswith('muf_') or metric.startswith('luf_'):
+            path = metric[len(metric)-3:]
+            blackout = maps['luf' + path] >= maps['muf' + path]
+        else:
+            blackout = None
 
     plt.draw_mofstyle(contour, lat_steps=contour.shape[0], lon_steps=contour.shape[1])
     if hatch is not None:
@@ -180,7 +206,10 @@ def moflof():
     centered = request.values.get('centered') in ('true', '1')
     res = float(request.values.get('res', '2'))
 
-    h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+    if metric.startswith('muf_') or metric.startswith('luf_') or metric=='ratio':
+        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+    else:
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
 
     svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
     resp = make_response(svg)

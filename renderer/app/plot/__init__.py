@@ -106,6 +106,11 @@ class Plot:
         self.levels = [1.8, 3.5, 5.3, 7, 10.1, 14]
         self.norm = matplotlib.colors.LogNorm(1.5, 15, clip=False)
 
+    def scale_ratio(self, cmap_name='viridis'):
+        self.scale_common(cmap_name)
+        self.levels = [1.0, 2.0, 3.0, 5.0, 10.0]
+        self.norm = matplotlib.colors.LogNorm(1.0, 10.0, clip=False)
+
     def set_geojson(self, filename):
         self.geojson = filename
 
@@ -204,7 +209,7 @@ class Plot:
                 fraction=0.03,
                 orientation='horizontal',
                 pad=0.02,
-                ticks=self.levels,
+                ticks=CS.levels,
                 format='%.1f',
                 drawedges=False
                 )

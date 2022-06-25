@@ -4,6 +4,7 @@ import h5py
 import urllib.request
 import io
 import math
+from datetime import datetime, timezone
 
 @jit('f8[:](f8[:,:],f8[:],f8[:])',nopython=True,error_model='numpy')
 def bilerp(table, latitude, longitude):
@@ -42,8 +43,11 @@ class Iono:
             self.h5 = h5py.File(bio, 'r')
             self.hmf2 = self.spline('/maps/hmf2')
             self.fof2 = self.spline('/maps/fof2')
+            self.mufd = self.spline('/maps/mufd')
             self.foe = self.spline('/maps/foe')
             self.gyf = self.spline('/maps/gyf')
+            self.ts = datetime.fromtimestamp(self.h5['/ts'][()], timezone.utc)
+            self.ssn = self.h5['/essn/ssn'][()]
 
     def spline(self, ds):
         return Spline(self.h5[ds])
