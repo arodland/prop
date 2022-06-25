@@ -5,6 +5,7 @@ use Mojolicious::Types;
 use Mojo::UserAgent;
 use Mojo::URL;
 use Mojo::Util qw(b64_encode b64_decode);
+use Mojo::JSON qw(encode_json);
 use WWW::Google::Cloud::Auth::ServiceAccount;
 
 has 'auth' => sub {
@@ -30,6 +31,25 @@ sub gcs_upload {
   });
 }
 
+sub format_metadata {
+  my ($data, $name, $mime_type, $metadata) = @_;
+  my @boundary_cs = ('A'..'Z', 'a'..'z', '0'..'9');
+  my $boundary;
+  do {
+    $boundary = join "", map { $boundary_cs[rand @boundary_cs] } 0 .. 16;
+  } while $data =~ /\Q$boundary\E/;
+
+  my $body = "\n--$boundary\n";
+  $body .= "Content-Type: application/json; charset=UTF-8\n\n";
+  $body .= encode_json({ name => $name, %$metadata });
+  $body .= "\n--$boundary\n";
+  $body .= "Content-Type: $mime_type\n\n";
+  $body .= $data;
+  $body .= "\n--$boundary--\n";
+
+  return ($body, $boundary);
+}
+
 sub register {
   my ($self, $app) = @_;
 
@@ -48,11 +68,11 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
+      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
 
       while (my $run = $runs->hash) {
         eval {
-          $self->archive_run($app->minion, $db, $run->{id});
+          $self->archive_run($app->minion, $db, $run->{id}, $run->{ts});
         };
         if ($@) {
           $app->log->warn("$@ archiving run $run->{id}");
@@ -65,7 +85,7 @@ sub register {
     my ($job, %args) = @_;
     my $token = $self->auth->get_token;
     my $ua = Mojo::UserAgent->new;
-    my $mime_type = $self->types->file_type($args{name});
+    my $mime_type = $self->types->file_type($args{name}) || 'application/octet-stream';
     my $url = $self->base_url->clone;
     $args{name} =~ s{^/}{};
 
@@ -78,15 +98,23 @@ sub register {
       die "no data found";
     }
 
-    $url->query({
-        uploadType => 'media',
-        name => "prop-archive/$args{name}",
+    if (defined $args{metadata}) {
+      ($data, my $boundary) = format_metadata($data, "prop-archive/$args{name}", $mime_type, $args{metadata});
+      $url->query({
+        uploadType => 'multipart',
       });
+      $mime_type = "multipart/related; boundary=$boundary";
+    } else {
+      $url->query({
+          uploadType => 'media',
+          name => "prop-archive/$args{name}",
+      });
+    }
 
     my $res = $ua->post(
       $url,
       {
-        'Content-Type' => $mime_type || 'application/octet-stream',
+        'Content-Type' => $mime_type,
         'Authorization' => "Bearer $token",
       },
       $data,
@@ -97,7 +125,9 @@ sub register {
 }
 
 sub archive_run {
-  my ($self, $minion, $db, $run_id) = @_;
+  my ($self, $minion, $db, $run_id, $ts) = @_;
+
+  my $ctmeta = { customTime => $ts };
 
   my $archive_dir = path("/archive/$run_id");
   $archive_dir->mkpath;
@@ -113,7 +143,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file");
+    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
@@ -124,7 +154,7 @@ sub archive_run {
     $map_dir->mkpath;
     my $target_file = $map_dir->child("$map->{ts}.h5");
     $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file");
+    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
   
@@ -138,7 +168,7 @@ sub archive_run {
       next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
 
       my $target_file = $file->copy($dest_dir);
-      # $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file");
+      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file", metadata => $ctmeta);
     }
     $rendered_dir->remove_tree;
   }
