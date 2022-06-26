@@ -23,6 +23,7 @@ class Plot:
         self.basemaps = basemaps
         self.plotalpha = alpha
         self.geojson = None
+        self.centered = centered
 
         if centered is None:
             self.proj = ccrs.PlateCarree()
@@ -182,8 +183,24 @@ class Plot:
         lati = np.linspace(lat_min, lat_max, lat_steps)
         loni, lati = np.meshgrid(loni, lati)
 
+        if self.centered:
+            zi_fill = np.copy(zi)
+            lon_step = (lon_max - lon_min + 1) / lon_steps
+            lat_step = (lat_max - lat_min + 1) / lat_steps
+            mask_center_lon = self.centered[0] + 180
+            mask_center_lat = -self.centered[1]
+            if mask_center_lon > 180:
+                mask_center_lon = mask_center_lon - 360
+
+            mask = (np.abs(lati - mask_center_lat) < lat_step) & (np.abs(loni - mask_center_lon) < lon_step)
+            print(lati[mask])
+            print(loni[mask])
+            zi_fill[mask] = np.nan
+        else:
+            zi_fill = zi
+
         filled = plt.contourf(
-            loni, lati, zi,
+            loni, lati, zi_fill,
             self.levels,
             cmap=self.cmap,
             norm=self.norm,
