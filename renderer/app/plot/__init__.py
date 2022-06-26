@@ -28,7 +28,8 @@ class Plot:
             self.proj = ccrs.PlateCarree()
             figsize=(16,24)
         else:
-            self.proj = ccrs.AzimuthalEquidistant(centered[0], centered[1])
+#            self.proj = ccrs.AzimuthalEquidistant(centered[0], centered[1])
+            self.proj = ccrs.LambertAzimuthalEqualArea(centered[0], centered[1])
             figsize=(12,12)
 
         self.fig = plt.figure(figsize=figsize)
