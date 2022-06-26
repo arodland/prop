@@ -467,6 +467,7 @@ def mof_lof():
     metric = request.values.get('metric', 'mof_sp')
     grid = request.values.get('grid', 'fn21wa')
     centered = '1' if request.values.get('centered') in ['true', '1'] else '0'
+    warc = '1' if request.values.get('warc', '1') in ['true', '1'] else '0'
     res = float(request.values.get('res', '2'))
 
     lat, lon = maidenhead_to_latlon(grid)
@@ -480,7 +481,7 @@ def mof_lof():
         run_id = int(run_id)
         ts = int(ts)
 
-    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f&centered=%s&res=%f" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon, centered, res)
+    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f&centered=%s&warc=%s&res=%f" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon, centered, warc, res)
     with urllib.request.urlopen(url) as res:
         content = res.read()
         res = make_response(content)

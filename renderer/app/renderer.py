@@ -77,15 +77,15 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
 
     plt.close()
 
-def mof_lof(dataset, metric, ts, lat, lon, centered, file_format):
+def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
     tm = datetime.fromtimestamp(ts, timezone.utc)
     plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
     maps = { name: dataset['/maps/' + name][:] for name in dataset['/maps'].keys() }
 
     if metric.startswith('mof_') or metric.startswith('muf_'):
-        plt.scale_mufd('turbo')
+        plt.scale_mufd('turbo', warc=warc)
     elif metric.startswith('lof_') or metric.startswith('luf_'):
-        plt.scale_fof2('turbo')
+        plt.scale_fof2('turbo', warc=warc)
     elif metric == 'ratio':
         plt.scale_ratio('viridis')
     else:
@@ -204,6 +204,7 @@ def moflof():
     lat = float(request.values['lat'])
     lon = float(request.values['lon'])
     centered = request.values.get('centered') in ('true', '1')
+    warc = request.values.get('warc') in ('true', '1', None)
     res = float(request.values.get('res', '2'))
 
     if metric.startswith('muf_') or metric.startswith('luf_') or metric=='ratio':
@@ -211,7 +212,7 @@ def moflof():
     else:
         h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
 
-    svg = mof_lof(h5, metric, ts, lat, lon, centered, 'svg')
+    svg = mof_lof(h5, metric, ts, lat, lon, centered, warc, 'svg')
     resp = make_response(svg)
     resp.mimetype = 'image/svg+xml'
     return resp

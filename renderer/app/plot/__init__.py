@@ -96,14 +96,22 @@ class Plot:
         self.levels = 16
         self.norm = matplotlib.colors.Normalize(clip=False)
 
-    def scale_mufd(self, cmap_name='viridis'):
+    def scale_mufd(self, cmap_name='viridis', warc=True):
         self.scale_common(cmap_name)
-        self.levels = [5.3, 7, 10.1, 14, 18, 21, 24.8, 28]
+        if warc:
+            self.levels = [5.3, 7, 10.1, 14, 18, 21, 24.8, 28]
+        else:
+            self.levels = [5, 7, 14, 21, 28]
+
         self.norm = matplotlib.colors.LogNorm(4, 35, clip=False)
 
-    def scale_fof2(self, cmap_name='viridis'):
+    def scale_fof2(self, cmap_name='viridis', warc=True):
         self.scale_common(cmap_name)
-        self.levels = [1.8, 3.5, 5.3, 7, 10.1, 14]
+        if warc:
+            self.levels = [1.8, 3.5, 5.3, 7, 10.1, 14]
+        else:
+            self.levels = [1.8, 3.5, 7, 14]
+
         self.norm = matplotlib.colors.LogNorm(1.5, 15, clip=False)
 
     def scale_ratio(self, cmap_name='viridis'):
