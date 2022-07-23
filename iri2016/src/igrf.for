@@ -67,7 +67,10 @@ C 2016.02 10/14/15 FELDCOF,SHELLG: DIMO to COMMON/IGRF1/
 C 2016.03 02/17/16 GEODIP: add PI to CONST
 C 2016.04 07/07/17 IGRF: updated with newest 2010, 2015, 2015s coeff.
 C 2016.05 03/25/19 GEODIP,SPHCAR,GEOMAG: improved COMMENTS
-C 2016.06 03/05/20 Updating to IGRF-13 (2020)
+C 2020.01 03/05/20 Updating to IGRF-13 (2020)
+C 2020.02 09/08/20 Comment RECALC: IYR outside (P. Coisson)
+C 2020.03 09/20/21 Corrected INTERVAL 1900-2025 in write statement
+C 2020.03 09/20/21 RECALC: DT=..2015, ..2020 (R. Panfili)
 c-----------------------------------------------------------------------        
 C 
         subroutine igrf_sub(xlat,xlong,year,height,
@@ -812,12 +815,9 @@ C ---------------------------------------------------------------
 C
 C
         SUBROUTINE EXTRASHC (DATE, DTE1, NMAX1, GH1, NMAX2,           
-     1                        GH2, NMAX, GH)                           
-                                                                                
-C ===============================================================               
-C                                                                               
-C       Version 1.01                                                   
-C                                                                               
+     1                        GH2, NMAX, GH)                                                                                                           
+C ===============================================================               C                                                                               
+C       Version 1.01                                                   C                                                                               
 C       Extrapolates linearly a spherical harmonic model with a        
 C       rate-of-change model.                                          
 C                                                                               
@@ -3411,7 +3411,7 @@ C
       RETURN
 C
 999   FORMAT(/
-     * '   IGRF: GIVEN YEAR',I5,' IS OUT OF INTERVAL 1900-2015'/,
+     * '   IGRF: GIVEN YEAR',I5,' IS OUT OF INTERVAL 1900-2025'/,
      * '   *** CALCULATIONS WILL BE DONE FOR YEAR =',I5,' ***'/)
       END
 C
@@ -3490,8 +3490,7 @@ c      IF(IY.GT.2015) IY=2015
 c      IF(IY.GT.2020) IY=2020
       IF(IY.GT.2025) IY=2025
 
-C  WE ARE RESTRICTED BY THE INTERVAL 1900-2015, FOR WHICH THE DGRF & IGRF-11
-C  COEFFICIENTS ARE KNOWN; IF IYR IS OUTSIDE THIS INTERVAL, THE
+C  IF IYR IS OUTSIDE THE TIME INTERVAL COVERED BY THE CURRENT IGRF, THE
 C  SUBROUTINE GIVES A WARNING (BUT DOES NOT REPEAT IT AT THE NEXT CALLS)
 
       IF(IY.NE.IYR.AND.mess) write(konsol,10) IYR,IY
@@ -3639,13 +3638,13 @@ C  VALUES FOR THE NEAREST EPOCHS:
            G11=-1586.42*F1-1501.77*F2
            H11= 4944.26*F1+4795.99*F2
         ELSEIF (IY.LT.2020) THEN                        !2015-2020
-           F2=(FLOAT(IY)+FLOAT(IDAY)/365.-2010.)/5.
+           F2=(FLOAT(IY)+FLOAT(IDAY)/365.-2015.)/5.
            F1=1.D0-F2
            G10=29441.46*F1+29404.8*F2
            G11=-1501.77*F1-1450.9*F2
            H11= 4795.99*F1+4652.5*F2
-        ELSE                                            !2015-2020
-           DT=FLOAT(IY)+FLOAT(IDAY)/365.-2015.
+        ELSE                                            !2020-2025
+           DT=FLOAT(IY)+FLOAT(IDAY)/365.-2020.
            G10=29404.8-5.7*DT
            G11=-1450.9+7.4*DT
            H11= 4652.5-25.9*DT
@@ -3795,7 +3794,7 @@ C  AND  THEREFORE:
       A33=Z3
 
  10   FORMAT(/
-     * ' RECALC: GIVEN YEAR',I5,' IS OUT OF INTERVAL 1900-2010'/,
+     * ' RECALC: GIVEN YEAR',I5,' IS OUT OF INTERVAL 1900-2025'/,
      * '   *** CALCULATIONS WILL BE DONE FOR YEAR =',I5,' ***'/)
 
       RETURN
