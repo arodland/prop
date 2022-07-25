@@ -31,6 +31,7 @@ jf(28:30) = .false.
 jf(33:35) = .false.
 jf(39) = .false.
 jf(40) = .false.
+jf(47) = .false.
 
 do
 

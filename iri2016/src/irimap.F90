@@ -30,6 +30,7 @@ jf(28:30) = .false.
 jf(33:36) = .false.
 jf(39) = .false.
 jf(40) = .false.
+jf(47) = .false.
 
 ! --- command line input
 if (command_argument_count() < 6) then
