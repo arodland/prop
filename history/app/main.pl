@@ -85,6 +85,69 @@ sub dispatch_request {
       }
     ]
   },
+  'GET + /history_v2.json + ?station~&days~&@metrics~' => sub {
+    my ($self, $station, $days, $metrics) = @_;
+    $days = 7 unless defined $days;
+    $metrics = ['fof2', 'mufd', 'hmf2'] unless @$metrics;
+
+    my $start_time = DateTime->now(time_zone => 'UTC')->subtract(days => $days)->strftime('%Y-%m-%d %H:%M:%S');
+
+    my @metrics_quoted = map $dbh->quote_identifier($_), @$metrics;
+    my $metrics_quoted = join ', ', @metrics_quoted;
+
+    my $sql = 'SELECT * FROM STATION';
+    if (defined $station) {
+      $sql .= ' WHERE ID = ?';
+    }
+    $sql .= ' ORDER BY id ASC';
+
+    my $sth = $dbh->prepare($sql);
+    $sth->execute((defined($station)?$station:()));
+    my $stations = $sth->fetchall_arrayref({});
+
+    my $sth2 = $dbh->prepare(qq{
+      SELECT EXTRACT(epoch FROM time), cs, $metrics_quoted FROM measurement
+      WHERE station_id=? AND time >= ?
+      ORDER BY time ASC
+    });
+
+    [ sub {
+        my $responder = shift;
+        my $writer = $responder->([ 200, [ 'Content-Type' => 'application/json' ] ]);
+        $writer->write("[\n");
+        my $first_station = 1;
+        for my $station (@$stations) {
+          $station->{$_} = 0 + $station->{$_} for qw(latitude longitude);
+          my $rows = $sth2->execute($station->{id}, $start_time);
+          next if $rows == 0;
+          $writer->write(",\n") unless $first_station;
+          $first_station = 0;
+          my $json = encode_json($station);
+          chop($json); # Remove trailing "}"
+          $writer->write($json);
+          $writer->write(q{,"history":[});
+
+          my $first_measurement = 1;
+          measurement: while(my $measurement = $sth2->fetchrow_arrayref) {
+            my $nonnull = 0;
+            for my $i (0 .. $#$measurement) {
+              $measurement->[$i] = undef if defined($measurement->[$i]) and $measurement->[$i] eq '';
+              $measurement->[$i] = 0 + $measurement->[$i] if defined $measurement->[$i];
+              $nonnull = 1 if $i > 1 and defined $measurement->[$i];
+            }
+            next measurement unless $nonnull;
+
+            $writer->write(",") unless $first_measurement;
+            $first_measurement = 0;
+            $writer->write(encode_json($measurement));
+          }
+          $writer->write(q(]}));
+        };
+        $writer->write("\n]\n");
+        $writer->close;
+      }
+    ]
+  },
   'GET + /sample.json' => sub {
     my ($self) = @_;
 
