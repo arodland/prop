@@ -62,6 +62,17 @@ class Measurement(db.Model):
         return '<Measurement %r>' % self.id
 
 
+class Runs(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    started = db.Column(db.DateTime)
+    ended = db.Column(db.DateTime)
+    target_time = db.Column(db.DateTime)
+    state = db.Enum('created', 'finished', 'archived', 'deleted', name='run_state')
+    experiment = db.Column(db.Text)
+    def __repr__(self):
+        return '<Run %r>' % self.id
+
+
 class Prediction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     run_id = db.Column(db.Integer)
@@ -78,7 +89,8 @@ class Prediction(db.Model):
 
 class Holdout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    run_id = db.Column(db.Integer)
+    run_id = db.Column(db.Integer, db.ForeignKey('runs.id'))
+    run = db.relationship('Runs', foreign_keys=[run_id], lazy='joined')
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station = db.relationship('Station', foreign_keys=[station_id])
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
@@ -89,26 +101,13 @@ class Holdout(db.Model):
 class HoldoutEval(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id])
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
     model = db.Column(db.Text)
     fof2 = db.Column(db.Numeric(asdecimal=False))
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
 
 class PredEval(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
-    model = db.Column(db.Text)
-    time = db.Column(db.DateTime)
-    hours_ahead = db.Column(db.Integer)
-    fof2 = db.Column(db.Numeric(asdecimal=False))
-    mufd = db.Column(db.Numeric(asdecimal=False))
-    hmf2 = db.Column(db.Numeric(asdecimal=False))
-    measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
-
-class PredEvalMay(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
     holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
@@ -146,6 +145,13 @@ class PredictionSchema(ma.ModelSchema):
 prediction_schema = PredictionSchema()
 predictions_schema = PredictionSchema(many=True)
 
+class RunsSchema(ma.ModelSchema):
+    class Meta:
+        model = Runs
+    
+run_schema = RunsSchema()
+runs_schema = RunsSchema(many=True)
+
 class HoldoutSchema(ma.ModelSchema):
     class Meta:
         model = Holdout
@@ -173,16 +179,6 @@ class PredEvalSchema(ma.ModelSchema):
 
 pred_eval_schema = PredEvalSchema()
 pred_evals_schema = PredEvalSchema(many=True)
-
-class PredEvalMaySchema(ma.ModelSchema):
-    class Meta:
-        model = PredEvalMay
-
-    holdout = fields.Nested(HoldoutSchema)
-    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
-
-pred_eval_may_schema = PredEvalMaySchema()
-pred_eval_mays_schema = PredEvalMaySchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -245,17 +241,19 @@ def pred_sample():
 @app.route("/pred_series.json", methods=['GET'])
 def predseries():
     station_id = request.args.get('station', None)
+    experiment = request.args.get('experiment', None)
 
     cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id)
     ret = memcache.get(cachekey)
 
     if ret is None:
-        sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished')"
+        sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment)"
         if station_id is not None:
             sql = sql + " and station_id=:station_id"
         sql = sql + " order by station_id asc, time asc"
 
         qry = db.session.query(Measurement).from_statement(sql)
+        qry = qry.params(experiment = experiment)
         if station_id is not None:
             qry = qry.params(station_id = station_id)
 
@@ -359,9 +357,9 @@ def assimilated():
 
     return Response(ret, mimetype='application/x-hdf5')
         
-def get_latest_run():
+def get_latest_run(experiment=None):
     with db.engine.connect() as conn:
-        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished') order by ts asc")
+        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from ?) order by ts asc", (experiment,))
         rows = list(res.fetchall())
 
         if len(rows) == 0:
@@ -376,12 +374,14 @@ def get_latest_run():
 
 @app.route("/latest_run.json", methods=['GET'])
 def latest_run():
-    return jsonify(get_latest_run())
+    experiment = request.args.get('experiment', None)
+    return jsonify(get_latest_run(experiment))
 
 @app.route("/available_maps.json", methods=['GET'])
 def available_maps_json():
     past_hours = request.args.get('past_hours', '24')
     future_hours = request.args.get('future_hours', '24')
+    experiment = request.args.get('experiment', None)
 
     with db.engine.connect() as conn:
         sql = """select a1.run_id, a1.ts, a2.start, (case when a1.ts=a2.start then 'now' else ((a1.ts-a2.start+300)/3600)::int::text || 'h' end) as filesuffix 
@@ -390,6 +390,7 @@ def available_maps_json():
             from assimilated a
             join runs r on a.run_id=r.id
             where r.state='finished'
+            and r.experiment is not distinct from %s
             and a.time >= now() - (%s * interval '1 hour')
             and a.time < now() + (%s * interval '1 hour')
             and a.time >= r.started
@@ -405,7 +406,7 @@ def available_maps_json():
         on a1.run_id=a2.run_id 
         order by a1.ts asc"""
 
-        res = conn.execute(sql, (past_hours, future_hours))
+        res = conn.execute(sql, (experiment, past_hours, future_hours))
         rows = list(res.fetchall())
 
         if len(rows) == 0:
@@ -543,7 +544,8 @@ def post_holdout():
 
 @app.route("/holdout_eval", methods=['GET'])
 def get_holdout_eval():
-    qry = db.session.query(HoldoutEval)
+    experiment = request.args.get('experiment', 'crossval_feb_2022')
+    qry = db.session.query(HoldoutEval).join(Holdout).join(Runs).filter_by(experiment=experiment)
     dump = holdout_evals_schema.dump(qry)
 
     modelmap = {
@@ -573,14 +575,9 @@ def get_holdout_eval():
 
 @app.route("/pred_eval", methods=['GET'])
 def get_pred_eval():
-    dataset = request.args.get('dataset', 'new')
-    if dataset == 'may':
-        qry = db.session.query(PredEvalMay)
-        dump = pred_eval_mays_schema.dump(qry)
-    else:
-        qry = db.session.query(PredEval)
-        dump = pred_evals_schema.dump(qry)
-
+    experiment = request.args.get('experiment', 'pred_jun_2022')
+    qry = db.session.query(PredEval).join(Holdout).join(Runs).filter_by(experiment=experiment)
+    dump = pred_evals_schema.dump(qry)
 
     modelmap = {
         'iri': '1-IRI',
