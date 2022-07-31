@@ -210,19 +210,20 @@ sub one_run {
         queue => 'assimilate',
       },
     );
-    my @map_jobs;
     if ($jobs->{make_maps}) {
-      @map_jobs = make_maps(
+      my @map_jobs = make_maps(
         run_id => $run_id,
         target => $render->{target_time},
         name => $render->{name},
         dots => $render->{dots},
         parents => [ $assimilate ],
       );
+      push @html_deps, @map_jobs;
+      push @holdout_deps, @map_jobs;
+    } else {
+      push @html_deps, $assimilate;
+      push @holdout_deps, $assimilate;
     }
-
-    push @html_deps, @map_jobs;
-    push @holdout_deps, @map_jobs;
 
     # This is inside of the loop because of its dependence on the assimilate
     # for the same target time.
@@ -241,6 +242,7 @@ sub one_run {
     }
   }
 
+  my @finish_deps;
   if ($jobs->{renderhtml}) {
     my $renderhtml = app->minion->enqueue('renderhtml',
       [
@@ -252,6 +254,9 @@ sub one_run {
         attempts => 2,
       },
     );
+    @finish_deps = $renderhtml;
+  } else {
+    @finish_deps = @html_deps;
   }
 
   for my $holdout_time (@holdout_times) {
@@ -295,6 +300,17 @@ sub one_run {
       },
     );
   }
+
+  app->minion->enqueue('finish_run',
+    [
+      run_id => $run_id,
+    ],
+    {
+      parents => [ @finish_deps ],
+      attempts => 2,
+      expire => 3 * 60 * 60,
+    },
+  );
 }
 
 sub queue_job {
