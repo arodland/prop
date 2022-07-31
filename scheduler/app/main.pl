@@ -171,7 +171,7 @@ sub one_run {
     push @pred_times, $holdout_time unless grep { $_ == $holdout_time} @pred_times;
   }
 
-  my $pred = app->minion->enqueue('pred',
+  my $pred = app->minion->enqueue(($jobs->{pred} eq 'v2' ? 'pred_v2' : 'pred'),
     [
       run_id => $run_id,
       target => [ @pred_times ],
@@ -319,7 +319,7 @@ sub one_run {
 sub queue_job {
   my ($run_time, $resched) = @_;
 
-  my $num_holdouts = 0;
+  my $num_holdouts = 1;
 
   my $holdout_meas = $num_holdouts && eval {
     Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout_measurements", form => { num => $num_holdouts })->result->json
@@ -329,6 +329,13 @@ sub queue_job {
     make_maps => 1,
     renderhtml => 1,
     band_quality => 1,
+  });
+
+  one_run($run_time, $holdout_meas, '2022-08-pred-unified', {
+  });
+
+  one_run($run_time, $holdout_meas, '2022-08-pred-independent', {
+    pred => 'v2',
   });
 
   app->minion->enqueue('cleanup');

@@ -167,5 +167,115 @@ def generate():
 
     return make_response("OK")
 
+@app.route("/generate_v2", methods=['POST'])
+def generate_v2():
+    metrics = [
+        { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel },
+        { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel },
+        { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel },
+    ]
+
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    con = psycopg2.connect(dsn)
+
+    times = [ dt.datetime.fromtimestamp(float(ts)) for ts in request.form.getlist('target') ]
+    if len(times) == 0:
+        times = [ dt.datetime.utcnow() ]
+    predtm = np.array([ time.mktime(ts.timetuple()) for ts in times ])
+
+    run_id = int(request.form.get('run_id', -1))
+
+    data = get_data('http://localhost:%s/history_v2.json?days=14&%s' % (os.getenv('HISTORY_PORT'), '&'.join(['metrics=' + x['name'] for x in metrics])))
+
+    with con.cursor() as cur:
+        cur.execute('select ssn from essn where run_id=%s and series=%s order by time desc nulls last limit 1', (run_id, '24h'))
+        (ssn,) = cur.fetchone()
+
+    for station in data:
+        mout = []
+        for mi in range(len(metrics)):
+            mout.append({'x': [], 'y': [], 'sigma': []})
+
+        for pt in station['history']:
+            tm = pt[0]
+            cs = pt[1]
+            yval = pt[2+mi]
+            if yval is None:
+                continue
+
+            if cs < 10 and cs != -1:
+                continue
+
+            sd = cs_to_stdev(cs, adj100=True)
+
+            iridata = get_iri(station['latitude'], station['longitude'], ssn, dt.datetime.fromtimestamp(float(tm)))
+
+            for mi, m in enumerate(metrics):
+                out = mout[mi]
+                yval = pt[2 + mi]
+                if yval is not None:
+                    y_iri = iridata[m['iriidx']]
+                    out['x'].append(tm / 86400.)
+                    out['y'].append(np.log(yval) - np.log(y_iri))
+                    out['sigma'].append(sd)
+
+        for mi, m in enumerate(metrics):
+            out = mout[mi]
+            if len(out['x']) < 7:
+                continue
+
+            out['x'] = np.array(out['x'])
+            out['y'] = np.array(out['y'])
+            out['sigma'] = np.array(out['sigma'])
+            out['mean'] = np.mean(out['y'])
+            out['gp'] = george.GP(m['kernel'])
+            out['gp'].compute(out['x'], out['sigma'] + 1e-3)
+
+            pred, sd = out['gp'].predict(out['y'], predtm / 86400., return_var = True)
+            out['pred'] = pred
+            out['sd'] = sd ** 0.5
+
+        if len([x for x in mout if 'pred' in x]) < 1:
+            continue
+
+        for i in range(len(times)):
+            iridata = get_iri(station['latitude'], station['longitude'], ssn, times[i])
+            col_names, col_vals = [], []
+            stdev = None
+            for mi, m in enumerate(metrics):
+                out = mout[mi]
+                if 'pred' not in out:
+                    continue
+                irival = iridata[m['iriidx']]
+                col_names.append(m['name'])
+                yout = np.exp(np.log(irival) + out['pred'][i])
+                col_vals.append(yout)
+                if stdev is None:
+                    stdev = out['sd'][i]
+
+            placeholders = ['%s'] * len(col_names)
+            upserts = ['{col}=excluded.{col}'.format(col=col) for col in col_names]
+
+            with con.cursor() as cur:
+                sql = """
+                insert into prediction (run_id, station_id, time, cs, log_stdev, {col_names})
+                values (%s, %s, %s, %s, %s, {placeholders})
+                on conflict (station_id, run_id, time) do update
+                set cs=excluded.cs, log_stdev=excluded.log_stdev,
+                {upserts}
+                """.format(col_names=", ".join(col_names), placeholders=", ".join(placeholders), upserts=", ".join(upserts))
+                cur.execute(sql, (
+                    run_id,
+                    station['id'],
+                    times[i],
+                    stdev_to_cs(stdev),
+                    stdev,
+                    *col_vals
+                ))
+        con.commit()
+
+
+    return make_response("OK")
+
 if __name__ == "__main__":
     app.run(debug=False,host='0.0.0.0', port=int(os.getenv('PRED_PORT')), threaded=False, processes=4)
