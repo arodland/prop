@@ -68,11 +68,11 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
+      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
 
       while (my $run = $runs->hash) {
         eval {
-          $self->archive_run($app->minion, $db, $run->{id}, $run->{ts});
+          $self->archive_run($app->minion, $db, $run);
         };
         if ($@) {
           $app->log->warn("$@ archiving run $run->{id}");
@@ -125,7 +125,11 @@ sub register {
 }
 
 sub archive_run {
-  my ($self, $minion, $db, $run_id, $ts) = @_;
+  my ($self, $minion, $db, $run) = @_;
+  my $run_id = $run->{id};
+  my $ts = $run->{ts};
+
+  my $do_upload = !defined $run->{experiment};
 
   my $ctmeta = { customTime => $ts };
 
@@ -137,38 +141,44 @@ sub archive_run {
   # pred: leave alone
 
   # irimap: download from db, place in /archive, delete from db
-  my $maps = $db->query("select extract(epoch from time) as ts, dataset from irimap where run_id=?", $run_id);
-  while (my $map = $maps->hash) {
-    my $map_dir = $archive_dir->child("irimap");
-    $map_dir->mkpath;
-    my $target_file = $map_dir->child("$map->{ts}.h5");
-    $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
+  if ($do_upload) {
+    my $maps = $db->query("select extract(epoch from time) as ts, dataset from irimap where run_id=?", $run_id);
+    while (my $map = $maps->hash) {
+      my $map_dir = $archive_dir->child("irimap");
+      $map_dir->mkpath;
+      my $target_file = $map_dir->child("$map->{ts}.h5");
+      $target_file->spew_raw($map->{dataset});
+      $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
+    }
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
   # assimilated: download from db, place in /archive, delete from db
-  $maps = $db->query("select extract(epoch from time) as ts, dataset from assimilated where run_id=?", $run_id);
-  while (my $map = $maps->hash) {
-    my $map_dir = $archive_dir->child("assimilated");
-    $map_dir->mkpath;
-    my $target_file = $map_dir->child("$map->{ts}.h5");
-    $target_file->spew_raw($map->{dataset});
-    $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
+  if ($do_upload) {
+    my $maps = $db->query("select extract(epoch from time) as ts, dataset from assimilated where run_id=?", $run_id);
+    while (my $map = $maps->hash) {
+      my $map_dir = $archive_dir->child("assimilated");
+      $map_dir->mkpath;
+      my $target_file = $map_dir->child("$map->{ts}.h5");
+      $target_file->spew_raw($map->{dataset});
+      $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
+    }
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
   
   # rendered files: move to /archive
   my $rendered_dir = path("/output/$run_id");
   if ($rendered_dir->exists) {
-    my $dest_dir = $archive_dir->child("rendered");
-    $dest_dir->mkpath;
+    if ($do_upload) {
+      my $dest_dir = $archive_dir->child("rendered");
+      $dest_dir->mkpath;
 
-    for my $file ($rendered_dir->children) {
-      next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
+      for my $file ($rendered_dir->children) {
+        next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
 
-      my $target_file = $file->copy($dest_dir);
-      $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file", metadata => $ctmeta);
+        my $target_file = $file->copy($dest_dir);
+        $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file", metadata => $ctmeta);
+      }
     }
     $rendered_dir->remove_tree;
   }

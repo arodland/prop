@@ -64,8 +64,8 @@ sub target_times {
   my ($run_time) = @_;
 
   return (
-    { 
-      name => 'now', 
+    {
+      name => 'now',
       target_time => $run_time + 300,
       dots => 'curr',
     },
@@ -128,16 +128,12 @@ sub make_maps {
   return @jobs;
 }
 
+sub one_run {
+  my ($run_time, $holdouts, $experiment, $jobs) = @_;
+  my @target_times = target_times($run_time);
+  my $first_target_time = $target_times[0]{target_time};
 
-sub queue_job {
-  my ($run_time, $resched) = @_;
-
-  my $num_holdouts = 0;
-
-  my $holdouts = $num_holdouts && eval { 
-    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { num => $num_holdouts })->result->json 
-  } || [];
-
+  $holdouts ||= [];
   my @holdout_ids = map $_->{holdout}, @$holdouts;
   my @holdout_times = map $_->{ts}, @$holdouts;
 
@@ -153,8 +149,8 @@ sub queue_job {
   );
 
   my $run_id = $essn_24h;
-  app->pg->db->query('insert into runs (id, started, state) values (?, to_timestamp(?), ?)',
-    $run_id, time(), 'created'
+  app->pg->db->query('insert into runs (id, started, target_time, experiment, state) values (?, to_timestamp(?), to_timestamp(?), ?, ?)',
+    $run_id, time(), $first_target_time, $experiment, 'created'
   );
 
   my $essn_6h = app->minion->enqueue('essn',
@@ -166,7 +162,6 @@ sub queue_job {
     },
   );
 
-  my @target_times = target_times($run_time);
   my @pred_times = pred_times($run_time);
 
   for my $holdout_time (@holdout_times) {
@@ -215,18 +210,23 @@ sub queue_job {
         queue => 'assimilate',
       },
     );
-    my @map_jobs = make_maps(
-      run_id => $run_id,
-      target => $render->{target_time},
-      name => $render->{name},
-      dots => $render->{dots},
-      parents => [ $assimilate ],
-    );
+    my @map_jobs;
+    if ($jobs->{make_maps}) {
+      @map_jobs = make_maps(
+        run_id => $run_id,
+        target => $render->{target_time},
+        name => $render->{name},
+        dots => $render->{dots},
+        parents => [ $assimilate ],
+      );
+    }
 
     push @html_deps, @map_jobs;
     push @holdout_deps, @map_jobs;
 
-    if ($render->{target_time} == $target_times[0]{target_time}) {
+    # This is inside of the loop because of its dependence on the assimilate
+    # for the same target time.
+    if ($jobs->{band_quality} && $render->{target_time} == $first_target_time) {
       my $band_quality = app->minion->enqueue('band_quality',
         [
           run_id => $run_id,
@@ -240,16 +240,19 @@ sub queue_job {
       push @html_deps, $band_quality;
     }
   }
-  my $renderhtml = app->minion->enqueue('renderhtml',
-    [
-      run_id => $run_id,
-    ],
-    {
-      parents => [ @html_deps ],
-      expire => 18 * 60,
-      attempts => 2,
-    },
-  );
+
+  if ($jobs->{renderhtml}) {
+    my $renderhtml = app->minion->enqueue('renderhtml',
+      [
+        run_id => $run_id,
+      ],
+      {
+        parents => [ @html_deps ],
+        expire => 18 * 60,
+        attempts => 2,
+      },
+    );
+  }
 
   for my $holdout_time (@holdout_times) {
     my $irimap = app->minion->enqueue('irimap',
@@ -292,6 +295,22 @@ sub queue_job {
       },
     );
   }
+}
+
+sub queue_job {
+  my ($run_time, $resched) = @_;
+
+  my $num_holdouts = 0;
+
+  my $holdouts = $num_holdouts && eval {
+    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { num => $num_holdouts })->result->json
+  } || [];
+
+  one_run($run_time, $holdouts, undef, {
+    make_maps => 1,
+    renderhtml => 1,
+    band_quality => 1,
+  });
 
   app->minion->enqueue('cleanup');
 
