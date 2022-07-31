@@ -287,7 +287,7 @@ def essnjson():
     if ret is None:
         with db.engine.connect() as conn:
             res = conn.execute(
-                text("select extract(epoch from time) as time, series, ssn, sfi, err from essn where time >= now() - :days * interval '1 day' order by time asc").\
+                text("select extract(epoch from e.time) as time, e.series, e.ssn, e.sfi, e.err from essn e join runs r on e.run_id=r.id where e.time >= now() - :days * interval '1 day' and r.experiment is null order by time asc").\
                     bindparams(days=days).\
                     columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
             )
@@ -520,25 +520,41 @@ def get_holdout():
     ho = holdouts_schema.dump(qry)
     return Response(json.dumps(ho.data), mimetype='application/json')
 
-@app.route("/holdout", methods=['POST'])
-def post_holdout():
+@app.route("/holdout_measurements", methods=['POST'])
+def post_holdout_measurements():
     num_ho = int(request.form.get('num', 1))
     ret = []
-
     with db.engine.connect() as conn:
         res = conn.execute(
-            text("select m.id as id, m.station_id as station_id, extract(epoch from m.time) as time from measurement m join station s on s.id=m.station_id where s.use_for_essn=true and s.use_for_maps=true and m.time > now() - interval '30 minutes' and m.fof2 is not null and m.hmf2 is not null and m.mufd is not null and (m.cs >= 75 or m.cs = -1) and m.station_id<>67 order by random() limit :num").\
+            text("select m.id as id from measurement m join station s on s.id=m.station_id where s.use_for_essn=true and s.use_for_maps=true and m.time > now() - interval '30 minutes' and m.fof2 is not null and m.hmf2 is not null and m.mufd is not null and (m.cs >= 75 or m.cs = -1) and m.station_id<>67 order by random() limit :num").\
                 bindparams(num=num_ho).\
-                columns(id=db.Numeric(asdecimal=False), station_id=db.Numeric(asdecimal=False), time=db.Numeric(asdecimal=False))
+                columns(id=db.Numeric(asdecimal=False))
         )
         for row in res:
-            (measurement_id, station_id, meas_time) = row
+            ret.append(int(row[0]))
+
+    return jsonify(ret)
+
+@app.route("/holdout", methods=['POST'])
+def post_holdout():
+    measurements = request.form.getlist('measurements')
+    ret = []
+
+    for meas in measurements:
+        with db.engine.connect() as conn:
             res = conn.execute(
-                text("insert into holdout (station_id, measurement_id) values (:station_id, :measurement_id) returning id").\
-                    bindparams(station_id=station_id, measurement_id=measurement_id)
+                text("select m.id as id, m.station_id as station_id, extract(epoch from m.time) as time from measurement m where m.id=:id ").\
+                bindparams(id=meas).\
+                columns(id=db.Numeric(asdecimal=False), station_id=db.Numeric(asdecimal=False), time=db.Numeric(asdecimal=False))
             )
-            (inserted_id,) = res.fetchone()
-            ret.append({ 'holdout': inserted_id, 'ts': meas_time })
+            for row in res:
+                (measurement_id, station_id, meas_time) = row
+                res = conn.execute(
+                    text("insert into holdout (station_id, measurement_id) values (:station_id, :measurement_id) returning id").\
+                        bindparams(station_id=station_id, measurement_id=measurement_id)
+                )
+                (inserted_id,) = res.fetchone()
+                ret.append({ 'holdout': inserted_id, 'ts': meas_time })
 
     return jsonify(ret)
 

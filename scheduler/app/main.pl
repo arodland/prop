@@ -129,11 +129,14 @@ sub make_maps {
 }
 
 sub one_run {
-  my ($run_time, $holdouts, $experiment, $jobs) = @_;
+  my ($run_time, $holdout_meas, $experiment, $jobs) = @_;
   my @target_times = target_times($run_time);
   my $first_target_time = $target_times[0]{target_time};
 
-  $holdouts ||= [];
+  my $holdouts = @$holdout_meas && eval {
+    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { measurements => $holdout_meas })->result->json
+  } || [];
+
   my @holdout_ids = map $_->{holdout}, @$holdouts;
   my @holdout_times = map $_->{ts}, @$holdouts;
 
@@ -318,11 +321,11 @@ sub queue_job {
 
   my $num_holdouts = 0;
 
-  my $holdouts = $num_holdouts && eval {
-    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { num => $num_holdouts })->result->json
+  my $holdout_meas = $num_holdouts && eval {
+    Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout_measurements", form => { num => $num_holdouts })->result->json
   } || [];
 
-  one_run($run_time, $holdouts, undef, {
+  one_run($run_time, [], undef, {
     make_maps => 1,
     renderhtml => 1,
     band_quality => 1,
