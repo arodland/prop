@@ -258,6 +258,61 @@ sub dispatch_request {
 
     [ 200, ['Content-Type' => 'application/json'], [encode_json($stations)] ];
   },
+  'GET + /mixscale_metric.json + ?station~&points~&max_span~&metric=' => sub {
+    my ($self, $station_id, $max_points, $max_span, $metric) = @_;
+    $max_points = 2000 unless defined $max_points;
+
+    my $sql = ( defined($station_id) 
+      ? 'SELECT * FROM STATION WHERE id=?'
+      : 'SELECT * FROM STATION WHERE id=(SELECT station_id FROM measurement ORDER BY random() LIMIT 1)'
+    );
+
+    my $sth = $dbh->prepare($sql);
+    $sth->execute((defined($station_id) ? ($station_id) : ()));
+    my $stations = $sth->fetchall_arrayref({});
+
+    my $metric_quoted = $dbh->quote_identifier($metric);
+    my $sth2 = $dbh->prepare(qq{
+      SELECT time, cs, $metric_quoted from measurement WHERE station_id=? AND $metric_quoted IS NOT NULL ORDER BY time ASC
+    });
+
+    for my $station(@$stations) {
+      $station->{$_} = 0 + $station->{$_} for qw(latitude longitude);
+      my $measurements = $dbh->selectall_arrayref($sth2, {}, $station->{id});
+      my $ts = [ map { $strp->parse_datetime($_->[0])->epoch } @$measurements ];
+      if (defined $max_span) {
+        my $secs = $max_span * 86400;
+        while ($ts->[-1] - $ts->[0] > $secs) {
+          shift @$ts;
+          shift @$measurements;
+        }
+      }
+
+      my $span = $ts->[-1] - $ts->[0];
+
+      while (@$measurements > $max_points) {
+        my $idx = int rand @$measurements;
+        my $prob = ($ts->[-1] - $ts->[$idx]) / $span + 0.05;
+        if (rand(1) < $prob) {
+          splice @$measurements, $idx, 1, ();
+          splice @$ts, $idx, 1, ();
+        }
+      }
+
+      for my $measurement (@$measurements) {
+        for (1..2) {
+          undef($measurement->[$_]) if defined $measurement->[$_] and $measurement->[$_] eq '';
+          $measurement->[$_] = 0 + $measurement->[$_] if defined $measurement->[$_];
+        }
+      }
+
+      @$measurements = grep { defined($_->[1]) && defined($_->[2]) } @$measurements;
+
+      $station->{history} = $measurements;
+    }
+
+    [ 200, ['Content-Type' => 'application/json'], [encode_json($stations)] ];
+  },
 }
 
 PropHist->run_if_script;

@@ -8,7 +8,7 @@ import urllib.request, json
 import pandas as pd
 import numpy as np
 import george
-from kernel import kernel, delta_kernel
+from kernel import kernel, delta_kernel, delta_fof2_kernel, delta_hmf2_kernel, delta_mufd_kernel
 from cs import cs_to_stdev, stdev_to_cs
 import psycopg2
 import subprocess
@@ -42,11 +42,19 @@ app = Flask(__name__)
 
 @app.route("/generate", methods=['POST'])
 def generate():
-    metrics = [
-        { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel },
-        { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel },
-        { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel },
-    ]
+    kernel_choice = request.form.get('kernels', 'old')
+    if kernel_choice == 'new':
+        metrics = [
+            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_mufd_kernel },
+            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_fof2_kernel },
+            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_hmf2_kernel },
+        ]
+    else:
+        metrics = [
+            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel },
+            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel },
+            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel },
+        ]
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg2.connect(dsn)

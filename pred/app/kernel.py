@@ -29,3 +29,23 @@ delta_kernel = 0.0971**2 * ExpSquaredKernel(611) * ExpSine2Kernel(gamma=29.696, 
 for param in delta_kernel.get_parameter_names():
     if param.endswith(':log_period'):
         delta_kernel.freeze_parameter(param)
+#delta_kernel = 0.0971**2 * ExpSquaredKernel(8) * ExpSine2Kernel(gamma=29.696, log_period=0.0) + 0.0444**2 * ExpSquaredKernel(4) + 0.0928**2 * RationalQuadraticKernel(metric=0.00182, log_alpha=-0.700) + ConstantKernel(np.log(0.00162)) # 2022-06-29
+
+delta_fof2_kernel = 0.0830**2 * ExpSquaredKernel(1141) * ExpSine2Kernel(gamma=35.368, log_period=0.0) + 0.04388**2 * ExpSquaredKernel(19.116) + 0.1105**2 * RationalQuadraticKernel(metric=0.00376, log_alpha=-1.224) + ConstantKernel(np.log(0.000548))
+
+for param in delta_fof2_kernel.get_parameter_names():
+    if param.endswith(':log_period'):
+        delta_fof2_kernel.freeze_parameter(param)
+
+delta_mufd_kernel = 0.0879**2 * ExpSquaredKernel(1040) * ExpSine2Kernel(gamma=38.792, log_period=0.0) + 0.03511**2 * ExpSquaredKernel(6.2735) + 0.1212**2 * RationalQuadraticKernel(metric=0.00171, log_alpha=-1.260) + ConstantKernel(np.log(0.000348))
+
+for param in delta_mufd_kernel.get_parameter_names():
+    if param.endswith(':log_period'):
+        delta_mufd_kernel.freeze_parameter(param)
+
+delta_hmf2_kernel = 0.0407**2 * ExpSquaredKernel(1126) * ExpSine2Kernel(gamma=20.511, log_period=0.0) + 0.02785**2 * ExpSquaredKernel(44.78) + 0.0622**2 * RationalQuadraticKernel(metric=0.00045, log_alpha=-0.759) + ConstantKernel(np.log(0.000204))
+
+for param in delta_mufd_kernel.get_parameter_names():
+    if param.endswith(':log_period'):
+        delta_mufd_kernel.freeze_parameter(param)
+
