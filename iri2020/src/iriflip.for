@@ -1,3 +1,4 @@
+c
 C IRIFLIP.for 
 C
 C 2012.00 10/05/11 IRI-2012: bottomside B0 B1 model (SHAMDB0D, SHAB1D),
@@ -12,7 +13,6 @@ C 2012.02 01/04/12 Deleted FINDAP,READAP,CONV_DATE,GET_DATA,RATCHK (not used)
 C 2012.02 01/04/12 Deleted BRACE,ACTUAL_DAY,EPHEM SOLDEC,TFILE,RUN_ERROR (not used)
 C 2012.02 01/04/12 COP2D: 99 FOMRAT ',' missing; commented out all WRITEs
 C 2012.03 07/17/14 COP4S: NPLUS=0; PR(13)=0.0 ------------------------- A Shabanloui
-C 2012.04 04/16/18 Versioning now based on year of major releases
 C 2016.01 09/08/16 Main: NEWTON replaced by iteration procedure ------- B Gustavsson
 C 2016.02 05/07/18 Added array PRV11 to DATA statement ---------------- K. Knight
 C****************************************************************************************

@@ -26,14 +26,26 @@ c          enddo
 c
 c Please also make sure to use the default setting for the switches jf
 c as noted in this comment section further down:
-c       jf(4,5,6,21,23,28,29,30,33,35,39,40,47)=.false. all others .true.
+c   jf(4,5,6,21,23,28,29,30,33,35,39,40,47)=.false. all others =.true.
+c     jf(4,5,6,23,30,33,35,39,40,47)=.false. all others =.true.
+c You can turn off (jf(%)=.false.) the computation of certain parmeters 
+c if you do not need these parameters:
+c     jf(1) Ne, jf(2) Te Ti Tn, jf(3) Ni, jf(21) ion drift, 
+c     jf(28) spread-F probability 
+c For some parameters the default is already .false.:
+c     jf(33) auroral boundaries,jf(35) foE storm model,
+c     jf(47) CGM coordinates 
+c If you use IRI with JF values other than the default values please
+c make sure to mention this in any publication that results from your
+C research.  
 c        
 c Required i/o units:  
 c  KONSOL= 6 IRISUB: Program messages (used when jf(12)=.true. -> konsol)
 c  IUCCIR=10 IRISUB: CCIR and URSI coefficients (CCIR%%.ASC, %%=month+10)
 c  KONSOL=11 IRISUB: Program messages (used when jf(12)=.false. -> MESSAGES.TXT)
-c    KONSOL=6/11 is also used in IRIFUN and IGRF. COMMON/iounit/konsol,mess 
+c  KONSOL=6/11 is also used in IRIFUN and IGRF. COMMON/iounit/konsol,mess 
 c    is used to pass the value of KONSOL. If mess=false messages are turned off.
+c  UNIT=10 read_data_SD: coefficients of Shubin (2015) hmF2 model  
 c  UNIT=12 IRIFUN/TCON:  Solar/ionospheric indices IG12, R12 (IG_RZ.DAT) 
 c  UNIT=13 IRIFUN/APF..: Magnetic indices and F10.7 (APF107.DAT 
 c  UNIT=14 IGRF/GETSHC:  IGRF coeff. (DGRF%%%%.DAT or IGRF%%%%.DAT, %%%%=year)
@@ -213,6 +225,13 @@ C 2020.09 01/03/21 Jf(19,20)=f no F1 -> C1=0, hmF1=0
 C 2020.09 01/03/21 f1_c1 call with ABSMDP
 C 2020.09 01/03/21 Intermediate region: hst 100<->hmF1(hmF2+hef)/2
 C 2020.09 01/03/21 Intermediate region: T calculated in XE_3
+C 2020.10 04/19/22 TEA(6 -> 4) used in TEBA call
+C 2020.10 04/20/22 New Ti option Tru-2021 using IONTIF
+C 2020.10 04/23/22 funct. ELTE changed to BOOKER1, COMMON/BLOTE del. 
+C 2020.10 04/23/22 funct. TI changed to BOOKER1, COMMON/BLOCK8 del. 
+C 2020.10 04/29/22 ROCSAT ion drift model of Fejer et al., 2008 
+C 2020.10 04/29/22 --- Requires rocdrift.for file  
+C 2020.11 08/05/22 F00 cal is now for new FIRI-2018 (IRIDREG.FOR)   
 C
 C*****************************************************************
 C********* INTERNATIONAL REFERENCE IONOSPHERE (IRI). *************
@@ -260,15 +279,15 @@ C   18    IGRF dip, magbr, modip old FIELDG using POGO68/10 for 1973 t
 C   19    F1 probability model   only if foF1>0 and not NIGHT        t
 C   20    standard F1            standard F1 plus L condition        t
 C (19,20) = (t,t) f1-prob, (t,f) f1-prob-L, (f,t) old F1, (f,f) no F1
-C   21    ion drift computed     ion drift not computed          false
+C   21    ion drift computed     ion drift not computed              t
 C   22    ion densities in %     ion densities in m-3                t
 C   23    Te_tops (Bil-1985)     Te_topside (TBT-2012)           false
 C   24    D-region: IRI-1990     FT-2001 and DRS-1995                t
 C   25    F107D from APF107.DAT  F107D user input (oarr(41))         t
 C   26    foF2 storm model       no storm updating                   t
 C   27    IG12 from file         IG12 - user                         t
-C   28    spread-F probability 	 not computed                    false
-C   29    IRI01-topside          new options as def. by JF(30)   false
+C   28    spread-F probability 	 not computed                        t
+C   29    IRI01-topside          new options as def. by JF(30)       t
 C   30    IRI01-topside corr.    NeQuick topside model   	     false 
 C (29,30) = (t,t) IRIold, (f,t) IRIcor, (f,f) NeQuick, (t,f) IRIcor2
 C   31    B0,B1 ABT-2009	     B0 Gulyaeva-1987 h0.5               t   
@@ -281,7 +300,7 @@ C   36    hmF2 w/out foF2_storm  with foF2-storm                     t
 C   37    topside w/out foF2-storm  with foF2-storm                  t
 C   38    turn WRITEs off in IRIFLIP   turn WRITEs on                t
 C   39    hmF2 (M3000F2)         new models                      false
-C   40    hmF2 AMTB-model        Shubin-COSMIC model             false
+C   40    hmF2 AMTB-model        Shubin-COSMIC model                 t
 C (39,40) = (t,t) hmF2-old, (f,t) AMTB, (f,f) Shubin, (t,f) not used
 C   41    Use COV=F10.7_365      COV=f(IG12) (IRI before Oct 2015)   t
 C   42    Te with PF10.7 dep.	 w/o PF10.7 dependance               t
@@ -290,6 +309,7 @@ C   44    B1 from model          B1 user input in OARR(35)           t
 C   45    HNEA=65/80km dya/night HNEA user input in OARR(89)         t
 C   46    HNEE=2000km 	         HNEE user input in OARR(90)         t
 C   47    CGM computation on 	 CGM computation off             false
+C   48    Ti  Tru-2021           Bil-1981                            t
 C      ....
 C   50    
 C   ------------------------------------------------------------------
@@ -435,11 +455,11 @@ c      CHARACTER FILNAM*53
       DIMENSION  ARIG(3),RZAR(3),F(3),E(4),XDELS(4),DNDS(4),
      &  FF0(988),XM0(441),F2(13,76,2),FM3(9,49,2),ddens(5,11),
      &  elg(7),FF0N(988),XM0N(441),F2N(13,76,2),FM3N(9,49,2),
-     &  INDAP(13),AMP(4),HXL(4),SCL(4),XSM(4),MM(5),DTI(4),AHH(7),
-     &  STTE(6),DTE(5),ATE(7),TEA(6),XNAR(2),param(2),
+     &  INDAP(13),AMP(4),HXL(4),SCL(4),XSM(7),MM(6),DTI(5),AHH(7),
+     &  STTE(6),DTE(5),ATE(7),TEA(4),XNAR(2),param(2),
      &  DION(7),osfbr(25),D_MSIS(9),T_MSIS(2),
      &  IAPO(7),SWMI(25),ab_mlat(48),DAT(11,4),PLA(4),PLO(4),
-     &  a01(2,2)
+     &  a01(2,2),teva(5),sdteva(5),tiv(4),sigtv(4),FJM(59,25,4,1,1)
 
       LOGICAL  EXT,SCHALT,TECON(2),sam_mon,sam_yea,sam_ut,sam_date,
      &  F1REG,FOF2IN,HMF2IN,URSIF2,LAYVER,RBTT,DREG,rzino,FOF1IN,
@@ -455,10 +475,7 @@ c      CHARACTER FILNAM*53
      &   /BLOCK3/HZ,T,HST              /BLOCK4/HME,NMES,HEF 
      &   /BLOCK5/ENIGHT,E              /BLOCK6/HMD,NMD,HDX
      &   /BLOCK7/D1,XKK,FP30,FP3U,FP1,FP2
-     &   /BLOCK8/HS,TNHS,XSM,MM,DTI,MXSM       
-     &   /BLOTE/AHH,ATE1,STTE,DTE
      &   /BLO10/BETA,ETA,DELTA,ZETA    /findRLAT/FLON,RYEAR   
-c     &   /BLO11/B2TOP,TC3,itopn,alg10,hcor1,tcor2       
      &   /BLO11/B2TOP,itopn,tcor       
      &   /iounit/konsol,mess     /CSW/SW(25),ISW,SWC(25)
      &   /QTOP/Y05,H05TOP,QF,XNETOP,XM3000,HHALF,TAU
@@ -570,10 +587,11 @@ C
         DTE(3)=10.
         DTE(4)=20.
         DTE(5)=20.
-        DTI(1)=10.
-        DTI(2)=10.
-        DTI(3)=20.
+        DTI(1)=5.
+        DTI(2)=5.
+        DTI(3)=10.
         DTI(4)=20.
+        DTI(5)=20.
 C
 C FIRST SPECIFY YOUR COMPUTERS CHANNEL NUMBERS ....................
 C AGNR=OUTPUT (OUTPUT IS DISPLAYED OR STORED IN FILE OUTPUT.IRI)...
@@ -948,13 +966,19 @@ C
         endif
 c
 c calculate L-value, dip lati, and B_abs needed for invdip computation
-c calculating invdip at 600 km
+c calculating invdip at 600 km for Ni-TBT-2015 and Ti-Tru-2021 and
+c invdip_old for Te-TBT-2012
 c
 		invdip=-100.0
-		if((jf(2).and..not.jf(23)).or.(jf(3).and..not.jf(6))) then
+		invdip_old=-100.0
+		if(jf(3).and.(.not.jf(6))) then
        		call igrf_sub(lati,longi,ryear,600.0,fl,icode,dipl,babs)
         	if(fl.gt.10.) fl=10.
       		invdip=INVDPC(FL,DIMO,BABS,DIPL)
+			endif
+		if((jf(2).and.(.not.jf(23))).or.(jf(2).and.jf(48))) then
+       		call igrf_sub(lati,longi,ryear,600.0,fl,icode,dipl,babs)
+        	if(fl.gt.10.) fl=10.
       		invdip_old=INVDPC_OLD(FL,DIMO,BABS,DIPL)
 			endif
 
@@ -1769,10 +1793,6 @@ c        hf2=hef
          	goto 3885
          	endif
         CALL REGFA1(hf1,HF2,XF1,XF2,0.001,NMES,XE3_1,SCHALT,HST)
-c		if(HST.lt.HEF) then
-c			type*,hst,hef,hme
-c			goto 3885
-c			endif
         if(schalt) goto 3885
         HZ=(HST+HF1)/2.0
         xheit=123.2
@@ -1824,6 +1844,7 @@ C
 
 4933  HTA=60.0
       HEQUI=120.0
+      HTE=3000.0
       IF(NOTEM) GOTO 240
       SEC=hourut*3600.
       CALL APFMSIS(ISDATE,HOURUT,IAPO)
@@ -1851,67 +1872,56 @@ c Te(120km) = Tn(120km)
 
 C Te-MAXIMUM based on JICAMARCA and ARECIBO data 
 
-      HMAXD=60.*EXP(-(MLAT/22.41)**2)+210.
-      HMAXN=150.
-      AHH(2)=HPOL(HOUR,HMAXD,HMAXN,SAX200,SUX200,1.,1.)
-      TMAXD=800.*EXP(-(MLAT/33.)**2)+1500.
-      secni=(24.-longi/15)*3600.
-      CALL GTD7(IYD,SECNI,HMAXN,LATI,LONGI,0.0,F10781OBS,
+        HMAXD=60.*EXP(-(MLAT/22.41)**2)+210.
+        HMAXN=150.
+        AHH(2)=HPOL(HOUR,HMAXD,HMAXN,SAX200,SUX200,1.,1.)
+        TMAXD=800.*EXP(-(MLAT/33.)**2)+1500.
+        secni=(24.-longi/15)*3600.
+        CALL GTD7(IYD,SECNI,HMAXN,LATI,LONGI,0.0,F10781OBS,
      &        F107YOBS,IAPO,0,D_MSIS,T_MSIS)
-      TMAXN=T_MSIS(2)
-      ATE(2)=HPOL(HOUR,TMAXD,TMAXN,SAX200,SUX200,1.,1.)
+        TMAXN=T_MSIS(2)
+        ATE(2)=HPOL(HOUR,TMAXD,TMAXN,SAX200,SUX200,1.,1.)
 
-c Te(300km), Te(400km) from AE-C, Te(1400km), Te(3000km) from 
-c ISIS, Brace and Theis
-
-              DIPLAT=MAGBR
-              CALL TEBA(DIPLAT,HOUR,NSEASN,TEA)
-
-              icd=0              
           if(jf(23)) then
 
-c Te at fixed heights taken from Brace and Theis
-
+c BIL-1985 model:
+c Te(300km), Te(400km) from AE-C, Te(1400km) from ISIS-2, and 
+C Te(3000km) from ISIS-1 (Brace and Theis, 1981)
+              DIPLAT=MAGBR
+              CALL TEBA(DIPLAT,HOUR,NSEASN,TEA)
               AHH(3)=300.
               AHH(4)=400.
               AHH(5)=600.
               AHH(6)=1400.
               AHH(7)=3000.
-              hte=3000
               ATE(3)=TEA(1)
               ATE(4)=TEA(2)
               ATE(6)=TEA(3)
               ATE(7)=TEA(4)
 
 c Te(600km) from AEROS, Spenner and Plugge (1979)
-
               ETT=EXP(-MLAT/11.35)
               TET=2900.-5600.*ETT/((ETT+1)**2.)
               TEN=839.+1161./(1.+EXP(-(ABSMLT-45.)/5.))
               ATE(5)=HPOL(HOUR,TET,TEN,SAX300,SUX300,1.5,1.5)
+
           else
 
-c New model with solar activity effects included (Truhlik et al., 2011)
-c Te at fixed heights 350, 550, 850, 1400, and 2000 km
-
+c TBT-2012 model:
+c Te at fixed heights 350, 550, 850, 1400, and 2000 km with and
+c without solar activity effects included (Truhlik et al., 2012)
               AHH(3)=350.
               AHH(4)=550.
               AHH(5)=850.
               AHH(6)=1400.
               AHH(7)=2000.
-              hte=2500
-c  isa for solar activity correction: isa=0 sol activity corr off
+c isa for solar activity correction: isa=0 sol activity corr off
               isa=0
               if(jf(42)) isa=1
+              call elteik(isa,invdip_old,xmlt,daynr,
+     &              pf107obs,teva,sdteva)
               do ijk=3,7
-c                 call igrf_sub(lati,longi,ryear,ahh(ijk),
-c     &                xl,icode,dipl,babs)
-c                 if(xl.gt.10.) xl=10.                 
-c                 call elteik(1,isa,invdip,xl6,dimo,babs6,dipl6,
-c     &              xmlt,ahh(ijk),daynr,pf107,teh2,sdte)
-                 call elteik(isa,invdip_old,xmlt,ahh(ijk),daynr,
-     &              pf107obs,teh2,sdte)
-                 ate(ijk)=teh2
+                 ate(ijk)=teva(ijk-2)
                  enddo
           endif
 
@@ -1949,54 +1959,76 @@ C
 C------------ CALCULATION OF ION TEMPERATURE PARAMETERS--------
 C
 
+c Starting height is 200km. Below 200km Ti=Tn
+      	HS=200.
+      	XSM(1)=HS
+      	CALL GTD7(IYD,SEC,HS,LATI,LONGI,HOUR,F10781OBS,F107YOBS,
+     &        IAPO,0,D_MSIS,T_MSIS)
+      	TNHS=T_MSIS(2)
+
+      if(jf(48)) then
+c Tru-2021 model:
+c with solar activity dependence included us 0 instead of 1 to
+c exclude
+		xsm(1)=200
+		xsm(2)=350
+		xsm(3)=430
+		xsm(4)=600
+		xsm(5)=850
+      	CALL IONTIF(1,INVDIP_OLD,XMLT,DAYNR,PF107OBS,TIV,SIGTV)      
+        mm(1)=(TIV(1)-TNHS)/(xsm(2)-xsm(1))
+        mm(2)=(TIV(2)-TIV(1))/(xsm(3)-xsm(2))
+        mm(3)=(TIV(3)-TIV(2))/(xsm(4)-xsm(3))
+        mm(4)=(TIV(4)-TIV(3))/(xsm(5)-xsm(4))
+        MXSM=3
+      else
+c Bil-1981 model: 
 c Ti(430km) during daytime from AEROS data
+      	XSM1=430.0
+      	XSM(2)=XSM1
+      	Z1=EXP(-0.09*MLAT)
+      	Z2=Z1+1.
+      	TID1 = 1240.0 - 1400.0 * Z1 / ( Z2 * Z2 )
 
-      XSM1=430.0
-      XSM(1)=XSM1
-      Z1=EXP(-0.09*MLAT)
-      Z2=Z1+1.
-      TID1 = 1240.0 - 1400.0 * Z1 / ( Z2 * Z2 )
-      MM(2)=HPOL(HOUR,3.0,0.0,SAX300,SUX300,1.,1.)
-
-c Ti(430km) duirng nighttime from AEROS data
-
-      Z1=ABSMLT
-      Z2=Z1*(0.47+Z1*0.024)*UMR
-      Z3=COS(Z2)
-      TIN1=1200.0-300.0*SIGN(1.0,Z3)*SQRT(ABS(Z3))
+c Ti(430km) during nighttime from AEROS data
+      	Z1=ABSMLT
+      	Z2=Z1*(0.47+Z1*0.024)*UMR
+      	Z3=COS(Z2)
+      	TIN1=1200.0-300.0*SIGN(1.0,Z3)*SQRT(ABS(Z3))
 
 c Ti(430km) for specified time using HPOL
-
-      TI1=TIN1  
-      IF(TID1.GT.TIN1) TI1=HPOL(HOUR,TID1,TIN1,SAX300,SUX300,1.,1.)
-
-c Tn < Ti < Te enforced
-
-      TEN1=ELTE(XSM1)
-      CALL GTD7(IYD,SECNI,XSM1,LATI,LONGI,0.0,F10781OBS,
+      	TI1=TIN1  
+      	IF(TID1.GT.TIN1) TI1=HPOL(HOUR,TID1,TIN1,SAX300,SUX300,1.,1.)
+      
+c Tn < Ti < Te enforced at 430 km 
+        TEN1=BOOKER1(XSM1,5,ATE1,AHH,STTE,DTE)	
+      	CALL GTD7(IYD,SECNI,XSM1,LATI,LONGI,0.0,F10781OBS,
      &        F107YOBS,IAPO,0,D_MSIS,T_MSIS)
-      TNN1=T_MSIS(2)
-      IF(TEN1.LT.TNN1) TEN1=TNN1
-      IF(TI1.GT.TEN1) TI1=TEN1
-      IF(TI1.LT.TNN1) TI1=TNN1
+      	TNN1=T_MSIS(2)
+      	IF(TEN1.LT.TNN1) TEN1=TNN1
+      	IF(TI1.GT.TEN1) TI1=TEN1
+      	IF(TI1.LT.TNN1) TI1=TNN1
 
-c Tangent on Tn profile determines HS
-
-      HS=200.
-      CALL GTD7(IYD,SEC,HS,LATI,LONGI,HOUR,F10781OBS,F107YOBS,
+c First segment is from 200km to 430km
+      	HS=200.
+      	XSM(1)=HS
+      	CALL GTD7(IYD,SEC,HS,LATI,LONGI,HOUR,F10781OBS,F107YOBS,
      &        IAPO,0,D_MSIS,T_MSIS)
-      TNHS=T_MSIS(2)
-      MM(1)=(TI1-TNHS)/(XSM1-HS)
-      MXSM=2
+      	TNHS=T_MSIS(2)
+      	MM(1)=(TI1-TNHS)/(XSM1-HS)
+      	MXSM=1
+
+c Gradient for second segment 
+      	MM(2)=HPOL(HOUR,3.0,0.0,SAX300,SUX300,1.,1.)
+      	XSM(3)=HTE
 
 c XTETI is altitude where Te=Ti
-
 2391    XTTS=500.
         X=500.
 2390    X=X+XTTS
         IF(X.GE.AHH(7)) GOTO 240
-        TEX=ELTE(X)
-        TIX=TI(X)
+        TEX=BOOKER1(X,5,ATE1,AHH,STTE,DTE)	
+        TIX=BOOKER1(X,MXSM,TNHS,XSM,MM,DTI)
         IF(TIX.LT.TEX) GOTO 2390
         X=X-XTTS
         XTTS=XTTS/10.
@@ -2005,23 +2037,22 @@ c XTETI is altitude where Te=Ti
 
 c Ti=Te above XTETI 
 
-        MXSM=3
+        MXSM=2
         MM(3)=STTE(6)
-        XSM(2)=XTETI
+        XSM(3)=XTETI
         IF(XTETI.GT.AHH(6)) GOTO 240
-        MXSM=4
+        MXSM=3
         MM(3)=STTE(5)
         MM(4)=STTE(6)
-        XSM(3)=AHH(6)
+        XSM(4)=AHH(6)
         IF(XTETI.GT.AHH(5)) GOTO 240
-        MXSM=5
-        DTI(1)=5.
-        DTI(2)=5.
+        MXSM=4
         MM(3)=STTE(4)
         MM(4)=STTE(5)
         MM(5)=STTE(6)
-        XSM(3)=AHH(5)
-        XSM(4)=AHH(6)
+        XSM(4)=AHH(5)
+        XSM(5)=AHH(6)
+      endif
 
 C
 C CALCULATION OF ION DENSITY PARAMETER..................
@@ -2100,15 +2131,15 @@ c
      &        F107YOBS,IAPO,0,D_MSIS,T_MSIS)
       TNH=T_MSIS(2)
       TIH=TNH
-      if(HEIGHT.GT.HS) then
-      	TIH=TI(HEIGHT)
-      	if(TIH.lt.TNH) TIH=TNH
-      	endif
+      if(HEIGHT.GT.HS) TIH=BOOKER1(HEIGHT,MXSM,TNHS,XSM,MM,DTI)
+      
       TEH=TNH
-      if(HEIGHT.GT.HEQUI) then 
-         TEH=ELTE(HEIGHT)
-      	 if(TEH.lt.TIH) TEH=TIH
-      	 endif
+      if(HEIGHT.GT.HEQUI) TEH=BOOKER1(HEIGHT,5,ATE1,AHH,STTE,DTE)
+
+c Tn < Ti < Te enforced  
+      if(TIH.lt.TNH) TIH=TNH
+	  if(TEH.lt.TNH) TEH=TNH
+	  if(TIH.gt.TEH) TIH=TEH
 
         OUTF(2,kk)=TNH
         OUTF(3,kk)=TIH
@@ -2231,9 +2262,13 @@ c
 
       drift=-1.
       if(jf(21).and.abs(magbr).lt.25.0) then
-            param(1)=daynr
-            param(2)=f107d
-            call vdrift(hour,longi,param,drift)
+c            param(1)=daynr
+c            param(2)=f107d
+c            call vdrift(hour,longi,param,drift)
+      CALL vfjmodelrocstart(FJM)
+      CALL vfjmodelrocinit(F107D,DAYNR,JSEA,JF107)
+      CALL vfjmodelroc(FJM,HOUR,LONGI,JSEA,JF107,DRIFT)
+
             endif
 c
 c spread-F occurrence probability

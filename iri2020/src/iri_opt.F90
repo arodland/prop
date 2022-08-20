@@ -14,7 +14,7 @@ real:: sfi, ssn, ig
 #ifndef BIN_DIR
 #define BIN_DIR '.'
 #endif
-character(*), parameter :: datadir = BIN_DIR // '/iri2016/data'
+character(*), parameter :: datadir = BIN_DIR // '/iri2020/data'
 character(256) :: datadir1
 common /folders/ datadir1
 
