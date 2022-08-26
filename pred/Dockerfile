@@ -21,4 +21,4 @@ COPY app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 WORKDIR /app
-CMD uwsgi --http :${PRED_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi server:app --processes 4
+CMD uwsgi --http :${PRED_PORT} --master --need-app --single-interpreter --enable-threads --max-requests 100 --http-timeout 300 --wsgi server:app --processes 4 --die-on-term
