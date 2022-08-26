@@ -64,7 +64,7 @@ with con.cursor() as cur:
     cur.execute("select max(m.time) from measurement m where m.source='giro'")
     (lasttime,) = cur.fetchone()
     intervals = round((dt.datetime.now() - lasttime) / dt.timedelta(minutes = 15))
-    maxage = intervals * 15 + 5
+    maxage = intervals * 15 + 20
 
 # Create the queue and thread pool.
 q = Queue()
