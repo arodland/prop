@@ -23,4 +23,6 @@ COPY app /app
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 WORKDIR /app
 ENV HOME=/
+ENV OPENBLAS_NUM_THREADS=4
+ENV OMP_NUM_THREADS=4
 CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 32 --die-on-term

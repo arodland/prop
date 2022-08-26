@@ -19,6 +19,9 @@ RUN pip install -r requirements.txt
 
 COPY app /app
 
+ENV OPENBLAS_NUM_THREADS=4
+ENV OMP_NUM_THREADS=4
+
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 WORKDIR /app
 CMD uwsgi --http :${PRED_PORT} --master --need-app --single-interpreter --enable-threads --max-requests 100 --http-timeout 300 --wsgi server:app --processes 4 --die-on-term
