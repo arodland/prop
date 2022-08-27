@@ -1,4 +1,4 @@
-FROM iri2016 AS essn
+FROM iri2020 AS essn
 RUN apt-get update && apt-get install -y python3 python3-dateutil python3-xarray python3-sklearn python3-pip python3-sympy python3-pybind11 cython3 git dumb-init cmake
 WORKDIR /src
 COPY requirements.txt ./

@@ -102,6 +102,3 @@ def generate():
     con.close()
 
     return make_response("OK\n")
-
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('IRIMAP_PORT')), threaded=False, processes=16)

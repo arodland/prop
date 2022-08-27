@@ -157,6 +157,3 @@ def generate():
 
 
     return make_response("OK")
-
-if __name__ == "__main__":
-    app.run(debug=False,host='0.0.0.0', port=int(os.getenv('PRED_PORT')), threaded=False, processes=4)

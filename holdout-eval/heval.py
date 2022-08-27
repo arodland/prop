@@ -32,7 +32,7 @@ def get_holdouts(run_id):
 def get_iri(holdout, tm):
 
     iri = subprocess.Popen(
-            ['/build/iri2016_driver', str(tm.year), str(tm.month), str(tm.day), str(tm.hour), str(tm.minute), str(tm.second), str(holdout['station']['latitude']), str(holdout['station']['longitude']), '0', '0', '0'],
+            ['/build/iri2020_driver', str(tm.year), str(tm.month), str(tm.day), str(tm.hour), str(tm.minute), str(tm.second), str(holdout['station']['latitude']), str(holdout['station']['longitude']), '0', '0', '0'],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             universal_newlines=True,
@@ -150,5 +150,3 @@ def do_eval_run():
     match_pred_measurements(con)
     return jsonify(heval)
 
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0', port=int(os.getenv('HEVAL_PORT')))

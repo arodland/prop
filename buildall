@@ -2,7 +2,7 @@
 
 set -e
 
-podman -r build --tag iri2016 iri2016
+podman -r build --tag iri2020 iri2020
 
 podman -r build --tag prop-api api
 podman -r build --tag prop-assimilate assimilate

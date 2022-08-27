@@ -1,4 +1,4 @@
-FROM iri2016 AS essn
+FROM iri2020 AS essn
 RUN apt-get update && apt-get install -y python3 python3-dateutil python3-pip python3-scipy python3-numpy git dumb-init
 WORKDIR /src
 COPY requirements.txt ./

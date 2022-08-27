@@ -334,15 +334,15 @@ sub queue_job {
   });
 
   my @experiments = (
-    sub {
-      one_run($run_time, $holdout_meas, '2022-08-kernel-old', {
-      });
-    },
-    sub {
-      one_run($run_time, $holdout_meas, '2022-08-kernel-new', {
-          new_kernel => 1,
-      });
-    },
+    #    sub {
+    #      one_run($run_time, $holdout_meas, '2022-08-kernel-old', {
+    #      });
+    #    },
+    #    sub {
+    #      one_run($run_time, $holdout_meas, '2022-08-kernel-new', {
+    #          new_kernel => 1,
+    #      });
+    #    },
   );
 
   $_->() for shuffle @experiments;

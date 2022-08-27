@@ -9,7 +9,7 @@ RUN conda create -y -q -n my_cartopy_env -c conda-forge python=3.7 statsmodels p
 ENV PATH /opt/conda/envs/my_cartopy_env/bin:$PATH
 ENV PYTHON_EGG_CACHE=/tmp/egg-cache
 
-COPY --from=iri2016 /build/ /build/
+COPY --from=iri2020 /build/ /build/
 
 RUN echo "conda activate my_cartopy_env" >> ~/.bashrc
 
