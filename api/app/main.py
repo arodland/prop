@@ -287,7 +287,7 @@ def essnjson():
     if ret is None:
         with db.engine.connect() as conn:
             res = conn.execute(
-                text("select extract(epoch from e.time) as time, e.series, e.ssn, e.sfi, e.err from essn e join runs r on e.run_id=r.id where e.time >= now() - :days * interval '1 day' and r.experiment is null order by time asc").\
+                text("select extract(epoch from e.time) as time, e.series, e.ssn, e.sfi, e.err from essn e left join runs r on e.run_id=r.id where e.time >= now() - :days * interval '1 day' and r.experiment is null order by time asc").\
                     bindparams(days=days).\
                     columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
             )
