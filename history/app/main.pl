@@ -56,7 +56,6 @@ sub dispatch_request {
           $station->{$_} = 0 + $station->{$_} for qw(latitude longitude);
 
           my $rows = $sth2->execute($station->{id}, $start_time);
-          next if $rows == 0;
 
           $writer->write(",\n") unless $first_station;
           $first_station = 0;

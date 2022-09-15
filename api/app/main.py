@@ -359,7 +359,7 @@ def assimilated():
         
 def get_latest_run(experiment=None):
     with db.engine.connect() as conn:
-        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from ?) order by ts asc", (experiment,))
+        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from %s) order by ts asc", (experiment,))
         rows = list(res.fetchall())
 
         if len(rows) == 0:

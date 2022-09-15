@@ -79,6 +79,7 @@ def nF2MUF(iono, dist, mode, info, clip_dmax=True):
 def rec_533(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
     ## Geodesy setup
     one_from = np.ndim(from_lat) == 0 and np.ndim(from_lon) == 0
+    to_lat, to_lon = np.atleast_1d(to_lat, to_lon)
 
     dist, bearing = geodesy.distance_bearing(from_lat, from_lon, to_lat, to_lon)
     reverse_bearing = (bearing + np.pi) % (2 * np.pi)

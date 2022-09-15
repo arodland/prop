@@ -137,16 +137,16 @@ def ptp_json():
         if path in ('short', 'both'):
             rt_sp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon)
             keys = rt_sp.keys() if debug else ['muf', 'luf']
-            out['metrics'].update({ k+'_sp': rt_sp[k].tolist() for k in keys })
+            out['metrics'].update({ k+'_sp': rt_sp[k].tolist()[0] for k in keys })
 
         if path in ('long', 'both'):
-            rt_lp = raytrace.mof_lof(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+            rt_lp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
             keys = rt_lp.keys() if debug else ['muf', 'luf']
-            out['metrics'].update({ k+'_lp': rt_lp[k].tolist() for k in keys })
+            out['metrics'].update({ k+'_lp': rt_lp[k].tolist()[0] for k in keys })
 
         if path == 'both' and debug:
             muf_ratio = np.maximum(rt_sp['muf'], rt_lp['muf']) / np.minimum(rt_sp['luf'], rt_lp['luf'])
-            out['metrics']['muf_ratio'] = muf_ratio.tolist()
+            out['metrics']['muf_ratio'] = muf_ratio.tolist()[0]
 
         ret.append(out)
 

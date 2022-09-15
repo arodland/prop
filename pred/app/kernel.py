@@ -49,3 +49,5 @@ for param in delta_mufd_kernel.get_parameter_names():
     if param.endswith(':log_period'):
         delta_mufd_kernel.freeze_parameter(param)
 
+# delta_fof2_kernel = 0.7512**2 * ExpSquaredKernel(10773) * ExpSine2Kernel(gamma=12.333, log_period=0.0) + 0.020**2 * ExpSquaredKernel(103.8) + 0.752**2 * RationalQuadraticKernel(metric=0.7, log_alpha=-5) + ConstantKernel(np.log(0.000470))
+
