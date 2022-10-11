@@ -15,5 +15,4 @@ podman -r build --tag prop-scheduler scheduler
 podman -r build --tag prop-storm storm
 podman -r build --tag prop-raytrace raytrace
 
-podman -r build --tag noaa-loader noaa-loader
-podman -r build --tag giro-loader giro-loader
+podman -r build --tag prop-loader loader

@@ -8,8 +8,7 @@ COPY cpanfile .
 RUN cpm install -g
 
 COPY ./app /app
-COPY ./bin /noaa-loader
+COPY ./noaa-loader /noaa-loader
 COPY ./lib /perl5lib
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["/noaa-loader/listen"]
