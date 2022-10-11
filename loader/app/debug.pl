@@ -2,10 +2,10 @@
 use strict;
 use warnings;
 
-use Data::SAO4;
+use Data::SAO;
 use Data::Dumper;
 
-my $sao = Data::SAO4->new(filename => $ARGV[0]);
+my $sao = Data::SAO->new(filename => $ARGV[0]);
 
 print "Station code: ", $sao->station_code, "\n";
 print "Name: ", $sao->name, "\n";
@@ -42,4 +42,4 @@ for my $key (sort keys %map) {
     print "$key: $val ";
   }
 }
-print "\n";
+print "\n\n";

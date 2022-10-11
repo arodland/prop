@@ -15,5 +15,5 @@ cd /noaa-data/unzipped
 for x in *.SAO ; do
         MONTH="$(date +%Y-%m)"
         mkdir -p "/noaa-data/loaded/$MONTH" "/noaa-data/load-error/$MONTH"
-        perl -I/perl5lib /app/load.pl "$x" && mv "$x" "/noaa-data/loaded/$MONTH" || mv "$x" "/noaa-data/load-error/$MONTH"
+        perl -I/perl5lib /app/load.pl "$x" noaa && mv "$x" "/noaa-data/loaded/$MONTH" || mv "$x" "/noaa-data/load-error/$MONTH"
 done
