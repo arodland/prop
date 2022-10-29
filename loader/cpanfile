@@ -3,3 +3,4 @@ requires 'DBI';
 requires 'Fortran::Format';
 requires 'Moo';
 requires 'Net::Statsd::Client';
+requires 'XML::Twig';

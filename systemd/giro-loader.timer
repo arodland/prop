@@ -1,0 +1,9 @@
+[Unit]
+Description=giro-loader every 5m
+
+[Timer]
+OnCalendar=*-*-* *:3/5:00
+Persistent=true
+
+[Install]
+WantedBy=kc2gprop.target

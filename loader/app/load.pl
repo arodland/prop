@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 
-use Data::SAO4;
+use Data::SAO;
 use Data::Dumper;
 use DBI;
 use Time::HiRes 'time';
@@ -23,7 +23,8 @@ my $statsd = Net::Statsd::Client->new(
 
 warn "Input file: ", $ARGV[0], "\n";
 
-my $sao = Data::SAO4->new(filename => $ARGV[0]);
+my $sao = Data::SAO->new(filename => $ARGV[0]);
+my $source = $ARGV[1] || 'noaa';
 
 my $code = $sao->station_code;
 my $name = $sao->name || $code;
@@ -58,7 +59,7 @@ if ($ts->{epoch} > time() + 3600) {
 }
 
 my @cols = ('station_id', 'time', 'cs', 'source');
-my @vals = ($station_id, $time, 0+$sao->confidence, 'noaa');
+my @vals = ($station_id, $time, 0+$sao->confidence, $source);
 my @placeholders = ('?', '?', '?', '?');
 
 my %map = (
@@ -98,13 +99,20 @@ if (defined $characteristics->{'foF2'} && defined $characteristics->{'M(D)'} && 
   $characteristics->{'MUF(D)'} = $characteristics->{'foF2'} * $characteristics->{'M(D)'};
 }
 
+my $chars = 0;
 for my $key (sort keys %map) {
   if (defined(my $val = $characteristics->{$map{$key}})) {
     next if $val == 0;
     push @cols, $key;
     push @vals, $val;
     push @placeholders, '?';
+    $chars++;
   }
+}
+
+if ($chars == 0) {
+    debug "Nothing to load.";
+    exit 0;
 }
 
 my $sql = "INSERT INTO measurement (". join(", ", @cols) .") VALUES (". join(", ", @placeholders) .")";
@@ -113,9 +121,11 @@ $dbh->do($sql, undef, @vals);
 
 my $latency = sprintf "%.2f", (time() - $ts->{epoch});
 
-$statsd->increment('prop.noaa_loader.loaded.total');
-$statsd->increment("prop.noaa_loader.loaded.station.$code");
-$statsd->timing_ms("prop.noaa_loader.latency.overall", $latency * 1000);
-$statsd->timing_ms("prop.noaa_loader.latency.station.$code", $latency * 1000);
+$statsd->increment('prop.loader.loaded.total');
+$statsd->increment("prop.loader.loaded.station.$code");
+$statsd->increment("prop.loader.loaded.source.$source");
+$statsd->timing_ms("prop.loader.latency.overall", $latency * 1000);
+$statsd->timing_ms("prop.loader.latency.source.$source", $latency * 1000);
+$statsd->timing_ms("prop.loader.latency.station.$code", $latency * 1000);
 
 debug "Latency: $latency";
