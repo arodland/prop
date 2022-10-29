@@ -80,7 +80,9 @@ sub parse {
 
     $self->_set_confidence( $self->compute_confidence($sao_record) );
 
-    my @characteristics = $sao_record->first_child('CharacteristicList')->children;
+    my $chars = $sao_record->first_child('CharacteristicList');
+    my @characteristics = $chars ? $chars->children : ();
+
     my %char_out;
     for my $char (@characteristics) {
         if ($char->tag eq 'URSI') { # URSI standard characteristics, appendix C

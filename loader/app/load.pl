@@ -99,13 +99,20 @@ if (defined $characteristics->{'foF2'} && defined $characteristics->{'M(D)'} && 
   $characteristics->{'MUF(D)'} = $characteristics->{'foF2'} * $characteristics->{'M(D)'};
 }
 
+my $chars = 0;
 for my $key (sort keys %map) {
   if (defined(my $val = $characteristics->{$map{$key}})) {
     next if $val == 0;
     push @cols, $key;
     push @vals, $val;
     push @placeholders, '?';
+    $chars++;
   }
+}
+
+if ($chars == 0) {
+    debug "Nothing to load.";
+    exit 0;
 }
 
 my $sql = "INSERT INTO measurement (". join(", ", @cols) .") VALUES (". join(", ", @placeholders) .")";
