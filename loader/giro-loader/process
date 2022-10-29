@@ -1,0 +1,13 @@
+#!/bin/bash
+
+shopt -s nullglob
+
+cd /giro-data/in
+
+lftp -c 'open -u kc2g --env-password ftp://giro.uml.edu ; set ftp:sync-mode false ; mirror --Remove-source-files --parallel=4 . .'
+
+find . -type f | while read x ; do
+    MONTH="$(date +%Y-%m)"
+    mkdir -p "/giro-data/loaded/$MONTH" "/giro-data/load-error/$MONTH"
+    perl -I/perl5lib /app/load.pl "$x" giro && mv "$x" "/giro-data/loaded/$MONTH" || mv "$x" "/giro-data/load-error/$MONTH"
+done
