@@ -141,7 +141,7 @@ sub one_run {
   my @holdout_ids = map $_->{holdout}, @$holdouts;
   my @holdout_times = map $_->{ts}, @$holdouts;
 
-  my @stations = app->pg->db->query('select id from station')->hashes->map(sub { $_->{id} })->each;
+  my @stations = app->pg->db->query("select distinct(station_id) from measurement where time > now() - interval '14 day' and time <= now()")->hashes->map(sub { $_->{station_id} })->each;
 
   my $essn_24h = app->minion->enqueue('essn',
     [
