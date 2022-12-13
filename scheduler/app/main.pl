@@ -141,6 +141,8 @@ sub one_run {
   my @holdout_ids = map $_->{holdout}, @$holdouts;
   my @holdout_times = map $_->{ts}, @$holdouts;
 
+  my @stations = app->pg->db->query('select id from station')->hashes->map(sub { $_->{id} })->each;
+
   my $essn_24h = app->minion->enqueue('essn',
     [
       series => '24h',
@@ -172,19 +174,24 @@ sub one_run {
     push @pred_times, $holdout_time unless grep { $_ == $holdout_time} @pred_times;
   }
 
-  my $pred = app->minion->enqueue('pred',
-    [
-      run_id => $run_id,
-      target => [ @pred_times ],
-      ($jobs->{new_kernel} ? (kernels => 'new') : ()),
-    ],
-    {
-      parents => [ $essn_24h ],
-      attempts => 2,
-      queue => 'pred',
-      expire => 18 * 60,
-    },
-  );
+  my @preds;
+  for my $station (@stations) {
+    my $pred = app->minion->enqueue('pred',
+      [
+        run_id => $run_id,
+        target => [ @pred_times ],
+        station => $station,
+        ($jobs->{new_kernel} ? (kernels => 'new') : ()),
+      ],
+      {
+        parents => [ $essn_24h ],
+        attempts => 2,
+        queue => 'pred',
+        expire => 18 * 60,
+      },
+    );
+    push @preds, $pred;
+  }
 
   my @html_deps;
   my @holdout_deps;
@@ -209,7 +216,7 @@ sub one_run {
         holdout => ($jobs->{holdout_all_timestep} ? 1 : 0),
       ],
       {
-        parents => [ $pred, $irimap ],
+        parents => [ @preds, $irimap ],
         attempts => 2,
         expire => 18 * 60,
         queue => 'assimilate',
@@ -284,7 +291,7 @@ sub one_run {
         holdout => 1,
       ],
       {
-        parents => [ $pred, $irimap ],
+        parents => [ @preds, $irimap ],
         attempts => 2,
         expire => 18 * 60,
         queue => 'assimilate',

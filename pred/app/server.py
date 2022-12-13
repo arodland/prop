@@ -59,6 +59,8 @@ def generate():
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg2.connect(dsn)
 
+    station = request.form.get('station', None)
+
     times = [ dt.datetime.fromtimestamp(float(ts)) for ts in request.form.getlist('target') ]
     if len(times) == 0:
         times = [ dt.datetime.utcnow() ]
@@ -66,7 +68,8 @@ def generate():
 
     run_id = int(request.form.get('run_id', -1))
 
-    data = get_data('http://localhost:%s/history_v2.json?days=14&%s' % (os.getenv('HISTORY_PORT'), '&'.join(['metrics=' + x['name'] for x in metrics])))
+    station_q = '' if station is None else 'station=%d&' % int(station)
+    data = get_data('http://localhost:%s/history_v2.json?days=14&%s%s' % (os.getenv('HISTORY_PORT'), station_q, '&'.join(['metrics=' + x['name'] for x in metrics])))
 
     with con.cursor() as cur:
         cur.execute('select ssn from essn where run_id=%s and series=%s order by time desc nulls last limit 1', (run_id, '24h'))
