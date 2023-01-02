@@ -49,9 +49,10 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     dotjson, dot_df = None, None
 
     if dots == 'curr':
-        dotjson = str(dataset['/stationdata/curr'][...])
+        dotjson = (dataset['/stationdata/curr'][...]).item().decode('utf-8')
     elif dots == 'pred':
-        dotjson = str(dataset['/stationdata/pred'][...])
+        dotjson = (dataset['/stationdata/pred'][...]).item().decode('utf-8')
+
 
     if dotjson is not None:
         dot_df = pd.read_json(dotjson)
@@ -59,7 +60,11 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
         plt.draw_dots(dot_df, metric)
 
     if decorations:
-        plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
+        extra = None
+        if '/essn/sfi' in dataset and '/essn/ssn' in dataset:
+            extra = 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...])
+
+        plt.draw_title(metric, extra)
 
     if 'svg' in file_formats:
         plt.write(out_path + '.svg')
