@@ -192,12 +192,14 @@ def rendersvg():
 @app.route('/renderhtml', methods=['POST'])
 def renderhtml():
     run_id = int(request.form['run_id'])
+    run_name = request.form.get('run_name', 'current')
+
     try:
-        os.unlink('/output/current')
+        os.unlink('/output/' + run_name)
     except:
         pass
 
-    os.symlink('%d' % (run_id), '/output/current')
+    os.symlink('%d' % (run_id), '/output/' + run_name)
 
     return make_response("OK\n")
 

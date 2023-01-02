@@ -259,6 +259,7 @@ sub one_run {
     my $renderhtml = app->minion->enqueue('renderhtml',
       [
         run_id => $run_id,
+        ($experiment ? (run_name => $experiment) : ()),
       ],
       {
         parents => [ @html_deps ],
