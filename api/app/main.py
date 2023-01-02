@@ -5,11 +5,15 @@ from marshmallow import Schema, fields
 import json
 import os
 import datetime as dt
+import dateutil
 from sqlalchemy import and_, text
 import urllib.request
 import maidenhead
 from pymemcache.client.base import Client as MemcacheClient
 import re
+import logging
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -91,18 +95,18 @@ class Prediction(db.Model):
 class Holdout(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     run_id = db.Column(db.Integer, db.ForeignKey('runs.id'))
-    run = db.relationship('Runs', foreign_keys=[run_id], lazy='joined')
+    run = db.relationship('Runs', foreign_keys=[run_id], lazy='joined', innerjoin=True)
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
-    station = db.relationship('Station', foreign_keys=[station_id])
+    station = db.relationship('Station', foreign_keys=[station_id], lazy='joined', innerjoin=True)
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined', innerjoin=True)
     def __repr__(self):
         return '<Holdout %r: %r %r %r>' % (self.id, self.run_id, self.station_id, self.measurement_id)
 
 class HoldoutEval(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined', innerjoin=True)
     model = db.Column(db.Text)
     fof2 = db.Column(db.Numeric(asdecimal=False))
     mufd = db.Column(db.Numeric(asdecimal=False))
@@ -111,7 +115,7 @@ class HoldoutEval(db.Model):
 class PredEval(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     holdout_id = db.Column(db.Integer, db.ForeignKey('holdout.id'))
-    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined')
+    holdout = db.relationship('Holdout', foreign_keys=[holdout_id], lazy='joined', innerjoin=True)
     model = db.Column(db.Text)
     time = db.Column(db.DateTime)
     hours_ahead = db.Column(db.Integer)
@@ -119,7 +123,7 @@ class PredEval(db.Model):
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
-    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined')
+    measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined', innerjoin=True)
 
 #Generate marshmallow Schemas from your models using ModelSchema
 
@@ -194,19 +198,28 @@ pred_evals_schema = PredEvalSchema(many=True)
 @app.route("/stations.json" , methods=['GET'])
 def stationsjson():
     maxage = request.args.get('maxage', None)
+    source = request.args.get('source', None)
 
-    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage)
+    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage) + ('<none>' if source is None else source)
     ret = memcache.get(cachekey)
 
     if ret is None:
-        if maxage is None:
-            qry = db.session.query(Measurement).from_statement(
-                text("select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc"))
-        else:
-            qry = db.session.query(Measurement).from_statement(
-                text("select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc")).params(
-                maxage=int(maxage),
-            )
+        sql = "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where 1=1"
+        bp = {}
+
+        if maxage is not None:
+            sql = sql + " and m1.time >= now() - :maxage * interval '1 second'"
+            bp['maxage'] = int(maxage)
+
+        if source is not None:
+            sql = sql + " and m1.source = :source"
+            bp['source'] = source
+
+        sql = sql + " order by station_id asc"
+
+        qry = db.session.query(Measurement).from_statement(text(sql))
+        if len(bp) > 0:
+            qry = qry.params(**bp)
 
         db.session.close()
         
@@ -373,6 +386,34 @@ def assimilated():
 
     return Response(ret, mimetype='application/x-hdf5')
         
+@app.route("/ipe.h5", methods=['GET'])
+def ipe():
+    run_id = request.args.get('run_id', None)
+    ts = request.args.get('ts', None)
+
+    cachekey = 'api;ipe.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    ret = memcache.get(cachekey)
+
+    if ret is None:
+        with db.engine.connect() as conn:
+            if run_id is not None and ts is not None:
+                ts = dt.datetime.fromtimestamp(float(ts))
+                res = conn.execute("select dataset from ipemap where run_id=%s and time=%s",
+                    (run_id, ts),
+                )
+            else:
+                res = conn.execute("select dataset from ipemap order by run_id desc, time asc limit 1")
+
+            rows = list(res.fetchall())
+
+            if len(rows) == 0:
+                return make_response('Not Found', 404)
+
+            ret = rows[0]['dataset'].tobytes()
+            memcache.set(cachekey, ret, 3600)
+
+    return Response(ret, mimetype='application/x-hdf5')
+        
 def get_latest_run(experiment=None):
     with db.engine.connect() as conn:
         res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from %s) order by ts asc", (experiment,))
@@ -486,6 +527,7 @@ def mof_lof():
     centered = '1' if request.values.get('centered') in ['true', '1'] else '0'
     warc = '1' if request.values.get('warc', '1') in ['true', '1'] else '0'
     res = float(request.values.get('res', '2'))
+    ipe = request.values.get('ipe', '0')
 
     lat, lon = maidenhead_to_latlon(grid)
 
@@ -498,7 +540,7 @@ def mof_lof():
         run_id = int(run_id)
         ts = int(ts)
 
-    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f&centered=%s&warc=%s&res=%f" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon, centered, warc, res)
+    url = "http://localhost:%s/moflof.svg?run_id=%d&ts=%d&metric=%s&lat=%f&lon=%f&centered=%s&warc=%s&res=%f&ipe=%s" % (os.getenv('RENDERER_PORT'), run_id, ts, metric, lat, lon, centered, warc, res, ipe)
     with urllib.request.urlopen(url) as res:
         content = res.read()
         res = make_response(content)
@@ -577,7 +619,14 @@ def post_holdout():
 @app.route("/holdout_eval", methods=['GET'])
 def get_holdout_eval():
     experiment = request.args.get('experiment', 'crossval_feb_2022')
-    qry = db.session.query(HoldoutEval).join(Holdout).join(Runs).filter_by(experiment=experiment)
+    qry = db.session.query(HoldoutEval).join(Holdout)
+    since = request.args.get('since', None)
+    if since is not None:
+        ts = dateutil.parser.parse(since)
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+        qry = qry.filter(Measurement.time >= ts)
+    qry = qry.join(Runs).filter_by(experiment=experiment)
+    print(qry.statement.compile())
     dump = holdout_evals_schema.dump(qry)
 
     modelmap = {
@@ -609,6 +658,13 @@ def get_holdout_eval():
 def get_pred_eval():
     experiment = request.args.get('experiment', 'pred_jun_2022')
     qry = db.session.query(PredEval).join(Holdout).join(Runs).filter_by(experiment=experiment)
+
+    since = request.args.get('since', None)
+    if since is not None:
+        ts = dateutil.parser.parse(since)
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+        qry = qry.filter(Measurement.time >= ts)
+
     dump = pred_evals_schema.dump(qry)
 
     modelmap = {

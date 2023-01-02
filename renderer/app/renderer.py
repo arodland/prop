@@ -180,7 +180,13 @@ def rendersvg():
     pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
     out_path = '%s/%s-%s-%s' % (job_path, metric, format, name)
 
-    h5 = get_dataset('http://localhost:%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
+    if metric.endswith('_ipe'):
+        dataset = 'ipe'
+        metric = metric[:len(metric)-4]
+    else:
+        dataset = 'assimilated'
+
+    h5 = get_dataset('http://localhost:%s/%s.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), dataset, run_id, ts))
 
     draw_map(
         out_path = out_path,
@@ -218,9 +224,10 @@ def moflof():
     centered = request.values.get('centered') in ('true', '1')
     warc = request.values.get('warc') in ('true', '1', None)
     res = float(request.values.get('res', '2'))
+    ipe = request.values.get('ipe', '0')
 
     if metric.startswith('muf_') or metric.startswith('luf_') or metric=='ratio':
-        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f&ipe=%s' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res, ipe))
     else:
         h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
 

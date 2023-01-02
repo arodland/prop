@@ -38,6 +38,7 @@ plugin 'Minion::Statsd';
 plugin 'Task::eSSN';
 plugin 'Task::Pred';
 plugin 'Task::IRIMap';
+plugin 'Task::IPE';
 plugin 'Task::Assimilate';
 plugin 'Task::BandQuality';
 plugin 'Task::Render';
@@ -210,14 +211,50 @@ sub one_run {
         expire => 18 * 60,
       },
     );
+
+    my $ipe;
+    if ($jobs->{ipe}) {
+      $ipe = app->minion->enqueue('ipe',
+        [
+          run_id => $run_id,
+          target => $render->{target_time},
+        ],
+        {
+          attempts => 2,
+        },
+      );
+      if (0 && $jobs->{make_maps}) {
+        for my $metric (qw(mufd fof2)) {
+          my $map = app->minion->enqueue('rendersvg',
+            [
+              run_id => $run_id,
+              target => $render->{target_time},
+              metric => "${metric}_ipe",
+              name   => $render->{name},
+              format => 'normal',
+              dots   => 'none',
+              file_format => ['svg'],
+            ],
+            {
+              parents => [ $ipe ],
+              attempts => 2,
+              expire => 18 * 60,
+            }
+          );
+          push @html_deps, $map;
+        }
+      }
+    }
+
     my $assimilate = app->minion->enqueue('assimilate',
       [
         run_id => $run_id,
         target => $render->{target_time},
         holdout => ($jobs->{holdout_all_timestep} ? 1 : 0),
+        ($jobs->{basemap_type} ? (basemap => $jobs->{basemap_type}) : ()),
       ],
       {
-        parents => [ @preds, $irimap ],
+        parents => [ @preds, $irimap, ($jobs->{ipe} ? $ipe : ()) ],
         attempts => 2,
         expire => 18 * 60,
         queue => 'assimilate',
@@ -237,6 +274,7 @@ sub one_run {
       push @html_deps, $assimilate;
       push @holdout_deps, $assimilate;
     }
+
 
     # This is inside of the loop because of its dependence on the assimilate
     # for the same target time.
@@ -342,17 +380,30 @@ sub queue_job {
     band_quality => 1,
   });
 
-  my @experiments = (
-    #    sub {
-    #      one_run($run_time, $holdout_meas, '2022-08-kernel-old', {
-    #      });
-    #    },
-    #    sub {
-    #      one_run($run_time, $holdout_meas, '2022-08-kernel-new', {
-    #          new_kernel => 1,
-    #      });
-    #    },
-  );
+#  my @experiments = (
+#    sub {
+#      one_run($run_time, $holdout_meas, '2022-12-ipe-control', {
+#      });
+#    },
+#    sub {
+#      one_run($run_time, $holdout_meas, '2022-12-ipe-logscale-blend', {
+#        ipe => 1,
+#        make_maps => 1,
+#        renderhtml => 1,
+#        basemap_type => 'iri-ipe_logscaled',
+#      });
+#    },
+#    sub {
+#      one_run($run_time, $holdout_meas, '2022-12-ipe-logscale', {
+#        ipe => 1,
+#        make_maps => 1,
+#        renderhtml => 1,
+#        basemap_type => 'ipe_logscaled',
+#      });
+#    },
+#  );
+#
+  my @experiments = ();
 
   $_->() for shuffle @experiments;
 

@@ -45,9 +45,11 @@ class Iono:
             self.fof2 = self.spline('/maps/fof2')
             self.mufd = self.spline('/maps/mufd')
             self.foe = self.spline('/maps/foe')
-            self.gyf = self.spline('/maps/gyf')
+            if '/maps/gyf' in self.h5:
+                self.gyf = self.spline('/maps/gyf')
             self.ts = datetime.fromtimestamp(self.h5['/ts'][()], timezone.utc)
-            self.ssn = self.h5['/essn/ssn'][()]
+            if '/essn/ssn' in self.h5:
+                self.ssn = self.h5['/essn/ssn'][()]
 
     def spline(self, ds):
         return Spline(self.h5[ds])

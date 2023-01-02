@@ -57,7 +57,7 @@ sub register {
       my ($job, %args) = @_;
       my $db = $app->pg->db;
 
-      my $runs = $db->query(q{select id from runs where state='archived' and started < now() - interval '14 days' order by started asc limit 50});
+      my $runs = $db->query(q{select id from runs where state='archived' and started < now() - interval '7 days' order by started asc limit 50});
 
       while (my $run = $runs->hash) {
         eval {
@@ -68,7 +68,7 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('created', 'finished') and started < now() - interval '7 days' order by started asc limit 10});
+      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('created', 'finished') and started < now() - interval '5 days' order by started asc limit 10});
 
       while (my $run = $runs->hash) {
         eval {
@@ -165,6 +165,9 @@ sub archive_run {
     }
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
+
+  # WAM-IPE: clean up, no upload for now.
+  $db->query("delete from ipemap where run_id=?", $run_id);
   
   # rendered files: move to /archive
   my $rendered_dir = path("/output/$run_id");

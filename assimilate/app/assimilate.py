@@ -7,6 +7,8 @@ import numpy as np
 import h5py
 import hdf5plugin
 
+import wquantiles
+
 from data import json, jsonapi, hdf5
 from models import spline, gp3d, combinators
 
@@ -23,6 +25,9 @@ def get_pred(run_id, ts):
 def get_irimap(run_id, ts):
     return hdf5.get_data('http://localhost:%s/irimap.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
+def get_ipe(run_id, ts):
+    return hdf5.get_data('http://localhost:%s/ipe.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
+
 def get_holdouts(run_id):
     return json.get_data('http://localhost:%s/holdout?run_id=%d' % (os.getenv('API_PORT'), run_id))
 
@@ -34,7 +39,26 @@ def filter_holdouts(df, holdouts):
 
     return df
 
-def assimilate(run_id, ts, holdout):
+def get_scale(base, target):
+    base_trimmed = base[1:180, 0:360].flatten()
+    target_trimmed = target[1:180, 0:360].flatten()
+    weight = np.repeat(np.cos(np.linspace(-np.pi / 2, np.pi / 2, 181)[1:180]), 360) # cos(latitude)
+
+    base_med = wquantiles.quantile(target_trimmed, weight, 0.5)
+    target_med = wquantiles.quantile(target_trimmed, weight, 0.5)
+
+    iqr_ratio = (
+            (wquantiles.quantile(base_trimmed, weight, 0.75) - wquantiles.quantile(base_trimmed, weight, 0.25)) /
+            (wquantiles.quantile(target_trimmed, weight, 0.75) - wquantiles.quantile(target_trimmed, weight, 0.25))
+            )
+
+    return (base_med, target_med, iqr_ratio)
+
+def rescale(target, params):
+    (base_med, target_med, iqr_ratio) = params
+    return (target - target_med) * iqr_ratio + base_med
+
+def assimilate(run_id, ts, holdout, basemap_type):
     df_cur = get_current()
     df_pred = get_pred(run_id, ts)
     irimap = get_irimap(run_id, ts)
@@ -42,6 +66,30 @@ def assimilate(run_id, ts, holdout):
     if holdout:
         holdouts = get_holdouts(run_id)
         df_pred = filter_holdouts(df_pred, holdouts)
+
+    if basemap_type == 'iri':
+        basemap = irimap
+    else:
+        ipemap = get_ipe(run_id, ts)
+        ipemap = {k: ipemap[k] for k in ('/maps/hmf2', '/maps/fof2', '/maps/mufd')}
+
+        if basemap_type.endswith('_scaled'):
+            basemap_type = basemap_type[:len(basemap_type)-len('_scaled')]
+            fof2_scale = get_scale(irimap['/maps/fof2'], ipemap['/maps/fof2'])
+            ipemap['/maps/fof2'] = rescale(ipemap['/maps/fof2'], fof2_scale)
+            ipemap['/maps/mufd'] = rescale(ipemap['/maps/mufd'], fof2_scale)
+        elif basemap_type.endswith('_logscaled'):
+            basemap_type = basemap_type[:len(basemap_type)-len('_logscaled')]
+            fof2_scale = get_scale(np.log(irimap['/maps/fof2']), np.log(ipemap['/maps/fof2']))
+            new_fof2 = np.exp(rescale(np.log(ipemap['/maps/fof2']), fof2_scale))
+            fof2_ratio = new_fof2 / ipemap['/maps/fof2'][:]
+            ipemap['/maps/fof2'] = new_fof2
+            ipemap['/maps/mufd'] = ipemap['/maps/mufd'][:] * fof2_ratio
+
+        if basemap_type == 'ipe':
+            basemap = ipemap
+        elif basemap_type == 'iri-ipe':
+            basemap = {k: (irimap[k][:] + ipemap[k][:]) / 2.0 for k in ('/maps/hmf2', '/maps/fof2', '/maps/mufd')}
 
     bio = io.BytesIO()
     h5 = h5py.File(bio, 'w')
@@ -51,7 +99,6 @@ def assimilate(run_id, ts, holdout):
         np.linspace(-180, 180, 361),
         indexing='ij',
     )
-
 
     h5.create_dataset('/essn/ssn', data=irimap['/essn/ssn'])
     h5.create_dataset('/essn/sfi', data=irimap['/essn/sfi'])
@@ -65,13 +112,13 @@ def assimilate(run_id, ts, holdout):
     for metric in ["fof2", "hmf2"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
-        irimodel = spline.Spline(irimap['/maps/' + metric])
-        pred = irimodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
+        basemodel = spline.Spline(basemap['/maps/' + metric])
+        pred = basemodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
 
         gp3dmodel = gp3d.GP3D()
         gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred))
 
-        model = combinators.Product(irimodel, combinators.LogSpace(gp3dmodel))
+        model = combinators.Product(basemodel, combinators.LogSpace(gp3dmodel))
 
         assimilated = model.predict(lat, lon)
 
@@ -81,24 +128,24 @@ def assimilate(run_id, ts, holdout):
     for metric in ["md"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
-        iri_mufd = spline.Spline(irimap['/maps/mufd'])
-        iri_fof2 = spline.Spline(irimap['/maps/fof2'])
+        base_mufd = spline.Spline(basemap['/maps/mufd'])
+        base_fof2 = spline.Spline(basemap['/maps/fof2'])
 
-        pred_mufd = iri_mufd.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
-        pred_fof2 = iri_fof2.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
+        pred_mufd = base_mufd.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
+        pred_fof2 = base_fof2.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
 
         pred_md = pred_mufd / pred_fof2
 
         gp3dmodel = gp3d.GP3D()
         gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred_md))
 
-        iri_mufd_map = iri_mufd.predict(lat, lon)
-        iri_fof2_map = iri_fof2.predict(lat, lon)
-        iri_md_map = iri_mufd_map / iri_fof2_map
+        base_mufd_map = base_mufd.predict(lat, lon)
+        base_fof2_map = base_fof2.predict(lat, lon)
+        base_md_map = base_mufd_map / base_fof2_map
 
         log_md_ratio = gp3dmodel.predict(lat, lon)
 
-        assim_md = iri_md_map * np.exp(log_md_ratio)
+        assim_md = base_md_map * np.exp(log_md_ratio)
         h5.create_dataset('/maps/md', data=assim_md, **hdf5plugin.SZ(absolute=0.001))
 
         assim_mufd = h5['/maps/fof2'] * assim_md
@@ -118,10 +165,11 @@ def generate():
     run_id = int(request.form.get('run_id', -1))
     tgt = int(request.form.get('target', None))
     holdout = bool(request.form.get('holdout', False))
+    basemap_type = request.form.get('basemap', 'iri')
 
     tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
 
-    dataset = assimilate(run_id, tgt, holdout)
+    dataset = assimilate(run_id, tgt, holdout, basemap_type)
 
     with con.cursor() as cur:
         cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))

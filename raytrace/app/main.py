@@ -3,7 +3,7 @@ import io
 import numpy as np
 import raytrace
 import raytrace.rec533
-from iono import Iono
+from iono import Iono, Spline
 import h5py
 import hdf5plugin
 from flask import Flask, request, make_response, jsonify
@@ -62,6 +62,7 @@ def rec533():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
     res = float(request.args.get('res', '2'))
+    ipe = int(request.args.get('ipe', '0'))
 
     from_lat *= np.pi / 180
     from_lon *= np.pi / 180
@@ -71,6 +72,23 @@ def rec533():
         iono_url += '?run_id=%s&ts=%s' % (run_id, ts)
 
     iono = Iono(iono_url)
+
+    if ipe in [1, 2]:
+        ipe_url = 'http://localhost:%s/ipe.h5' % (os.getenv('API_PORT'))
+        if run_id is not None and ts is not None:
+            ipe_url += '?run_id=%s&ts=%s' % (run_id, ts)
+
+        ipe_iono = Iono(ipe_url)
+
+        if ipe == 1:
+            fof2 = ipe_iono.h5['/maps/fof2'][:]
+            mufd = ipe_iono.h5['/maps/mufd'][:]
+        elif ipe == 2:
+            fof2 = 0.5 * (iono.h5['/maps/fof2'][:] + ipe_iono.h5['/maps/fof2'][:])
+            mufd = 0.5 * (iono.h5['/maps/mufd'][:] + ipe_iono.h5['/maps/mufd'][:])
+
+        iono.fof2 = Spline(fof2)
+        iono.mufd = Spline(mufd)
 
     to_lat = np.linspace(-90, 90, int(180 / res) + 1) * np.pi / 180
     to_lon = np.linspace(-180, 180, int(360 / res) + 1) * np.pi / 180
