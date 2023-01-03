@@ -122,39 +122,44 @@ class PredEval(db.Model):
 
 #Generate marshmallow Schemas from your models using ModelSchema
 
-class StationSchema(ma.ModelSchema):
+class StationSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Station # Fields to expose
+        load_instance = True
 
 station_schema = StationSchema()
 stations_schema = StationSchema(many=True)
 
-class MeasurementSchema(ma.ModelSchema):
+class MeasurementSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Measurement
+        load_instance = True
     station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude']))
 
 measurement_schema = MeasurementSchema()
 measurements_schema = MeasurementSchema(many=True)
 
-class PredictionSchema(ma.ModelSchema):
+class PredictionSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Prediction
+        load_instance = True
     station = fields.Nested(StationSchema(only=['name', 'id', 'code', 'longitude', 'latitude', 'use_for_maps']))
 
 prediction_schema = PredictionSchema()
 predictions_schema = PredictionSchema(many=True)
 
-class RunsSchema(ma.ModelSchema):
+class RunsSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Runs
+        load_instance = True
     
 run_schema = RunsSchema()
 runs_schema = RunsSchema(many=True)
 
-class HoldoutSchema(ma.ModelSchema):
+class HoldoutSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Holdout
+        load_instance = True
 
     station = fields.Nested(StationSchema(only=['id', 'code', 'latitude', 'longitude']))
     measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
@@ -162,17 +167,19 @@ class HoldoutSchema(ma.ModelSchema):
 holdout_schema = HoldoutSchema()
 holdouts_schema = HoldoutSchema(many=True)
 
-class HoldoutEvalSchema(ma.ModelSchema):
+class HoldoutEvalSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = HoldoutEval
+        load_instance = True
 
     holdout = fields.Nested(HoldoutSchema)
 
 holdout_evals_schema = HoldoutEvalSchema(many=True)
 
-class PredEvalSchema(ma.ModelSchema):
+class PredEvalSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = PredEval
+        load_instance = True
 
     holdout = fields.Nested(HoldoutSchema)
     measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
@@ -193,17 +200,16 @@ def stationsjson():
     if ret is None:
         if maxage is None:
             qry = db.session.query(Measurement).from_statement(
-                "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc")
+                text("select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime order by station_id asc"))
         else:
             qry = db.session.query(Measurement).from_statement(
-                "select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc").params(
+                text("select m1.* from measurement m1 inner join (select station_id, max(time) as maxtime from measurement group by station_id) m2 on m1.station_id=m2.station_id and m1.time=m2.maxtime where m1.time >= now() - :maxage * interval '1 second' order by station_id asc")).params(
                 maxage=int(maxage),
             )
 
         db.session.close()
         
-        result = measurements_schema.dump(qry)
-        ret = json.dumps(result.data)
+        ret = measurements_schema.dumps(qry)
         memcache.set(cachekey, ret, 60)
 
     return Response(ret, mimetype='application/json')
@@ -214,29 +220,27 @@ def predjson():
     ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
 
     qry = db.session.query(Measurement).from_statement(
-        "select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc").params(
+        text("select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc")).params(
             run_id = run_id,
             ts = ts,
         )
     db.session.close()
     
-    result = predictions_schema.dump(qry)
-
-    return jsonify(result.data)
+    ret = predictions_schema.dumps(qry)
+    return Response(ret, mimetype='application/json')
 
 @app.route("/pred_sample.json", methods=['GET'])
 def pred_sample():
     n_samples = int(request.args.get('samples', 100))
 
     qry = db.session.query(Prediction).from_statement(
-        "select prediction.* from prediction, (select run_id, min(time) as time from prediction where run_id in (select run_id from prediction order by random() limit :n_samples) group by run_id) sample where prediction.run_id=sample.run_id and prediction.time=sample.time order by run_id asc, station_id asc").params(
+        text("select prediction.* from prediction, (select run_id, min(time) as time from prediction where run_id in (select run_id from prediction order by random() limit :n_samples) group by run_id) sample where prediction.run_id=sample.run_id and prediction.time=sample.time order by run_id asc, station_id asc")).params(
             n_samples = n_samples
     )
     db.session.close()
 
-    result = predictions_schema.dump(qry)
-
-    return jsonify(result.data)
+    ret = predictions_schema.dumps(qry)
+    return Response(ret, mimetype='application/json')
 
 @app.route("/pred_series.json", methods=['GET'])
 def predseries():
@@ -252,7 +256,7 @@ def predseries():
             sql = sql + " and station_id=:station_id"
         sql = sql + " order by station_id asc, time asc"
 
-        qry = db.session.query(Measurement).from_statement(sql)
+        qry = db.session.query(Measurement).from_statement(text(sql))
         qry = qry.params(experiment = experiment)
         if station_id is not None:
             qry = qry.params(station_id = station_id)
@@ -264,11 +268,11 @@ def predseries():
         out = []
         prev_st = None
 
-        for row in result.data:
-            if prev_st is None or row['station_name'] != prev_st:
+        for row in result:
+            if prev_st is None or row['station']['name'] != prev_st:
                 out.append({'station': row['station'], 'pred': []})
 
-            prev_st = row['station_name']
+            prev_st = row['station']['name']
 
             out[len(out)-1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'], 'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
 
@@ -517,8 +521,8 @@ def ptp_json():
 def get_holdout():
     run_id = int(request.values.get('run_id'))
     qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
-    ho = holdouts_schema.dump(qry)
-    return Response(json.dumps(ho.data), mimetype='application/json')
+    ho = holdouts_schema.dumps(qry)
+    return Response(ho, mimetype='application/json')
 
 @app.route("/holdout_measurements", methods=['POST'])
 def post_holdout_measurements():
@@ -570,7 +574,7 @@ def get_holdout_eval():
         'assimilated': '3-Full',
     }
 
-    for row in dump.data:
+    for row in dump:
         row['holdout']['station']['latitude'] = float(row['holdout']['station']['latitude'])
         row['holdout']['station']['longitude'] = float(row['holdout']['station']['longitude'])
 
@@ -585,7 +589,7 @@ def get_holdout_eval():
         'true_fof2': row['holdout']['measurement']['fof2'],
         'true_mufd': row['holdout']['measurement']['mufd'],
         'true_hmf2': row['holdout']['measurement']['hmf2'],
-    } for row in dump.data ]
+    } for row in dump ]
 
     return Response(json.dumps(ret), mimetype='application/json')
 
@@ -601,7 +605,7 @@ def get_pred_eval():
         'assimilated': '3-Full',
     }
 
-    for row in dump.data:
+    for row in dump:
         row['holdout']['station']['latitude'] = float(row['holdout']['station']['latitude'])
         row['holdout']['station']['longitude'] = float(row['holdout']['station']['longitude'])
 
@@ -619,7 +623,7 @@ def get_pred_eval():
         'true_fof2': row['measurement']['fof2'],
         'true_mufd': row['measurement']['mufd'],
         'true_hmf2': row['measurement']['hmf2'],
-    } for row in dump.data if row['measurement'] is not None ]
+    } for row in dump if row['measurement'] is not None ]
 
     return Response(json.dumps(ret), mimetype='application/json')
 
