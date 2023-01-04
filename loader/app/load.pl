@@ -90,6 +90,9 @@ if (($code =~ /^(?:MM168|SD266|KB548|MG560|TK356)$/) &&
   $characteristics->{'M(D)'} = delete $characteristics->{'MUF(D)'};
 }
 
+delete $characteristics->{'foF2'} if defined $characteristics->{'foF2'} and $characteristics->{'foF2'} == 0;
+delete $characteristics->{'zmF2'} if defined $characteristics->{'zmF2'} and $characteristics->{'zmF2'} == 0;
+
 # Compute mufd from fof2 and md or fof2 and hmf2, if available
 # (pred can only work with stations that have fof2 + hmf2 + mufd, so it's worth trying to fill in)
 if (defined $characteristics->{'foF2'} && defined $characteristics->{'M(D)'} && !defined $characteristics->{'MUF(D)'}) {
