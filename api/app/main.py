@@ -13,6 +13,7 @@ import re
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Order matters: Initialize SQLAlchemy before Marshmallow
 db = SQLAlchemy(app)
@@ -30,7 +31,7 @@ class Station(db.Model):
     latitude = db.Column(db.Text)
     use_for_essn = db.Column(db.Boolean)
     use_for_maps = db.Column(db.Boolean)
-    measurements = db.relationship('Measurement', backref='station')
+    measurements = db.relationship('Measurement', back_populates='station')
 
     def __repr__(self):
         return '<Station %r>' % self.name
@@ -56,7 +57,7 @@ class Measurement(db.Model):
     fbes = db.Column(db.Numeric(asdecimal=False))
     source = db.Column(db.Text)
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
-    station_name = db.relationship('Station', foreign_keys=[station_id])
+    station = db.relationship('Station', foreign_keys=[station_id], back_populates='measurements')
     md = db.Column(db.Text)
     def __repr__(self):
         return '<Measurement %r>' % self.id
@@ -83,7 +84,7 @@ class Prediction(db.Model):
     hmf2 = db.Column(db.Numeric(asdecimal=False))
     log_stdev = db.Column(db.Numeric(asdecimal=False))
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
-    station_name = db.relationship('Station', foreign_keys=[station_id])
+    station = db.relationship('Station', foreign_keys=[station_id])
     def __repr__(self):
         return '<Prediction %r>' % self.id
 
