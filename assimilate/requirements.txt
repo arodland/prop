@@ -1,6 +1,6 @@
-psycopg2-binary==2.8.5
-h5py==2.10.0
-Flask==1.1.2
-itsdangerous==2.0.1
-Jinja2==3.0.3
-Werkzeug==1.0.1
+psycopg[binary]==3.1.6
+h5py==3.7.0
+Flask==2.2.2
+itsdangerous==2.1.2
+Jinja2==3.1.2
+Werkzeug==2.2.2

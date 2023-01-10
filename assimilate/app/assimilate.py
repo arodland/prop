@@ -9,7 +9,7 @@ import h5py
 from data import json, jsonapi, hdf5
 from models import spline, gp3d, combinators
 
-import psycopg2
+import psycopg
 
 from flask import Flask, request, make_response
 
@@ -112,7 +112,7 @@ app = Flask(__name__)
 @app.route('/generate', methods=['POST'])
 def generate():
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-    con = psycopg2.connect(dsn)
+    con = psycopg.connect(dsn)
 
     run_id = int(request.form.get('run_id', -1))
     tgt = int(request.form.get('target', None))
