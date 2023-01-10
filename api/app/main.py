@@ -320,9 +320,10 @@ def irimap():
                 ts = dt.datetime.fromtimestamp(float(ts))
                 res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
                     (run_id, ts),
+                    binary=True,
                 )
             else:
-                res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
+                res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1", binary=True)
 
             rows = list(res.fetchall())
 
@@ -348,9 +349,10 @@ def assimilated():
                 ts = dt.datetime.fromtimestamp(float(ts))
                 res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
                     (run_id, ts),
+                    binary=True,
                 )
             else:
-                res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
+                res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1", binary=True)
 
             rows = list(res.fetchall())
 
