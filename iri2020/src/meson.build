@@ -1,6 +1,6 @@
 project('iri2020', 'fortran', default_options : ['default_library=static'])
 
-add_project_arguments('-O3', '-ffast-math', language: 'fortran')
+add_project_arguments('-O3', '-ffast-math', '-march=znver3', language: 'fortran')
 
 iri2020= library('iri2020', 'irisub.for', 'irifun.for', 'iritec.for', 'iridreg.for', 'igrf.for', 'cira.for', 'iriflip.for', 'rocdrift.for',
   fortran_args: '-w')
