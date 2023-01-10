@@ -5,7 +5,7 @@ import dateutil
 import io
 import os
 
-import psycopg2
+import psycopg
 import numpy as np
 import wmm2020 as wmm
 import h5py
@@ -78,7 +78,7 @@ app = Flask(__name__)
 @app.route('/generate', methods=['POST'])
 def generate():
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-    con = psycopg2.connect(dsn)
+    con = psycopg.connect(dsn)
 
     run_id = request.form.get('run_id', -1)
     tgt = request.form.get('target', None)
