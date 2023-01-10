@@ -15,7 +15,7 @@ import multiprocessing
 from scipy import interpolate
 from scipy.signal import windows
 
-import psycopg2
+import psycopg
 
 from flask import Flask, request, jsonify
 
@@ -163,7 +163,7 @@ def generate_essn(run_id, series, holdout_ids):
     linear = True if series.endswith('_linear') else False
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-    con = psycopg2.connect(dsn)
+    con = psycopg.connect(dsn)
 
     with urllib.request.urlopen('http://localhost:%s/history.json?days=2' % (os.getenv('HISTORY_PORT'))) as res:
         data = json.loads(res.read().decode())
