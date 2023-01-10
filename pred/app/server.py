@@ -10,7 +10,7 @@ import numpy as np
 import george
 from kernel import kernel, delta_kernel, delta_fof2_kernel, delta_hmf2_kernel, delta_mufd_kernel
 from cs import cs_to_stdev, stdev_to_cs
-import psycopg2
+import psycopg
 import subprocess
 
 def get_data(url):
@@ -57,7 +57,7 @@ def generate():
         ]
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-    con = psycopg2.connect(dsn)
+    con = psycopg.connect(dsn)
 
     station = request.form.get('station', None)
 
