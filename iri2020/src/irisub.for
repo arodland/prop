@@ -2391,7 +2391,7 @@ c10201	format(I5,11F6.1)
 c
 c
         subroutine iri_web(jmag,jf,alati,along,iyyyy,mmdd,iut,dhour,
-     &          height,h_tec_max,ivar,vbeg,vend,vstp,a,b)
+     &          height,h_tec_max,ivar,vbeg,vend,vstp,a,b,datadir)
 c-----------------------------------------------------------------------        
 c changes:
 c       11/16/99 jf(30) instead of jf(17)
@@ -2416,6 +2416,7 @@ c-----------------------------------------------------------------------
         dimension   outf(20,1000),oar(100),oarr(100),a(20,1000)
         dimension   xvar(8),b(100,1000)
         logical     jf(50)
+        character(*), intent(in) :: datadir
 
 		nummax=1000
         numstp=int((vend-vbeg)/vstp)+1
@@ -2429,7 +2430,7 @@ c-----------------------------------------------------------------------
 1249            oarr(i)=oar(i) 
             xhour=dhour+iut*25.
             call IRI_SUB(JF,JMAG,ALATI,ALONG,IYYYY,MMDD,XHOUR,
-     &                  VBEG,VEND,VSTP,a,OARR)
+     &                  VBEG,VEND,VSTP,a,OARR,datadir)
             if(h_tec_max.gt.50.) then 
                 call iri_tec (50.,h_tec_max,2,tec,tect,tecb)
                 oarr(37)=tec
@@ -2464,7 +2465,7 @@ c-----------------------------------------------------------------------
                 do 1349 iii=1,100
 1349                    oarr(iii)=b(iii,i) 
                 call IRI_SUB(JF,JMAG,ALATI,ALONG,IYYYY,MMDD,DHOUR,
-     &                  height,height,1.,OUTF,OARR)
+     &                  height,height,1.,OUTF,OARR,datadir)
                 if(h_tec_max.gt.50.) then
                         call iri_tec (50.,h_tec_max,2,tec,tect,tecb)
                         oarr(37)=tec
