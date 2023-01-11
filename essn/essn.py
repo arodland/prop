@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-import igrf
+import ppigrf
 import json
 import numpy as np
 import os
@@ -182,15 +182,14 @@ def generate_essn(run_id, series, holdout_ids):
         data = [ station for station in data if station['id'] not in exclude_station_ids ]
 
     for station in data:
-        # TODO: use the current time once IGRF13 is available
-        mag = igrf.igrf(
-                now.strftime('%Y-%m-%d'),
-                glat=station['latitude'],
-                glon=station['longitude'],
-                alt_km=1.
+        east, north, up = ppigrf.igrf(
+                lon=station['longitude'],
+                lat=station['latitude'],
+                h=1,
+                date=now,
                 )
 
-        station['dip_angle'] = mag['incl'].item()
+        station['dip_angle'] = np.degrees(np.arctan2(-up, np.hypot(east, north)))
 
         for record in station['history']:
             record[0] = re.sub(r"\.\d+$", "", record[0])
