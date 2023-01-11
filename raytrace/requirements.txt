@@ -1,8 +1,8 @@
-h5py==2.10.0
+h5py==3.7.0
 cython
-Flask==1.1.2
-itsdangerous==2.0.1
-numba==0.55.0
-uwsgi==2.0.18
-Jinja2==3.0.3
-Werkzeug==1.0.1
+Flask==2.2.2
+itsdangerous==2.1.2
+numba==0.56.4
+uwsgi==2.0.21
+Jinja2==3.1.2
+Werkzeug==2.2.2
