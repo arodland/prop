@@ -13,7 +13,7 @@ import multiprocessing
 
 from scipy.interpolate import RectBivariateSpline
 
-import psycopg2
+import psycopg
 
 from flask import Flask, request, jsonify
 
@@ -141,7 +141,7 @@ def match_pred_measurements(con):
 @app.route('/eval', methods=['POST'])
 def do_eval_run():
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
-    con = psycopg2.connect(dsn)
+    con = psycopg.connect(dsn)
 
     run_id = request.form.get('run_id')
     holdouts = get_holdouts(run_id)
