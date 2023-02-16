@@ -2,6 +2,9 @@ import cartopy.crs as ccrs
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import cartopy
+cartopy.config['pre_existing_data_dir'] = '/app/cartopy_data'
+
 import cartopy.feature
 import geojsoncontour
 from cartopy.feature.nightshade import Nightshade
