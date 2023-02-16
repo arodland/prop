@@ -20,5 +20,5 @@ pytz==2022.7
 six==1.16.0
 SQLAlchemy==1.4.46
 uwsgi==2.0.21
-Werkzeug==2.2.2
+Werkzeug==2.2.3
 WTForms==2.2.1
