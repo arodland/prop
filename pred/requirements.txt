@@ -4,4 +4,4 @@ itsdangerous==2.1.2
 pyyaml
 pybind11
 Jinja2==3.1.2
-Werkzeug==2.2.2
+Werkzeug==2.2.3
