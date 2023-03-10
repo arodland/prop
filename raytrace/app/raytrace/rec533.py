@@ -76,7 +76,7 @@ def nF2MUF(iono, dist, mode, info, clip_dmax=True):
     return muf
 
 
-def rec_533(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
+def muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
     ## Geodesy setup
     one_from = np.ndim(from_lat) == 0 and np.ndim(from_lon) == 0
     to_lat, to_lon = np.atleast_1d(to_lat, to_lon)

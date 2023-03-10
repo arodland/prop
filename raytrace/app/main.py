@@ -76,8 +76,8 @@ def rec533():
 
     to_lon, to_lat = np.meshgrid(to_lon, to_lat)
 
-    rt_sp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon)
-    rt_lp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+    rt_sp = raytrace.rec533.muf_luf(iono, from_lat, from_lon, to_lat, to_lon)
+    rt_lp = raytrace.rec533.muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
 
     muf_ratio = np.maximum(rt_sp['muf'] / rt_sp['luf'], 0.8 * rt_lp['muf'] / rt_lp['luf'])
 
@@ -135,12 +135,12 @@ def ptp_json():
         }
 
         if path in ('short', 'both'):
-            rt_sp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon)
+            rt_sp = raytrace.rec533.muf_luf(iono, from_lat, from_lon, to_lat, to_lon)
             keys = rt_sp.keys() if debug else ['muf', 'luf']
             out['metrics'].update({ k+'_sp': rt_sp[k].tolist()[0] for k in keys })
 
         if path in ('long', 'both'):
-            rt_lp = raytrace.rec533.rec_533(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
+            rt_lp = raytrace.rec533.muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=True)
             keys = rt_lp.keys() if debug else ['muf', 'luf']
             out['metrics'].update({ k+'_lp': rt_lp[k].tolist()[0] for k in keys })
 
