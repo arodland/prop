@@ -166,4 +166,8 @@ sub compute_confidence {
     return -1;
 }
 
+sub file_format {
+    return "saoxml";
+}
+
 1;

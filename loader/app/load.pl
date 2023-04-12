@@ -124,9 +124,13 @@ $dbh->do($sql, undef, @vals);
 
 my $latency = sprintf "%.2f", (time() - $ts->{epoch});
 
+my $format = $sao->file_format;
+
 $statsd->increment('prop.loader.loaded.total');
 $statsd->increment("prop.loader.loaded.station.$code");
 $statsd->increment("prop.loader.loaded.source.$source");
+$statsd->increment("prop.loader.loaded.format.$format");
+$statsd->increment("prop.loader.loaded.source.$source.format.$format");
 $statsd->timing_ms("prop.loader.latency.overall", $latency * 1000);
 $statsd->timing_ms("prop.loader.latency.source.$source", $latency * 1000);
 $statsd->timing_ms("prop.loader.latency.station.$code", $latency * 1000);

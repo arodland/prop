@@ -290,4 +290,8 @@ sub scaled_characteristics {
   return $ret;
 }
 
+sub file_format {
+    return "sao4";
+}
+
 1;
