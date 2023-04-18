@@ -160,7 +160,7 @@ sub dispatch_request {
     });
 
     my $sth3 = $dbh->prepare(q{
-      SELECT time, cs, fof2, mufd, hmf2 from measurement WHERE station_id=? AND time BETWEEN (?::timestamp - interval '4 days')::text AND (?::timestamp + interval '4 days')::text ORDER BY time ASC
+      SELECT time, cs, fof2, mufd, hmf2 from measurement WHERE station_id=? AND time BETWEEN (?::timestamp - interval '4 days') AND (?::timestamp + interval '4 days') ORDER BY time ASC
     });
 
     [ sub {
