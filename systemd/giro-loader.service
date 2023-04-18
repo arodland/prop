@@ -7,6 +7,7 @@ PartOf=kc2gprop.target
 Type=oneshot
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
 ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --cgroups=no-conmon --user 1001 --env-file /etc/kc2gprop/db.env --env-file /etc/kc2gprop/ports.env --env-file /etc/kc2gprop/giro.env --mount type=bind,src=/home/prop/giro-data,dst=/giro-data prop-loader /giro-loader/process
+TimeoutStartSec=600
 ExecStop=/usr/bin/podman stop --ignore --cidfile %t/%N-cid -t 10
 ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/%N-cid
 KillMode=mixed
