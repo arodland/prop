@@ -12,7 +12,7 @@ RUN echo "conda activate my_cartopy_env" >> ~/.bashrc
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
-RUN cartopy_feature_download.py physical -o /app/cartopy_data --no-warn
+RUN cartopy_feature_download.py physical cultural cultural-extra -o /app/cartopy_data --no-warn
 
 WORKDIR /  
 COPY app /app  

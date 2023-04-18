@@ -31,9 +31,13 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
     tm = datetime.fromtimestamp(ts, timezone.utc)
 
     decorations = format not in ['bare', 'overlay']
-    basemaps = format not in ['overlay']
+    basemaps = "new"
+    alpha = 0.38
+    if format == "overlay":
+        basemaps = False
+        alpha = 0.35
 
-    plt = plot.Plot(metric, tm, decorations=decorations, basemaps=basemaps)
+    plt = plot.Plot(metric, tm, decorations=decorations, basemaps=basemaps, alpha=alpha)
     if metric == 'mufd':
         plt.scale_mufd()
     elif metric == 'fof2':
