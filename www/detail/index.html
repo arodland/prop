@@ -38,12 +38,12 @@
 
     function cs_to_logstdev(cs) {
       if (cs == -1) {
-        cs = 62;
+        cs = 75;
       }
       if (cs == 100) {
-        cs = 86;
+        cs = 85;
       }
-      return 0.237 - 0.00170 * cs;
+      return 0.200 - 0.00175 * cs;
     }
 
     function error_plus(val, cs) {
