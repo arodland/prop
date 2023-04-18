@@ -247,18 +247,29 @@ def pred_sample():
 def predseries():
     station_id = request.args.get('station', None)
     experiment = request.args.get('experiment', None)
+    run_id = request.args.get('run_id', None)
 
-    cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id)
+    cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id) + ';' + ('<none>' if run_id is None else run_id)
     ret = memcache.get(cachekey)
 
     if ret is None:
-        sql = "select p.* from prediction p where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment)"
+        sql = "select p.* from prediction p"
+        if run_id is None:
+            sql = sql + " where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment)"
+        else:
+            sql = sql + " where run_id=:run_id"
+
         if station_id is not None:
             sql = sql + " and station_id=:station_id"
         sql = sql + " order by station_id asc, time asc"
 
         qry = db.session.query(Measurement).from_statement(text(sql))
-        qry = qry.params(experiment = experiment)
+
+        if run_id is None:
+            qry = qry.params(experiment = experiment)
+        else:
+            qry = qry.params(run_id = int(run_id))
+
         if station_id is not None:
             qry = qry.params(station_id = station_id)
 
