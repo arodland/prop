@@ -6,6 +6,7 @@ import urllib.request
 import subprocess
 
 import h5py
+import hdf5plugin
 import pandas as pd
 import numpy as np
 from flask import Flask, request, make_response

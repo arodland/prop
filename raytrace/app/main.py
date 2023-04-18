@@ -5,6 +5,7 @@ import raytrace
 import raytrace.rec533
 from iono import Iono
 import h5py
+import hdf5plugin
 from flask import Flask, request, make_response, jsonify
 
 app = Flask(__name__)
@@ -43,10 +44,10 @@ def moflof():
     h5.create_dataset('/essn/ssn', data=iono.h5['/essn/ssn'])
     h5.create_dataset('/essn/sfi', data=iono.h5['/essn/sfi'])
     h5.create_dataset('/ts', data=iono.h5['/ts'])
-    h5.create_dataset('/maps/mof_sp', data=mof_sp, compression='gzip', scaleoffset=3, shuffle=True)
-    h5.create_dataset('/maps/mof_lp', data=mof_lp, compression='gzip', scaleoffset=3, shuffle=True)
-    h5.create_dataset('/maps/lof_sp', data=lof_sp, compression='gzip', scaleoffset=3, shuffle=True)
-    h5.create_dataset('/maps/lof_lp', data=lof_lp, compression='gzip', scaleoffset=3, shuffle=True)
+    h5.create_dataset('/maps/mof_sp', data=mof_sp, **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/mof_lp', data=mof_lp, **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/lof_sp', data=lof_sp, **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/lof_lp', data=lof_lp, **hdf5plugin.SZ(absolute=0.001))
 
     h5.close()
 
@@ -87,15 +88,15 @@ def rec533():
     h5.create_dataset('/essn/ssn', data=iono.h5['/essn/ssn'])
     h5.create_dataset('/essn/sfi', data=iono.h5['/essn/sfi'])
     h5.create_dataset('/ts', data=iono.h5['/ts'])
-    h5.create_dataset('/maps/muf_e_sp', data=rt_sp['muf_e'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/muf_e_lp', data=rt_lp['muf_e'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/muf_f2_sp', data=rt_sp['muf_f2'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/muf_f2_lp', data=rt_lp['muf_f2'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/muf_sp', data=rt_sp['muf'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/muf_lp', data=rt_lp['muf'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/luf_sp', data=rt_sp['luf'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/luf_lp', data=rt_lp['luf'], compression='gzip', scaleoffset=3)
-    h5.create_dataset('/maps/ratio', data=muf_ratio, compression='gzip', scaleoffset=3)
+    h5.create_dataset('/maps/muf_e_sp', data=rt_sp['muf_e'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/muf_e_lp', data=rt_lp['muf_e'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/muf_f2_sp', data=rt_sp['muf_f2'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/muf_f2_lp', data=rt_lp['muf_f2'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/muf_sp', data=rt_sp['muf'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/muf_lp', data=rt_lp['muf'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/luf_sp', data=rt_sp['luf'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/luf_lp', data=rt_lp['luf'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/ratio', data=muf_ratio, **hdf5plugin.SZ(absolute=0.001))
 
     h5.close()
 

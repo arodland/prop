@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 import h5py
+import hdf5plugin
 
 from data import json, jsonapi, hdf5
 from models import spline, gp3d, combinators
@@ -58,8 +59,8 @@ def assimilate(run_id, ts, holdout):
     h5.create_dataset('/stationdata/curr', data=df_cur.to_json(orient='records'))
     h5.create_dataset('/stationdata/pred', data=df_pred.to_json(orient='records'))
 
-    h5.create_dataset('/maps/foe', data=irimap['/maps/foe'])
-    h5.create_dataset('/maps/gyf', data=irimap['/maps/gyf'])
+    h5.create_dataset('/maps/foe', data=irimap['/maps/foe'], **hdf5plugin.SZ(absolute=0.001))
+    h5.create_dataset('/maps/gyf', data=irimap['/maps/gyf'], **hdf5plugin.SZ(absolute=0.001))
 
     for metric in ["fof2", "hmf2"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
@@ -74,8 +75,8 @@ def assimilate(run_id, ts, holdout):
 
         assimilated = model.predict(lat, lon)
 
-        h5.create_dataset('/maps/' + metric, data=assimilated, compression='gzip', scaleoffset=3)
-        h5.create_dataset('/stdev/' + metric, data=gp3dmodel.stdev, compression='gzip', scaleoffset=3)
+        h5.create_dataset('/maps/' + metric, data=assimilated, **hdf5plugin.SZ(absolute=0.001))
+        h5.create_dataset('/stdev/' + metric, data=gp3dmodel.stdev, **hdf5plugin.SZ(absolute=0.001))
 
     for metric in ["md"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
@@ -98,10 +99,10 @@ def assimilate(run_id, ts, holdout):
         log_md_ratio = gp3dmodel.predict(lat, lon)
 
         assim_md = iri_md_map * np.exp(log_md_ratio)
-        h5.create_dataset('/maps/md', data=assim_md, compression='gzip', scaleoffset=3)
+        h5.create_dataset('/maps/md', data=assim_md, **hdf5plugin.SZ(absolute=0.001))
 
         assim_mufd = h5['/maps/fof2'] * assim_md
-        h5.create_dataset('/maps/mufd', data=assim_mufd, compression='gzip', scaleoffset=3)
+        h5.create_dataset('/maps/mufd', data=assim_mufd, **hdf5plugin.SZ(absolute=0.001))
 
     h5.close()
 

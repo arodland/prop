@@ -1,4 +1,5 @@
 h5py==3.7.0
+hdf5plugin==4.1.1
 cython
 Flask==2.2.2
 itsdangerous==2.1.2

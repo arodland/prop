@@ -5,6 +5,7 @@ import os
 import io
 import re
 import h5py
+import hdf5plugin
 
 import subprocess
 import urllib.request

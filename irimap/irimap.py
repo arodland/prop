@@ -9,6 +9,7 @@ import psycopg
 import numpy as np
 import wmm2020 as wmm
 import h5py
+import hdf5plugin
 
 from flask import Flask, request, make_response
 
@@ -58,7 +59,7 @@ def generate_map(ssn, sfi, tm):
     h5 = h5py.File(bio, 'w')
 
     for key, val in sorted(data.items()):
-        h5.create_dataset('maps/' + key, data=val, compression='gzip', scaleoffset=3)
+        h5.create_dataset('maps/' + key, data=val, **hdf5plugin.SZ(absolute=0.001))
 
     h5.create_dataset('/ts', data=np.array(tm.timestamp()))
     h5.create_dataset('/essn/ssn', data=np.array(ssn, np.float32))
