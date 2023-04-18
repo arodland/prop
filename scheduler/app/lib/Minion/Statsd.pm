@@ -19,6 +19,12 @@ sub register {
     my %info = %{ $job->info };
     my $queue = $info{queue};
 
+    if ($event eq 'failed') {
+        if ($info{attempts} > 0) {
+            $event = "failed_retryable";
+        }
+    }
+
     $statsd->increment("minion.job.state.$event");
     $statsd->increment("minion.job.task.$task");
     $statsd->increment("minion.job.task.$task.state.$event");
