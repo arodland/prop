@@ -86,6 +86,23 @@ def get_pred(params):
     return data # lat, lon, nmf2, fof2, md, mufd, hmf2, foe
                 #  0    1    2     3    4    5     6     7 
 
+def meas_err(now, ssn, station, record, recency):
+    ts, cs, fof2, mufd, hmf2, tm, iritime = record
+    pred = get_pred_station(station, ssn, iritime)
+    fof2_pred, hmf2_pred, mufd_pred = pred[3], pred[6], pred[5]
+    stdev = cs_to_stdev(cs)
+
+    err = 0.6 * np.abs(np.log(fof2_pred) - np.log(fof2)) / 0.34873
+    err += 0.3 * np.abs(np.log(mufd_pred) - np.log(mufd)) / 0.37516
+    err += 0.1 * np.abs(np.log(hmf2_pred) - np.log(hmf2)) / 0.18405
+    err /= stdev
+
+    sw = station_weight(station, tm)
+    rw = recency_weight(tm, now, recency)
+    weight = sw * rw
+
+    return err, weight
+
 def station_err(x):
     station, ssn, recency, now = x
 
@@ -101,23 +118,7 @@ def station_err(x):
         return (0,0)
 
     for record in station['history']:
-        ts, cs, fof2, mufd, hmf2, tm, iritime = record
-
-        if cs <= 25:
-            continue
-
-        pred = get_pred_station(station, ssn, iritime)
-        fof2_pred, hmf2_pred, mufd_pred = pred[3], pred[6], pred[5]
-        stdev = cs_to_stdev(cs)
-
-        err = 0.6 * np.abs(np.log(fof2_pred) - np.log(fof2)) / 0.34873
-        err += 0.3 * np.abs(np.log(mufd_pred) - np.log(mufd)) / 0.37516
-        err += 0.1 * np.abs(np.log(hmf2_pred) - np.log(hmf2)) / 0.18405
-        err /= stdev
-
-        sw = station_weight(station, tm)
-        rw = recency_weight(tm, now, recency)
-        weight = sw * rw
+        err, weight = meas_err(now, ssn, station, record, recency)
 
         station_total += err * weight
         station_tw += weight
@@ -184,6 +185,7 @@ def generate_essn(run_id, series, holdout_ids):
 
         station['dip_angle'] = np.degrees(np.arctan2(-up, np.hypot(east, north)))
 
+        station['history'] = [record for record in station['history'] if record[1] > 25]
         for record in station['history']:
             record[0] = re.sub(r"\.\d+$", "", record[0])
             record.append(datetime.strptime(record[0], '%Y-%m-%d %H:%M:%S'))
