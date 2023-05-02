@@ -162,6 +162,7 @@ sub one_run {
   my $essn_6h = app->minion->enqueue('essn',
     [
       series => '6h',
+      run_id => $run_id,
     ],
     {
       expire => 18 * 60,

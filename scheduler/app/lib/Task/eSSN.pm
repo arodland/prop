@@ -7,10 +7,12 @@ sub register {
 
   $app->minion->add_task(essn => sub {
       my ($job, %args) = @_;
+      my $run_id = $args{run_id} || $job->id;
+
       my $res = Mojo::UserAgent->new->inactivity_timeout(300)->post("http://localhost:$ENV{ESSN_PORT}/generate" =>
         form => {
           series => $args{series},
-          run_id => $job->id,
+          run_id => $run_id,
           holdouts => $args{holdouts},
         },
       )->result;
