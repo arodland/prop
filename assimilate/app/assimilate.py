@@ -44,7 +44,7 @@ def get_scale(base, target):
     target_trimmed = target[1:180, 0:360].flatten()
     weight = np.repeat(np.cos(np.linspace(-np.pi / 2, np.pi / 2, 181)[1:180]), 360) # cos(latitude)
 
-    base_med = wquantiles.quantile(target_trimmed, weight, 0.5)
+    base_med = wquantiles.quantile(base_trimmed, weight, 0.5)
     target_med = wquantiles.quantile(target_trimmed, weight, 0.5)
 
     iqr_ratio = (
