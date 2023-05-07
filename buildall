@@ -9,6 +9,7 @@ podman -r build --tag prop-assimilate assimilate
 podman -r build --tag prop-essn essn
 podman -r build --tag prop-history history
 podman -r build --tag irimap irimap
+podman -r build --tag prop-ipe ipe
 podman -r build --tag prop-pred pred
 podman -r build --tag prop-renderer renderer
 podman -r build --tag prop-scheduler scheduler

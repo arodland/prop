@@ -1,0 +1,10 @@
+Flask==2.2.2
+psycopg[binary]==3.1.6
+uwsgi==2.0.21
+itsdangerous==2.1.2
+Jinja2==3.1.2
+Werkzeug==2.2.2
+scipy==1.10.0
+h5py==3.7.0
+hdf5plugin==4.1.1
+netCDF4==1.6.3
