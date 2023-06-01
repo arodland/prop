@@ -21,4 +21,4 @@ WORKDIR /app
 ENV OPENBLAS_NUM_THREADS=4
 ENV OMP_NUM_THREADS=4
 
-CMD uwsgi --http :${ASSIMILATE_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi assimilate:app --processes 8 --die-on-term
+CMD uwsgi --http :${ASSIMILATE_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi assimilate:app --processes 8 --enable-metrics --carbon-use-metrics --carbon-name-resolve --carbon ${STATSD_HOST}:2003 --carbon-id prop-assimilate --die-on-term

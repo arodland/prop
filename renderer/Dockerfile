@@ -22,4 +22,4 @@ WORKDIR /app
 ENV HOME=/
 ENV OPENBLAS_NUM_THREADS=4
 ENV OMP_NUM_THREADS=4
-CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 32 --die-on-term
+CMD uwsgi --http :${RENDERER_PORT} --master --need-app --single-interpreter --max-requests 100 --http-timeout 300 --wsgi renderer:app --processes 32 --enable-metrics --carbon-use-metrics --carbon-name-resolve --carbon ${STATSD_HOST}:2003 --carbon-id prop-renderer --die-on-term
