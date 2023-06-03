@@ -47,7 +47,7 @@ c read foF2 coefficients
         WRITE(FILNAM,104) iname,idate,ihhmm
 ccc104     FORMAT('/home/bilitza/tango_home/IRI_data/iri/',
 ccc     &     'iri_dev/IRTAM_dir/IRTAM_',A12,I8,'_',I4.4,'.ASC')
-104     FORMAT('IRTAM_',A12,I8,'_',I4.4,'.ASC')
+104     FORMAT('/irtam/IRTAM_',A12,I8,'_',I4.4,'.ASC')
         OPEN(IUCCIR,FILE=FILNAM,STATUS='OLD',ERR=201,
      &          FORM='FORMATTED')
      	print*,mff,filnam
