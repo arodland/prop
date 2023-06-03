@@ -50,7 +50,6 @@ ccc     &     'iri_dev/IRTAM_dir/IRTAM_',A12,I8,'_',I4.4,'.ASC')
 104     FORMAT('/irtam/IRTAM_',A12,I8,'_',I4.4,'.ASC')
         OPEN(IUCCIR,FILE=FILNAM,STATUS='OLD',ERR=201,
      &          FORM='FORMATTED')
-     	print*,mff,filnam
 
 C skip header with comments
 c	    do 1,13 READ(iuccir,1289) LINE
