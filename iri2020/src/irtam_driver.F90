@@ -5,11 +5,12 @@ implicit none
 logical :: jf(50)
 integer, parameter :: jmag = 0
 real :: glat, glon, dhour
-integer :: hms(3)
+integer :: qtime(6)
 integer :: tov(5)
 integer :: tovdate, tovhhmm, otovdate, otovhhmm
+integer :: qdate
 integer :: iyyyy, mmdd
-real :: tovhour
+real :: tovhour, irtamhour
 real :: ff2(1064), fh2(1064), fb0(1064), fb1(1064)
 real :: modip
 real :: fof2rt, hmf2rt
@@ -44,16 +45,22 @@ otovhhmm = -1
 do
   read(*,*, end=42) glat, glon, & 
     tov(1), tov(2), tov(3), tov(4), tov(5), &
-    hms(1), hms(2), hms(3)
+    qtime(1), qtime(2), qtime(3), qtime(4), qtime(5), qtime(6)
 
   tovdate = tov(1)*10000 + tov(2)*100 + tov(3)
   tovhhmm = tov(4)*100 + tov(5)
   tovhour = tov(4) + tov(5) / 60.
 
-  iyyyy = tov(1)
-  mmdd = tov(2) * 100 + tov(3)
+  iyyyy = qtime(1)
+  mmdd = qtime(2) * 100 + qtime(3)
+  qdate = iyyyy*10000 + mmdd
 
-  dhour = hms(1) + hms(2) / 60. + hms(3) / 3600.
+  dhour = qtime(4) + qtime(5) / 60. + qtime(6) / 3600.
+  if(qdate.gt.tovdate) then
+      irtamhour = dhour + 24.
+  else
+      irtamhour = dhour
+  endif
 
   if ((tovdate.ne.otovdate).or.(tovhhmm.ne.otovhhmm)) then
       call READIRTAMCOF(0, tovdate, tovhhmm, 1064, ff2)
@@ -69,8 +76,8 @@ do
 
   modip = OARR(27)
 
-  fof2rt = FOUT1(modip, glat, glon, dhour, tovhour, ff2)
-  hmf2rt = FOUT1(modip, glat, glon, dhour, tovhour, fh2)
+  fof2rt = FOUT1(modip, glat, glon, irtamhour, tovhour, ff2)
+  hmf2rt = FOUT1(modip, glat, glon, irtamhour, tovhour, fh2)
 
   write(stdout, '(2ES16.8)') fof2rt, hmf2rt
 enddo
