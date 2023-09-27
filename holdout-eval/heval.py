@@ -26,7 +26,7 @@ def get_holdouts(run_id):
 
     for h in data:
         if 'measurement' in h and 'time' in h['measurement']:
-            h['measurement']['tm'] = datetime.strptime(h['measurement']['time'], '%Y-%m-%dT%H:%M:%S%z')
+            h['measurement']['tm'] = datetime.strptime(h['measurement']['time'], '%Y-%m-%dT%H:%M:%S')
 
     return data
 
