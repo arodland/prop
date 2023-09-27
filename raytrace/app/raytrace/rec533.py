@@ -208,14 +208,18 @@ def muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
     while too_low.any():
         print(np.sum(too_low), "too_low F2_n0")
         f2_n0[too_low] += 1
-        f2_d0 = dist / f2_n0
-        takeoff = elevation_angle(f2_d0, midpoint['hr'])
+        f2_d0[too_low] = dist[too_low] / f2_n0[too_low]
+        takeoff[too_low] = elevation_angle(f2_d0[too_low], midpoint['hr'][too_low])
         too_low = takeoff < min_elev
 
     up_to_dmax = dist <= dmax
     over_dmax = dist > dmax
     dmax_to_9000 = over_dmax & (dist <= 9000 * km)
     over_7000 = dist > 7000 * km
+
+    hoplen = 2 * np.abs(np.sin(f2_d0 / 2.) / np.cos(takeoff + f2_d0 / 2.))
+    pathlen = f2_n0 * hoplen
+    takeoff_true = takeoff
 
     ## F2-layer basic MUF
     f2_muf = np.zeros_like(to_lat)
@@ -262,8 +266,8 @@ def muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
     while too_low.any():
         print(np.sum(too_low), "too_low dm_300")
         nm_300[too_low] += 1
-        dm_300 = dist / nm_300
-        takeoff = elevation_angle(dm_300, 300)
+        dm_300[too_low] = dist[too_low] / nm_300[too_low]
+        takeoff[too_low] = elevation_angle(dm_300[too_low], 300)
         too_low = takeoff < min_elev
 
     print("nm_300:", np.min(nm_300), "-", np.max(nm_300))
@@ -332,4 +336,10 @@ def muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
         'muf_f2': f2_muf,
         'muf': np.maximum(e_muf, f2_muf),
         'luf': luf,
+        'distance': dist * r0,
+        'hoplen': hoplen * r0,
+        'pathlen': pathlen * r0,
+        'khop': f2_n0.astype(float),
+        'bearing': bearing,
+        'takeoff': np.degrees(takeoff_true),
     }
