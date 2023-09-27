@@ -131,11 +131,12 @@ sub make_maps {
 }
 
 sub one_run {
-  my ($run_time, $holdout_meas, $experiment, $jobs) = @_;
+  my ($run_time, $state, $experiment, $jobs) = @_;
   my @target_times = target_times($run_time);
   my $first_target_time = $target_times[0]{target_time};
 
-  my $holdouts = @$holdout_meas && eval {
+  my $holdout_meas = $state->{holdout_meas};
+  my $holdouts = @$holdout_meas && !$jobs->{no_holdout} && eval {
     Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout", form => { measurements => $holdout_meas })->result->json
   } || [];
 
@@ -214,15 +215,36 @@ sub one_run {
 
     my $ipe;
     if ($jobs->{ipe}) {
-      $ipe = app->minion->enqueue('ipe',
-        [
+      my $ipe_state = $state->{ipe};
+      my $target = $render->{target_time};
+      if (defined (my $prev = $state->{ipe}{$target})) {
+        $ipe = app->minion->enqueue('copy_ipe',
+          [
+            run_id => $run_id,
+            from_run_id => $prev->{run_id},
+            target => $target,
+          ],
+          {
+            parents => [ $prev->{job_id} ],
+            attempts => 2,
+          },
+        );
+      } else {
+        $ipe = app->minion->enqueue('ipe',
+          [
+            run_id => $run_id,
+            target => $render->{target_time},
+          ],
+          {
+            attempts => 2,
+          },
+        );
+        $state->{ipe}{$target} = {
           run_id => $run_id,
-          target => $render->{target_time},
-        ],
-        {
-          attempts => 2,
-        },
-      );
+          job_id => $ipe,
+        };
+      }
+
       if (0 && $jobs->{make_maps}) {
         for my $metric (qw(mufd fof2)) {
           my $map = app->minion->enqueue('rendersvg',
@@ -374,36 +396,31 @@ sub queue_job {
     Mojo::UserAgent->new->inactivity_timeout(30)->post("http://localhost:$ENV{API_PORT}/holdout_measurements", form => { num => $num_holdouts })->result->json
   } || [];
 
-  one_run($run_time, [], undef, {
+  my $state = {
+      holdout_meas => $holdout_meas,
+  };
+
+  one_run($run_time, $state, undef, {
+    no_holdout => 1,
     make_maps => 1,
     renderhtml => 1,
     band_quality => 1,
   });
 
-#  my @experiments = (
+  my @experiments = (
+    sub {
+      one_run($run_time, $state, '2023-07-control', {
+      });
+    },
 #    sub {
-#      one_run($run_time, $holdout_meas, '2022-12-ipe-control', {
-#      });
-#    },
-#    sub {
-#      one_run($run_time, $holdout_meas, '2022-12-ipe-logscale-blend', {
+#      one_run($run_time, $state, '2023-05b-ipe-logscale-blend', {
 #        ipe => 1,
 #        make_maps => 1,
 #        renderhtml => 1,
 #        basemap_type => 'iri-ipe_logscaled',
 #      });
 #    },
-#    sub {
-#      one_run($run_time, $holdout_meas, '2022-12-ipe-logscale', {
-#        ipe => 1,
-#        make_maps => 1,
-#        renderhtml => 1,
-#        basemap_type => 'ipe_logscaled',
-#      });
-#    },
-#  );
-#
-  my @experiments = ();
+  );
 
   $_->() for shuffle @experiments;
 
