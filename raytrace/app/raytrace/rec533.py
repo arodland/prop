@@ -75,6 +75,61 @@ def nF2MUF(iono, dist, mode, info, clip_dmax=True):
 
     return muf
 
+def field_strength(iono, freq, from_lat, from_lon, to_lat, to_lon, longpath=False):
+    ## Geodesy setup
+    one_from = np.ndim(from_lat) == 0 and np.ndim(from_lon) == 0
+    to_lat, to_lon = np.atleast_1d(to_lat, to_lon)
+
+    dist, bearing = geodesy.distance_bearing(from_lat, from_lon, to_lat, to_lon)
+    reverse_bearing = (bearing + np.pi) % (2 * np.pi)
+
+    if longpath:
+        dist = 2 * np.pi - dist
+        bearing, reverse_bearing = reverse_bearing, bearing
+
+
+    midpoint_lat, midpoint_lon = geodesy.destination(from_lat, from_lon, bearing, 0.5 * dist)
+    midpoint = calc_cp(iono, midpoint_lat, midpoint_lon)
+
+    up_to_9000 = dist <= 9000 * km
+    over_7000 = dist > 7000 * km
+
+    ## E-layer control points
+    up_to_4000 = dist <= 4000 * km
+    e_n0 = np.floor(dist / emax) + 1
+    e_d0 = dist / e_n0
+
+    takeoff = elevation_angle(e_d0, 110)
+    too_low = (takeoff < min_elev) & up_to_4000
+    while too_low.any():
+        print(np.sum(too_low), "too_low e_n0")
+        e_n0[too_low] += 1
+        e_d0 = dist / e_n0
+        takeoff = elevation_angle(e_d0, 110)
+        too_low = (takeoff < min_elev) & up_to_4000
+
+    up_to_2000 = dist <= 2000 * km
+    over_2000 = (dist > 2000 * km) & (dist <= 4000 * km)
+
+    screen_foe = np.zeros_like(to_lat)
+    # <= 2000km: E-screening CP @ midpoint
+    if np.any(up_to_2000):
+        screen_foe[up_to_2000] = midpoint['foe'][up_to_2000]
+
+    # 2000km - 4000km: E-screening CP @ endpoints ± 1000km
+    if np.any(over_2000):
+        thousand_km = np.full_like(to_lat[over_2000], 1000*km)
+        f_lat = from_lat if one_from else from_lat[over_2000]
+        f_lon = from_lon if one_from else from_lon[over_2000]
+        t_plus_1000_lat, t_plus_1000_lon = geodesy.destination(f_lat, f_lon, bearing[over_2000], thousand_km)
+        r_minus_1000_lat, r_minus_1000_lon = geodesy.destination(to_lat[over_2000], to_lon[over_2000], reverse_bearing[over_2000], thousand_km)
+        t_plus_1000_cp = calc_cp(iono, t_plus_1000_lat, t_plus_1000_lon)
+        r_minus_1000_cp = calc_cp(iono, r_minus_1000_lat, r_minus_1000_lon)
+        screen_foe[over_2000] = np.maximum(
+            t_plus_1000_cp['foe'],
+            r_minus_1000_cp['foe'],
+        )
+
 
 def muf_luf(iono, from_lat, from_lon, to_lat, to_lon, longpath=False):
     ## Geodesy setup
