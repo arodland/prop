@@ -15,4 +15,4 @@ python-dateutil==2.8.2
 pytz==2022.7
 six==1.16.0
 SQLAlchemy==1.4.46
-uwsgi==2.0.21
+uwsgi==2.0.22
