@@ -10,4 +10,4 @@ RUN cpm install -g
 COPY ./app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
-CMD starman --listen ":$HISTORY_PORT" /app/main.pl
+CMD starman --listen ":$HISTORY_PORT" --workers 12 /app/main.pl
