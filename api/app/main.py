@@ -299,9 +299,17 @@ def stationsjson():
 @app.route("/pred.json" , methods=['GET'])
 def predjson():
     run_id = request.args.get('run_id', None)
-    ts = dt.datetime.fromtimestamp(float(request.args.get('ts', None)))
+    ts = request.args.get('ts', None)
 
-    qry = db.session.query(Measurement).from_statement(
+    if run_id is None or ts is None:
+        latest = get_latest_run(request.values.get('experiment', None))
+        run_id = latest['run_id']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
+
+    ts = dt.datetime.fromtimestamp(float(ts))
+
+    qry = db.session.query(Prediction).from_statement(
         text("select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc")).params(
             run_id = run_id,
             ts = ts,
@@ -403,18 +411,21 @@ def irimap():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
 
-    cachekey = 'api;irimap.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    if run_id is None or ts is None:
+        latest = get_latest_run(request.values.get('experiment', None))
+        run_id = latest['run_id']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
+
+    cachekey = 'api;irimap.h5;%s;%s' % (run_id, ts)
     ret = memcache.get(cachekey)
     
     if ret is None:
         with db.engine.connect() as conn:
-            if run_id is not None and ts is not None:
-                ts = dt.datetime.fromtimestamp(float(ts))
-                res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
-                    (run_id, ts),
-                )
-            else:
-                res = conn.execute("select dataset from irimap order by run_id asc, time desc limit 1")
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
+                (run_id, ts),
+            )
 
             rows = list(res.fetchall())
 
@@ -431,18 +442,21 @@ def assimilated():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
 
-    cachekey = 'api;assimilated.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    if run_id is None or ts is None:
+        latest = get_latest_run(request.values.get('experiment', None))
+        run_id = latest['run_id']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
+
+    cachekey = 'api;assimilated.h5;%s;%s' % (run_id, ts)
     ret = memcache.get(cachekey)
 
     if ret is None:
         with db.engine.connect() as conn:
-            if run_id is not None and ts is not None:
-                ts = dt.datetime.fromtimestamp(float(ts))
-                res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
-                    (run_id, ts),
-                )
-            else:
-                res = conn.execute("select dataset from assimilated order by run_id desc, time asc limit 1")
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
+                (run_id, ts),
+            )
 
             rows = list(res.fetchall())
 
@@ -459,18 +473,21 @@ def ipe():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
 
-    cachekey = 'api;ipe.h5;%s;%s' % (('<none>' if run_id is None else run_id), ('<none>' if ts is None else ts))
+    if run_id is None or ts is None:
+        latest = get_latest_run(request.values.get('experiment', None))
+        run_id = latest['run_id']
+        ahead = int(request.values.get('hours_ahead', 0))
+        ts = latest['maps'][ahead]['ts']
+
+    cachekey = 'api;ipe.h5;%s;%s' % (run_id, ts)
     ret = memcache.get(cachekey)
 
     if ret is None:
         with db.engine.connect() as conn:
-            if run_id is not None and ts is not None:
-                ts = dt.datetime.fromtimestamp(float(ts))
-                res = conn.execute("select dataset from ipemap where run_id=%s and time=%s",
-                    (run_id, ts),
-                )
-            else:
-                res = conn.execute("select dataset from ipemap order by run_id desc, time asc limit 1")
+            ts = dt.datetime.fromtimestamp(float(ts))
+            res = conn.execute("select dataset from ipemap where run_id=%s and time=%s",
+                (run_id, ts),
+            )
 
             rows = list(res.fetchall())
 
@@ -483,6 +500,11 @@ def ipe():
     return Response(ret, mimetype='application/x-hdf5')
         
 def get_latest_run(experiment=None):
+    cachekey = 'api;get_latest_run;%s' % ('<none>' if experiment is None else experiment)
+    ret = memcache.get(cachekey)
+    if ret is not None:
+        return json.loads(ret)
+
     with db.engine.connect() as conn:
         res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from %s) order by ts asc", (experiment,))
         rows = list(res.fetchall())
@@ -491,9 +513,11 @@ def get_latest_run(experiment=None):
             return make_response('Not Found', 404)
 
         out = {
-            'run_id': rows[0]['run_id'],
-            'maps': [ { 'id': x['id'], 'ts': x['ts'] } for x in rows ],
+            'run_id': int(rows[0]['run_id']),
+            'maps': [ { 'id': int(x['id']), 'ts': int(x['ts']) } for x in rows ],
         }
+
+        memcache.set(cachekey, json.dumps(out), 60)
 
         return out
 
