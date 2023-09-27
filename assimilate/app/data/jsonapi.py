@@ -1,5 +1,6 @@
 import os
 import urllib.request, json
+import numpy as np
 import pandas as pd
 from pandas import json_normalize
 
@@ -30,6 +31,11 @@ def get_data(url=os.getenv("METRICS_URI"), default_confidence=62):
     df.cs = df.cs / 100.
 
     df['md'] = df['mufd'] / df['fof2']
+
+    # Maybe this should be an add-in-quadrature, but the way we're using it is kind of tricky
+    # and I need to really think out the error-propagation. Max feels right.
+    if 'stdev_mufd' in df and 'stdev_fof2' in df:
+        df['stdev_md'] = np.maximum(df['stdev_mufd'], df['stdev_fof2'])
 
     df.time = pd.to_datetime(df.time)
 

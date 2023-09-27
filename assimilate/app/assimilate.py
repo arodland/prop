@@ -58,7 +58,7 @@ def rescale(target, params):
     (base_med, target_med, iqr_ratio) = params
     return (target - target_med) * iqr_ratio + base_med
 
-def assimilate(run_id, ts, holdout, basemap_type):
+def assimilate(run_id, ts, holdout, basemap_type, cs_type):
     df_cur = get_current()
     df_pred = get_pred(run_id, ts)
     irimap = get_irimap(run_id, ts)
@@ -115,15 +115,20 @@ def assimilate(run_id, ts, holdout, basemap_type):
         basemodel = spline.Spline(basemap['/maps/' + metric])
         pred = basemodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
 
+        if cs_type == 'new':
+            stdev = df_pred_filtered['stdev_'+metric].values
+        else:
+            stdev = 0.203 - 0.170 * df_pred_filtered.cs.values
+
         gp3dmodel = gp3d.GP3D()
-        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred))
+        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred), stdev)
 
         model = combinators.Product(basemodel, combinators.LogSpace(gp3dmodel))
 
         assimilated = model.predict(lat, lon)
 
         h5.create_dataset('/maps/' + metric, data=assimilated, **hdf5plugin.SZ(absolute=0.001))
-        h5.create_dataset('/stdev/' + metric, data=gp3dmodel.stdev, **hdf5plugin.SZ(absolute=0.001))
+        h5.create_dataset('/stdev/' + metric, data=gp3dmodel.stdev, **hdf5plugin.SZ(absolute=0.0001))
 
     for metric in ["md"]:
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
@@ -136,8 +141,13 @@ def assimilate(run_id, ts, holdout, basemap_type):
 
         pred_md = pred_mufd / pred_fof2
 
+        if cs_type == 'new':
+            stdev = df_pred_filtered['stdev_'+metric].values
+        else:
+            stdev = 0.203 - 0.170 * df_pred_filtered.cs.values
+
         gp3dmodel = gp3d.GP3D()
-        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred_md))
+        gp3dmodel.train(df_pred_filtered, np.log(df_pred_filtered[metric].values) - np.log(pred_md), stdev)
 
         base_mufd_map = base_mufd.predict(lat, lon)
         base_fof2_map = base_fof2.predict(lat, lon)
@@ -166,10 +176,11 @@ def generate():
     tgt = int(request.form.get('target', None))
     holdout = bool(request.form.get('holdout', False))
     basemap_type = request.form.get('basemap', 'iri')
+    cs_type = request.form.get('cs', 'old')
 
     tm = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
 
-    dataset = assimilate(run_id, tgt, holdout, basemap_type)
+    dataset = assimilate(run_id, tgt, holdout, basemap_type, cs_type)
 
     with con.cursor() as cur:
         cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))

@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import george
 from kernel import kernel, delta_kernel, delta_fof2_kernel, delta_hmf2_kernel, delta_mufd_kernel
-from cs import cs_to_stdev, stdev_to_cs
+from cs import cs_to_stdev, cs_to_stdev_new, stdev_to_cs
 import psycopg
 import subprocess
 
@@ -45,15 +45,15 @@ def generate():
     kernel_choice = request.form.get('kernels', 'old')
     if kernel_choice == 'new':
         metrics = [
-            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_mufd_kernel },
-            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_fof2_kernel },
-            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_hmf2_kernel },
+            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_mufd_kernel, 'cs': 'mufd' },
+            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_fof2_kernel, 'cs': 'fof2' },
+            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_hmf2_kernel, 'cs': 'hmf2' },
         ]
     else:
         metrics = [
-            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel },
-            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel },
-            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel },
+            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel, 'cs': 'old' },
+            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel, 'cs': 'old' },
+            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel, 'cs': 'old' },
         ]
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
@@ -90,12 +90,11 @@ def generate():
             if cs < 10 and cs != -1:
                 continue
 
-            sd = cs_to_stdev(cs, adj100=True)
-
             iridata = get_iri(station['latitude'], station['longitude'], ssn, dt.datetime.fromtimestamp(float(tm)))
 
             for mi, m in enumerate(metrics):
                 out = mout[mi]
+                sd = cs_to_stdev_new(cs, m['cs'], adj100=True)
                 yval = pt[2 + mi]
                 if yval is not None:
                     y_iri = iridata[m['iriidx']]
@@ -124,7 +123,7 @@ def generate():
 
         for i in range(len(times)):
             iridata = get_iri(station['latitude'], station['longitude'], ssn, times[i])
-            col_names, col_vals = [], []
+            col_names, col_vals, stdev_names, stdev_vals = [], [], [], []
             stdev = None
             for mi, m in enumerate(metrics):
                 out = mout[mi]
@@ -132,28 +131,33 @@ def generate():
                     continue
                 irival = iridata[m['iriidx']]
                 col_names.append(m['name'])
+                stdev_names.append('stdev_'+m['name'])
                 yout = np.exp(np.log(irival) + out['pred'][i])
                 col_vals.append(yout)
+                stdev_vals.append(out['sd'][i])
+
                 if stdev is None:
                     stdev = out['sd'][i]
 
+            print('run_id: {run_id} time: {time} stdev_vals: {stdev_vals}'.format(run_id=run_id, time=time, stdev_vals=stdev_vals))
+
             placeholders = ['%s'] * len(col_names)
-            upserts = ['{col}=excluded.{col}'.format(col=col) for col in col_names]
+            upserts = ['{col}=excluded.{col}'.format(col=col) for col in col_names + stdev_names]
 
             with con.cursor() as cur:
                 sql = """
-                insert into prediction (run_id, station_id, time, cs, log_stdev, {col_names})
-                values (%s, %s, %s, %s, %s, {placeholders})
+                insert into prediction (run_id, station_id, time, cs, {stdev_names}, {col_names})
+                values (%s, %s, %s, %s, {placeholders}, {placeholders})
                 on conflict (station_id, run_id, time) do update
-                set cs=excluded.cs, log_stdev=excluded.log_stdev,
+                set cs=excluded.cs,
                 {upserts}
-                """.format(col_names=", ".join(col_names), placeholders=", ".join(placeholders), upserts=", ".join(upserts))
+                """.format(col_names=", ".join(col_names), stdev_names=", ".join(stdev_names), placeholders=", ".join(placeholders), upserts=", ".join(upserts))
                 cur.execute(sql, (
                     run_id,
                     station['id'],
                     times[i],
                     stdev_to_cs(stdev),
-                    stdev,
+                    *stdev_vals,
                     *col_vals
                 ))
         con.commit()

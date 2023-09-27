@@ -123,7 +123,9 @@ class Prediction(db.Model):
     fof2 = db.Column(db.Numeric(asdecimal=False))
     mufd = db.Column(db.Numeric(asdecimal=False))
     hmf2 = db.Column(db.Numeric(asdecimal=False))
-    log_stdev = db.Column(db.Numeric(asdecimal=False))
+    stdev_fof2 = db.Column(db.Numeric(asdecimal=False))
+    stdev_mufd = db.Column(db.Numeric(asdecimal=False))
+    stdev_hmf2 = db.Column(db.Numeric(asdecimal=False))
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station = db.relationship('Station', foreign_keys=[station_id])
     def __repr__(self):

@@ -15,9 +15,8 @@ class GP3D:
     def __init__(self):
         pass
 
-    def train(self, df, t):
+    def train(self, df, t, stdev):
         x, y, z = sph_to_xyz(df['station.latitude'].values, df['station.longitude'].values)
-        stdev = 0.203 - 0.170 * df.cs
 
         kernel = 0.0809**2 * Matern52Kernel(0.0648, ndim=3) + 0.0845**2 * ExpSquaredKernel(0.481, ndim=3)
         self.gp = george.GP(kernel)
