@@ -1,0 +1,32 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Time::Piece ();
+
+my $yesterday = (Time::Piece::gmtime() - 86400)->truncate(to => 'day');
+my $year = $yesterday->truncate(to => 'year');
+my $yday = ($yesterday - $year)->days + 1;
+$year = $year->year;
+my $year2 = ($year % 100);
+
+my @ionosondes = (
+    [qw(bri5f BR52P)],
+    [qw(cas6a CW46O)],
+    [qw(cbr5f CB53N)],
+    [qw(cck5f CS31K)],
+    [qw(dwn5d DW41K)],
+    [qw(hbt5f HO54K)],
+    [qw(lea6a LM42J)],
+    [qw(mawcd MW26P)],
+    [qw(nlk5d NI63_)],
+    [qw(nue5f ND61R)],
+    [qw(per6a PE43K)],
+    [qw(tvl6a TV51R)],
+);
+
+for my $sonde (@ionosondes) {
+    my ($dir, $code) = @$sonde;
+    my $url = "https://downloads.sws.bom.gov.au/wdc/wdc_ion_auto/${dir}/sao/${year2}/${code}_${year}${yday}.zip";
+    print "$url\n";
+}
+

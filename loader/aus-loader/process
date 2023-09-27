@@ -1,0 +1,21 @@
+#!/bin/bash
+
+shopt -s nullglob
+
+cd /aus-data/in
+
+wget $(perl -I/perl5lib /aus-loader/urls)
+
+for x in *.zip ; do
+        pushd /aus-data/unzipped > /dev/null
+        unzip "../in/$x" && rm "../in/$x" || mv "../in/$x" /aus-data/unzip-fail
+        popd > /dev/null
+done
+
+cd /aus-data/unzipped
+
+for x in *.SAO *.sao; do
+        MONTH="$(date +%Y-%m)"
+        mkdir -p "/aus-data/loaded/$MONTH" "/aus-data/load-error/$MONTH"
+        perl -I/perl5lib /app/load.pl "$x" aus-sws && mv "$x" "/aus-data/loaded/$MONTH" || mv "$x" "/aus-data/load-error/$MONTH"
+done

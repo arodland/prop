@@ -10,6 +10,7 @@ RUN cpm install -g
 COPY ./app /app
 COPY ./noaa-loader /noaa-loader
 COPY ./giro-loader /giro-loader
+COPY ./aus-loader /aus-loader
 COPY ./lib /perl5lib
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
