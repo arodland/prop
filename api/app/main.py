@@ -268,7 +268,7 @@ def stationsjson():
     maxage = request.args.get('maxage', None)
     source = request.args.get('source', None)
 
-    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage) + ('<none>' if source is None else source)
+    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage) + ';' + ('<none>' if source is None else source)
     ret = memcache.get(cachekey)
 
     if ret is None:
