@@ -57,7 +57,7 @@ sub register {
       my ($job, %args) = @_;
       my $db = $app->pg->db;
 
-      my $runs = $db->query(q{select id from runs where state='archived' and started < now() - interval '7 days' order by started asc limit 50});
+      my $runs = $db->query(q{select id from runs where state in ('archived', 'uploaded') and started < now() - interval '60 days' order by started asc limit 50});
 
       while (my $run = $runs->hash) {
         eval {
@@ -68,8 +68,23 @@ sub register {
         }
       }
 
-      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('created', 'finished') and started < now() - interval '5 days' order by started asc limit 10});
+      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('archived') and started < now() - interval '30 days' order by started asc limit 10});
 
+      while (my $run = $runs->hash) {
+        eval {
+          if (!defined $run->{experiment}) {
+            $self->upload_run($app->minion, $db, $run);
+          } else {
+            # We can just delete it straight off
+            $self->delete_run($app->minion, $db, $run->{id});
+          }
+        };
+        if ($@) {
+          $app->log->warn("$@ uploading run $run->{id}");
+        }
+      }
+
+      $runs = $db->query(q{select id, to_char(ended, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ts, experiment from runs where state in ('created', 'finished') and started < now() - interval '5 days' order by started asc limit 10});
       while (my $run = $runs->hash) {
         eval {
           $self->archive_run($app->minion, $db, $run);
@@ -78,7 +93,6 @@ sub register {
           $app->log->warn("$@ archiving run $run->{id}");
         }
       }
-
   });
 
   $app->minion->add_task(gcs_upload => sub {
@@ -129,10 +143,6 @@ sub archive_run {
   my $run_id = $run->{id};
   my $ts = $run->{ts};
 
-  my $do_upload = !defined $run->{experiment};
-
-  my $ctmeta = { customTime => $ts };
-
   my $archive_dir = path("/archive/$run_id");
   $archive_dir->mkpath;
 
@@ -141,28 +151,22 @@ sub archive_run {
   # pred: leave alone
 
   # irimap: download from db, place in /archive, delete from db
-  if ($do_upload) {
-    my $maps = $db->query("select extract(epoch from time) as ts, dataset from irimap where run_id=?", $run_id);
-    while (my $map = $maps->hash) {
-      my $map_dir = $archive_dir->child("irimap");
-      $map_dir->mkpath;
-      my $target_file = $map_dir->child("$map->{ts}.h5");
-      $target_file->spew_raw($map->{dataset});
-      $self->gcs_upload($minion, name => "/$run_id/irimap/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
-    }
+  my $maps = $db->query("select extract(epoch from time) as ts, dataset from irimap where run_id=?", $run_id);
+  while (my $map = $maps->hash) {
+    my $map_dir = $archive_dir->child("irimap");
+    $map_dir->mkpath;
+    my $target_file = $map_dir->child("$map->{ts}.h5");
+    $target_file->spew_raw($map->{dataset});
   }
   $db->query("delete from irimap where run_id=?", $run_id);
 
   # assimilated: download from db, place in /archive, delete from db
-  if ($do_upload) {
-    my $maps = $db->query("select extract(epoch from time) as ts, dataset from assimilated where run_id=?", $run_id);
-    while (my $map = $maps->hash) {
-      my $map_dir = $archive_dir->child("assimilated");
-      $map_dir->mkpath;
-      my $target_file = $map_dir->child("$map->{ts}.h5");
-      $target_file->spew_raw($map->{dataset});
-      $self->gcs_upload($minion, name => "/$run_id/assimilated/$map->{ts}.h5", disk_file => "$target_file", metadata => $ctmeta);
-    }
+  $maps = $db->query("select extract(epoch from time) as ts, dataset from assimilated where run_id=?", $run_id);
+  while (my $map = $maps->hash) {
+    my $map_dir = $archive_dir->child("assimilated");
+    $map_dir->mkpath;
+    my $target_file = $map_dir->child("$map->{ts}.h5");
+    $target_file->spew_raw($map->{dataset});
   }
   $db->query("delete from assimilated where run_id=?", $run_id);
 
@@ -172,22 +176,40 @@ sub archive_run {
   # rendered files: move to /archive
   my $rendered_dir = path("/output/$run_id");
   if ($rendered_dir->exists) {
-    if ($do_upload) {
-      my $dest_dir = $archive_dir->child("rendered");
-      $dest_dir->mkpath;
+    my $dest_dir = $archive_dir->child("rendered");
+    $dest_dir->mkpath;
 
-      for my $file ($rendered_dir->children) {
-        next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
+    for my $file ($rendered_dir->children) {
+      next unless "$file" =~ /-(?:now|6h|12h|24h)(?:\.|_station)/;
 
-        my $target_file = $file->copy($dest_dir);
-        $self->gcs_upload($minion, name => "/$run_id/rendered/" . $file->basename, disk_file => "$target_file", metadata => $ctmeta);
-      }
+      my $target_file = $file->copy($dest_dir);
     }
-    $rendered_dir->remove_tree;
   }
+  $rendered_dir->remove_tree;
 
   # run: update state to 'archived'
   $db->query("update runs set state=? where id=?", "archived", $run_id);
+}
+
+sub upload_run {
+  my ($self, $minion, $db, $run) = @_;
+  my $run_id = $run->{id};
+  my $ts = $run->{ts};
+
+  my $archive_dir = path("/archive/$run_id");
+  my $ctmeta = { customTime => $ts };
+
+  for my $subdirname (qw(irimap assimilated rendered)) {
+    my $subdir = $archive_dir->child($subdirname);
+    next unless $subdir->exists;
+
+    for my $file ($subdir->children) {
+      $self->gcs_upload($minion, name => "/$run_id/$subdirname/" . $file->basename, disk_file => "$file", metadata => $ctmeta);
+    }
+  }
+
+  # run: update state to 'uploaded'
+  $db->query("update runs set state=? where id=?", "uploaded", $run_id);
 }
 
 sub delete_run {
