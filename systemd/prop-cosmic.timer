@@ -1,0 +1,9 @@
+[Unit]
+Description=fetch COSMIC data
+
+[Timer]
+OnCalendar=6:47:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=kc2gprop.target

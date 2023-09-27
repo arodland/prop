@@ -1,0 +1,8 @@
+psycopg[binary]==3.1.6
+netCDF4==1.6.3
+h5py==3.7.0
+hdf5plugin==4.1.1
+scipy==1.10.0
+PyGeodesy==23.4.23
+requests==2.31.0
+retry-requests==2.0.0
