@@ -2,8 +2,11 @@ from flask import Flask, request, jsonify, render_template, send_file, make_resp
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from marshmallow import Schema, fields
+from sqlalchemy import tablesample
+from sqlalchemy.orm import aliased
 import json
 import os
+import io
 import datetime as dt
 import dateutil
 from sqlalchemy import and_, text
@@ -12,8 +15,11 @@ import maidenhead
 from pymemcache.client.base import Client as MemcacheClient
 import re
 import logging
-logging.basicConfig()
-logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+import pandas as pd
+import pyarrow as pa
+
+#logging.basicConfig()
+#logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
@@ -26,6 +32,37 @@ ma = Marshmallow(app)
 memcache = MemcacheClient('127.0.0.1', ignore_exc=True, no_delay=True)
 
 #Declare models 
+
+def dump_streaming(obj, schema):
+    yield "["
+    it = iter(obj)
+    i = next(it, None)
+    while i is not None:
+        yield schema.dumps(i)
+        i = next(it, None)
+        if i is not None:
+            yield ","
+    yield "]"
+
+def arrow_streaming(qry, con, remove_fields=[]):
+    dfi = pd.read_sql(qry, con, chunksize=50000)
+    bio = io.BytesIO()
+    it = iter(dfi)
+    i = next(it, None)
+    if i is not None:
+        schema = pa.Schema.from_pandas(i)
+        for field in remove_fields:
+            schema = schema.remove(schema.get_field_index(field))
+        writer = pa.ipc.new_stream(bio, schema, options=pa.ipc.IpcWriteOptions(compression='lz4'))
+    while i is not None:
+        batch = pa.RecordBatch.from_pandas(i, schema=schema, preserve_index=False)
+        writer.write_batch(batch)
+        yield bio.getvalue() + b""
+        bio.seek(0)
+        bio.truncate(0)
+        i = next(it, None)
+    writer.close()
+    yield bio.getvalue()
 
 class Station(db.Model):
     id = db.Column(db.Integer,  primary_key=True)
@@ -72,7 +109,7 @@ class Runs(db.Model):
     started = db.Column(db.DateTime)
     ended = db.Column(db.DateTime)
     target_time = db.Column(db.DateTime)
-    state = db.Enum('created', 'finished', 'archived', 'deleted', name='run_state')
+    state = db.Enum('created', 'finished', 'archived', 'deleted', 'uploaded', name='run_state')
     experiment = db.Column(db.Text)
     def __repr__(self):
         return '<Run %r>' % self.id
@@ -124,6 +161,29 @@ class PredEval(db.Model):
     hmf2 = db.Column(db.Numeric(asdecimal=False))
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
     measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined', innerjoin=True)
+
+class CosmicEval(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    time = db.Column(db.DateTime)
+    run_id = db.Column(db.Integer, db.ForeignKey('runs.id'))
+    run = db.relationship('Runs', foreign_keys=[run_id])
+    hours_ahead = db.Column(db.Integer)
+#    source = db.Enum('cosmic-2', 'planetiq', name='cosmic_source')
+    source = db.Column(db.Text)
+    nearest_station = db.Column(db.Integer, db.ForeignKey('station.id'))
+    station_distance = db.Column(db.Numeric(asdecimal=False))
+    latitude = db.Column(db.Numeric(asdecimal=False))
+    longitude = db.Column(db.Numeric(asdecimal=False))
+    fof2_true = db.Column(db.Numeric(asdecimal=False))
+    fof2_iri = db.Column(db.Numeric(asdecimal=False))
+    fof2_irimap = db.Column(db.Numeric(asdecimal=False))
+    fof2_full = db.Column(db.Numeric(asdecimal=False))
+    fof2_irtam = db.Column(db.Numeric(asdecimal=False))
+    hmf2_true = db.Column(db.Numeric(asdecimal=False))
+    hmf2_iri = db.Column(db.Numeric(asdecimal=False))
+    hmf2_irimap = db.Column(db.Numeric(asdecimal=False))
+    hmf2_full = db.Column(db.Numeric(asdecimal=False))
+    hmf2_irtam = db.Column(db.Numeric(asdecimal=False))
 
 #Generate marshmallow Schemas from your models using ModelSchema
 
@@ -191,6 +251,14 @@ class PredEvalSchema(ma.SQLAlchemyAutoSchema):
 
 pred_eval_schema = PredEvalSchema()
 pred_evals_schema = PredEvalSchema(many=True)
+
+class CosmicEvalSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = CosmicEval
+        load_instance = True
+
+cosmic_eval_schema = CosmicEvalSchema()
+cosmic_evals_schema = CosmicEvalSchema(many=True)
 
 #You can now use your schema to dump and load your ORM objects.
 
@@ -626,13 +694,13 @@ def get_holdout_eval():
         ts = ts.replace(tzinfo=dt.timezone.utc)
         qry = qry.filter(Measurement.time >= ts)
     qry = qry.join(Runs).filter_by(experiment=experiment)
-    print(qry.statement.compile())
     dump = holdout_evals_schema.dump(qry)
 
     modelmap = {
         'iri': '1-IRI',
         'irimap': '2-IRI+eSSN',
         'assimilated': '3-Full',
+        'irtam': '4-IRTAM',
     }
 
     for row in dump:
@@ -644,9 +712,9 @@ def get_holdout_eval():
         'time': row['holdout']['measurement']['time'],
         'station': row['holdout']['station'],
         'model': modelmap.get(row['model'], 'unk'),
-        'delta_fof2': row['fof2'] - row['holdout']['measurement']['fof2'],
-        'delta_mufd': row['mufd'] - row['holdout']['measurement']['mufd'],
-        'delta_hmf2': row['hmf2'] - row['holdout']['measurement']['hmf2'],
+        'delta_fof2': (float('nan') if row['fof2'] is None else row['fof2']) - row['measurement']['fof2'],
+        'delta_mufd': (float('nan') if row['mufd'] is None else row['mufd']) - row['measurement']['mufd'],
+        'delta_hmf2': (float('nan') if row['hmf2'] is None else row['hmf2']) - row['measurement']['hmf2'],
         'true_fof2': row['holdout']['measurement']['fof2'],
         'true_mufd': row['holdout']['measurement']['mufd'],
         'true_hmf2': row['holdout']['measurement']['hmf2'],
@@ -671,6 +739,7 @@ def get_pred_eval():
         'iri': '1-IRI',
         'irimap': '2-IRI+eSSN',
         'assimilated': '3-Full',
+        'irtam': '4-IRTAM',
     }
 
     for row in dump:
@@ -685,15 +754,67 @@ def get_pred_eval():
         'station': row['holdout']['station'],
         'model': modelmap.get(row['model'], 'unk'),
         'hours_ahead': row['hours_ahead'],
-        'delta_fof2': row['fof2'] - row['measurement']['fof2'],
-        'delta_mufd': row['mufd'] - row['measurement']['mufd'],
-        'delta_hmf2': row['hmf2'] - row['measurement']['hmf2'],
+        'delta_fof2': (float('nan') if row['fof2'] is None else row['fof2']) - row['measurement']['fof2'],
+        'delta_mufd': (float('nan') if row['mufd'] is None else row['mufd']) - row['measurement']['mufd'],
+        'delta_hmf2': (float('nan') if row['hmf2'] is None else row['hmf2']) - row['measurement']['hmf2'],
         'true_fof2': row['measurement']['fof2'],
         'true_mufd': row['measurement']['mufd'],
         'true_hmf2': row['measurement']['hmf2'],
     } for row in dump if row['measurement'] is not None ]
 
     return Response(json.dumps(ret), mimetype='application/json')
+
+@app.route("/cosmic_eval", methods=['GET'])
+def get_cosmic_eval():
+    experiment = request.args.get('experiment', '2023-05b-ipe-control')
+    sample = float(request.args.get('sample', 100))
+    fmt = request.args.get('format', 'json')
+
+    table = CosmicEval
+    if sample != 100:
+        table = aliased(table, tablesample(table, sample))
+
+    qry = db.session.query(table).join(Runs).filter(Runs.experiment==experiment)
+    
+    since = request.args.get('since', None)
+    if since is not None:
+        ts = dateutil.parser.parse(since)
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+        qry = qry.filter(CosmicEval.time >= ts)
+
+    qry = qry.yield_per(5000)
+    if fmt == 'json':
+        return Response(dump_streaming(qry, cosmic_eval_schema), mimetype='application/json')
+    elif fmt == 'arrow':
+        return Response(arrow_streaming(qry.statement, qry.session.bind, remove_fields=['id', 'run_id']), mimetype='application/vnd.apache.arrow')
+    else:
+        raise("unknown format")
+
+
+@app.route("/sonde_export", methods=['GET'])
+def sonde_export():
+    station = int(request.args.get('station', None))
+    since = request.args.get('since', None)
+    sample = int(request.args.get('sample', 100))
+    fmt = request.args.get('format', 'arrow')
+
+    table = Measurement
+    if sample != 100:
+        table = aliased(table, tablesample(table, sample))
+
+    qry = db.session.query(table).filter(Measurement.station_id == station)
+    if since is not None:
+        ts = dateutil.parser.parse(since)
+        ts = ts.replace(tzinfo=dt.timezone.utc)
+        qry = qry.filter(Measurement.time >= ts)
+
+    qry = qry.yield_per(5000)
+    if fmt == 'json':
+        return Response(dump_streaming(qry, measurement_schema), mimetype='application/json')
+    elif fmt == 'arrow':
+        return Response(arrow_streaming(qry.statement, qry.session.bind), mimetype='application/vnd.apache.arrow')
+    else:
+        raise("unknown format")
 
 @app.route("/", methods=['GET'])
 def static_stations():
