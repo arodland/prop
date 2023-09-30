@@ -2,8 +2,5 @@ h5py==3.7.0
 hdf5plugin==4.1.1
 cython
 Flask==2.2.2
-itsdangerous==2.1.2
 numba==0.56.4
 uwsgi==2.0.22
-Jinja2==3.1.2
-Werkzeug==2.2.2

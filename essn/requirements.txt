@@ -2,7 +2,4 @@ psycopg[binary]==3.1.6
 scipy==1.10.0
 Flask==2.2.2
 uwsgi==2.0.22
-itsdangerous==2.1.2
-Jinja2==3.1.2
-Werkzeug==2.2.2
 ppigrf==1.0.2
