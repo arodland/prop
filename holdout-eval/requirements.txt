@@ -1,6 +1,6 @@
 psycopg[binary]==3.1.6
 Flask==2.2.2
-uwsgi==2.0.21
+uwsgi==2.0.22
 h5py==3.7.0
 hdf5plugin==4.1.1
 itsdangerous==2.1.2
