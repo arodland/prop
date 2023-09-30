@@ -1,4 +1,4 @@
-Flask==2.2.2
+Flask==2.2.5
 psycopg[binary]==3.1.6
 uwsgi==2.0.22
 scipy==1.10.0
