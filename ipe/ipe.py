@@ -24,21 +24,28 @@ def get_ncdata(ts):
     run_ts = ts - timedelta(hours = ts.hour % 6)
     for i in range(7):
         if i == 6:
-            raise "tar not found"
+            raise "file not found"
 
-        tar_filename = 'wfs.t%02dz.%04d%02d%02d_%02d.tar' % (
+        nc_url = 'https://nomads.ncep.noaa.gov/pub/data/nccf/com/wfs/prod/wfs.%04d%02d%02d/%02d/wfs.t%02dz.ipe05.%04d%02d%02d_%02d%02d%02d.nc' % (
+            run_ts.year, run_ts.month, run_ts.day, run_ts.hour,
             run_ts.hour,
             ts.year, ts.month, ts.day,
-            ts.hour
+            ts.hour, ts.minute, ts.second
         )
+        print(nc_url)
 
-        tar_url = 'https://nomads.ncep.noaa.gov/pub/data/nccf/com/wfs/prod/wfs.%04d%02d%02d/%02d/%s' % (
-            run_ts.year, run_ts.month, run_ts.day, run_ts.hour,
-            tar_filename
-        )
         try:
-            res = urllib.request.urlopen(urllib.request.Request(tar_url, method="HEAD"))
-            res.close()
+            with urllib.request.urlopen(nc_url) as res:
+                content = res.read()
+
+            ds = netCDF4.Dataset('dummy.nc', memory=content)
+            return {
+                'hmf2': ds['HmF2'][:].data,
+                'nmf2': ds['NmF2'][:].data,
+                'lat': ds['lat'][:].data,
+                'lon': ds['lon'][:].data,
+            }
+
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 run_ts = run_ts - timedelta(hours=6)
@@ -46,73 +53,6 @@ def get_ncdata(ts):
                 raise e
         else:
             break
-
-    print(tar_url)
-    disk_filename = 'run-%04d%02d%02dT%02d-target-%04d%02d%02dT%02d.tar' % (run_ts.year, run_ts.month, run_ts.day, run_ts.hour, ts.year, ts.month, ts.day, ts.hour)
-
-    files = []
-    with os.scandir('/ipe-data') as i:
-        for entry in i:
-            if not entry.name.startswith('.') and entry.is_file():
-                m = re.match('run-(\d{4})(\d{2})(\d{2})T(\d{2})-target-(\d{4})(\d{2})(\d{2})T(\d{2}).tar', entry.name)
-                if m:
-                    files.append({ 
-                        'run_key': m[1] + m[2] + m[3] + 'T' + m[4],
-                        'target_key': m[5] + m[6] + m[7] + 'T' + m[8],
-                        'run_ts': datetime(year=int(m[1]), month=int(m[2]), day=int(m[3]), hour=int(m[4])),
-                        'target_ts': datetime(year=int(m[5]), month=int(m[6]), day=int(m[7]), hour=int(m[8])),
-                        'path': entry.path,
-                        })
-
-    by_target = {}
-
-    for f in files:
-        if f['target_ts'] < datetime.utcnow() - timedelta(minutes=90):
-            print("Delete %s which has target in the past" % f['path'])
-            os.unlink(f['path'])
-        else:
-            if f['target_key'] not in by_target:
-                by_target[f['target_key']] = []
-            by_target[f['target_key']].append(f)
-
-    for k, files in by_target.items():
-        if len(files) > 1:
-            files.sort(key=lambda f: f['run_key'])
-            for i in range(len(files) - 1):
-                f = files[i]
-                print("Delete %s which isn't the newest run for its target time" % f['path'])
-                try:
-                    os.unlink(f['path'])
-                except FileNotFoundError:
-                    pass
-
-    tar_path = '/ipe-data/' + disk_filename
-    if not os.path.exists(tar_path):
-        print("Downloading to %s" % tar_path)
-        urllib.request.urlretrieve(tar_url, tar_path)
-
-    tf = tarfile.open(tar_path, mode='r')
-
-    member_path = 'wfs.t%02dz.ipe05.%04d%02d%02d_%02d%02d%02d.nc' % (
-        run_ts.hour,
-        ts.year, ts.month, ts.day,
-        ts.hour, ts.minute, ts.second
-    )
-    print(member_path)
-
-    try:
-        ncbuf = tf.extractfile(member_path).read()
-    except tarfile.ReadError:
-        os.unlink(tar_path)
-        raise
-
-    ds = netCDF4.Dataset('dummy.nc', memory=ncbuf)
-    return {
-        'hmf2': ds['HmF2'][:].data,
-        'nmf2': ds['NmF2'][:].data,
-        'lat': ds['lat'][:].data,
-        'lon': ds['lon'][:].data,
-    }
 
 def resample(ilat, ilon, ds):
     olat, olon = np.meshgrid(
