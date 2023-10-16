@@ -5,7 +5,8 @@ StartLimitIntervalSec=600
 
 [Service]
 Type=oneshot
+Delegate=yes
 ExecStartPre=/usr/bin/rm -f /%t/%N-pid /%t/%N-cid
-ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pod --cidfile /%t/%N-cid --cgroups=no-conmon --user 1001 --mount type=bind,src=/home/prop/iri-index,dst=/iri-index prop-storm
+ExecStart=/usr/bin/podman run --rm --pod prop --name %N --conmon-pidfile /%t/%N-pod --cidfile /%t/%N-cid --cgroups=no-conmon --attach stdin --log-driver journald --user 1001 --mount type=bind,src=/home/prop/iri-index,dst=/iri-index prop-storm
 Restart=on-failure
 RestartSec=60

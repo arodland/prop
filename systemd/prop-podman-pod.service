@@ -3,6 +3,7 @@ Description=Podman Pod for Prop
 After=network-online.target
 PartOf=kc2gprop.target
 [Service]
+Delegate=yes
 ExecStartPre=-podman pod rm -f prop
 ExecStart=podman pod create --name prop -p 127.0.0.1:5500-5520:5500-5520
 ExecStop=podman pod rm -f prop
