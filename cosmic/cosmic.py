@@ -11,6 +11,7 @@ import netCDF4
 import h5py
 import hdf5plugin
 import json
+import ppigrf
 from pygeodesy.sphericalTrigonometry import LatLon
 
 LatLon.epsilon = 1e-6
@@ -91,6 +92,10 @@ for source in sources:
                 rounded = rounded - datetime.timedelta(minutes = rounded.minute % 15)
                 iri = get_iri(ts, ds.edmaxlat, ds.edmaxlon)
 
+                east, north, up = ppigrf.igrf(lat=ds.edmaxlat, lon=ds.edmaxlon, h=1, date=ts)
+                dip_angle = np.degrees(np.arctan2(-up, np.hypot(east, north)))[0, 0]
+                modip = np.degrees(np.arctan2(np.radians(dip_angle), np.sqrt(np.cos(np.radians(ds.edmaxlat)))))
+
                 if bins.get(rounded) is None:
                     bins[rounded] = []
 
@@ -98,6 +103,8 @@ for source in sources:
                     'ts'  : ts,
                     'lat' : ds.edmaxlat,
                     'lon' : ds.edmaxlon,
+                    'dip_angle' : dip_angle,
+                    'modip' : modip,
                     'fof2': ds.critfreq,
                     'hmf2': ds.edmaxalt,
                     'iri_fof2': iri['fof2'],
@@ -155,7 +162,7 @@ for key in sorted(bins.keys()):
                 dist = sorted(dist, key=lambda x: x['dist'])
                 nearest = dist[0]
 
-                ins.execute("insert into cosmic_eval(time, latitude, longitude, run_id, hours_ahead, fof2_true, fof2_iri, fof2_irimap, fof2_full, hmf2_true, hmf2_iri, hmf2_irimap, hmf2_full, nearest_station, station_distance, source) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (record['ts'], record['lat'], record['lon'], row['run_id'], row['hours_ahead'], fof2_true, fof2_iri, fof2_iri_essn, fof2_full, hmf2_true, hmf2_iri, hmf2_iri_essn, hmf2_full, nearest['id'], nearest['dist'], record['source']))
+                ins.execute("insert into cosmic_eval(time, latitude, longitude, dip_angle, modip, run_id, hours_ahead, fof2_true, fof2_iri, fof2_irimap, fof2_full, hmf2_true, hmf2_iri, hmf2_irimap, hmf2_full, nearest_station, station_distance, source) values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (record['ts'], record['lat'], record['lon'], record['dip_angle'], record['modip'], row['run_id'], row['hours_ahead'], fof2_true, fof2_iri, fof2_iri_essn, fof2_full, hmf2_true, hmf2_iri, hmf2_iri_essn, hmf2_full, nearest['id'], nearest['dist'], record['source']))
                 num_loaded += ins.rowcount
                 num_attempted += 1
                 if num_attempted % 10000 == 0:
