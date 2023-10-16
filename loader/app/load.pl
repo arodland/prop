@@ -21,7 +21,7 @@ my $statsd = Net::Statsd::Client->new(
   host => $ENV{STATSD_HOST},
 );
 
-warn "Input file: ", $ARGV[0], "\n";
+print "Input file: ", $ARGV[0], "\n";
 
 my $sao = Data::SAO->new(filename => $ARGV[0]);
 my $source = $ARGV[1] || 'noaa';
@@ -32,7 +32,7 @@ my $geophys = $sao->geophysical_constants;
 my ($lat, $lon) = ($geophys->{latitude}, $geophys->{longitude});
 
 sub debug {
-  warn "[$code] ", @_, "\n";
+  print "[$code] ", @_, "\n";
 }
 
 my ($station_id) = $dbh->selectrow_array("SELECT id FROM station WHERE code=?", undef, $code);
