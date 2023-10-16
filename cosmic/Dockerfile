@@ -6,6 +6,7 @@ RUN pip3 install -r requirements.txt
 COPY cosmic.py ./
 COPY backfill_hmf2.py ./
 COPY backfill_irtam.py ./
+COPY backfill_modip_mp.py ./
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 CMD python3 -u /src/cosmic.py
