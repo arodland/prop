@@ -1,6 +1,5 @@
 import os
 import io
-import sys
 from datetime import datetime, timezone
 
 import numpy as np
@@ -48,9 +47,9 @@ def get_scale(base, target):
     target_med = wquantiles.quantile(target_trimmed, weight, 0.5)
 
     iqr_ratio = (
-            (wquantiles.quantile(base_trimmed, weight, 0.75) - wquantiles.quantile(base_trimmed, weight, 0.25)) /
-            (wquantiles.quantile(target_trimmed, weight, 0.75) - wquantiles.quantile(target_trimmed, weight, 0.25))
-            )
+        (wquantiles.quantile(base_trimmed, weight, 0.75) - wquantiles.quantile(base_trimmed, weight, 0.25)) /
+        (wquantiles.quantile(target_trimmed, weight, 0.75) - wquantiles.quantile(target_trimmed, weight, 0.25))
+    )
 
     return (base_med, target_med, iqr_ratio)
 
@@ -74,12 +73,12 @@ def assimilate(run_id, ts, holdout, basemap_type, cs_type):
         ipemap = {k: ipemap[k] for k in ('/maps/hmf2', '/maps/fof2', '/maps/mufd')}
 
         if basemap_type.endswith('_scaled'):
-            basemap_type = basemap_type[:len(basemap_type)-len('_scaled')]
+            basemap_type = basemap_type[:len(basemap_type) - len('_scaled')]
             fof2_scale = get_scale(irimap['/maps/fof2'], ipemap['/maps/fof2'])
             ipemap['/maps/fof2'] = rescale(ipemap['/maps/fof2'], fof2_scale)
             ipemap['/maps/mufd'] = rescale(ipemap['/maps/mufd'], fof2_scale)
         elif basemap_type.endswith('_logscaled'):
-            basemap_type = basemap_type[:len(basemap_type)-len('_logscaled')]
+            basemap_type = basemap_type[:len(basemap_type) - len('_logscaled')]
             fof2_scale = get_scale(np.log(irimap['/maps/fof2']), np.log(ipemap['/maps/fof2']))
             new_fof2 = np.exp(rescale(np.log(ipemap['/maps/fof2']), fof2_scale))
             fof2_ratio = new_fof2 / ipemap['/maps/fof2'][:]
@@ -113,10 +112,11 @@ def assimilate(run_id, ts, holdout, basemap_type, cs_type):
         df_pred_filtered = jsonapi.filter(df_pred.copy(), required_metrics=[metric], min_confidence=0.1)
 
         basemodel = spline.Spline(basemap['/maps/' + metric])
-        pred = basemodel.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
+        pred = basemodel.predict(df_pred_filtered['station.latitude'].values,
+                                 df_pred_filtered['station.longitude'].values)
 
         if cs_type == 'new':
-            stdev = df_pred_filtered['stdev_'+metric].values
+            stdev = df_pred_filtered['stdev_' + metric].values
         else:
             stdev = 0.203 - 0.170 * df_pred_filtered.cs.values
 
@@ -136,13 +136,15 @@ def assimilate(run_id, ts, holdout, basemap_type, cs_type):
         base_mufd = spline.Spline(basemap['/maps/mufd'])
         base_fof2 = spline.Spline(basemap['/maps/fof2'])
 
-        pred_mufd = base_mufd.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
-        pred_fof2 = base_fof2.predict(df_pred_filtered['station.latitude'].values, df_pred_filtered['station.longitude'].values)
+        pred_mufd = base_mufd.predict(df_pred_filtered['station.latitude'].values,
+                                      df_pred_filtered['station.longitude'].values)
+        pred_fof2 = base_fof2.predict(df_pred_filtered['station.latitude'].values,
+                                      df_pred_filtered['station.longitude'].values)
 
         pred_md = pred_mufd / pred_fof2
 
         if cs_type == 'new':
-            stdev = df_pred_filtered['stdev_'+metric].values
+            stdev = df_pred_filtered['stdev_' + metric].values
         else:
             stdev = 0.203 - 0.170 * df_pred_filtered.cs.values
 
@@ -169,7 +171,8 @@ app = Flask(__name__)
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
+        os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg.connect(dsn)
 
     run_id = int(request.form.get('run_id', -1))
@@ -183,7 +186,11 @@ def generate():
     dataset = assimilate(run_id, tgt, holdout, basemap_type, cs_type)
 
     with con.cursor() as cur:
-        cur.execute('insert into assimilated (time, run_id, dataset) values (%s, %s, %s) on conflict (run_id, time) do update set dataset=excluded.dataset', (tm, run_id, dataset))
+        cur.execute("""insert into assimilated (time, run_id, dataset)
+                    values (%s, %s, %s)
+                    on conflict (run_id, time) do update set dataset=excluded.dataset""",
+                    (tm, run_id, dataset)
+                    )
         con.commit()
 
     con.close()

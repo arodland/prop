@@ -20,7 +20,7 @@ class GP3D:
 
         kernel = 0.0809**2 * Matern52Kernel(0.0648, ndim=3) + 0.0845**2 * ExpSquaredKernel(0.481, ndim=3)
         self.gp = george.GP(kernel)
-        self.gp.compute(np.column_stack((x,y,z)), stdev + 1e-3)
+        self.gp.compute(np.column_stack((x, y, z)), stdev + 1e-3)
         self.z = t
 
     def predict(self, latitude, longitude):

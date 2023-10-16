@@ -9,4 +9,3 @@ def get_data(url):
         bio = io.BytesIO(content)
         h5 = h5py.File(bio, 'r')
         return h5
-
