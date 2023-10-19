@@ -854,7 +854,9 @@ def get_cosmic_eval():
 
     qry = qry.yield_per(6000)
     if fmt == 'json':
-        return Response(dump_streaming(qry, cosmic_eval_schema), mimetype='application/json')
+        with db.engine.connect() as con:
+            res = con.execute(qry.statement)
+            return Response(dump_streaming(res, cosmic_eval_schema), mimetype='application/json')
     elif fmt == 'arrow':
         return Response(arrow_streaming(qry.statement, db.engine, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
     else:
@@ -880,7 +882,9 @@ def sonde_export():
 
     qry = qry.yield_per(6000)
     if fmt == 'json':
-        return Response(dump_streaming(qry, measurement_schema), mimetype='application/json')
+        with db.engine.connect() as con:
+            res = con.execute(qry.statement)
+            return Response(dump_streaming(res, measurement_schema), mimetype='application/json')
     elif fmt == 'arrow':
         return Response(arrow_streaming(qry.statement, db.engine), mimetype='application/vnd.apache.arrow')
     else:
