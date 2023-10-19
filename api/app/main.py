@@ -18,9 +18,10 @@ import logging
 import pandas as pd
 import pyarrow as pa
 
-#logging.basicConfig()
-#logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 from werkzeug.middleware.profiler import ProfilerMiddleware
+
+# logging.basicConfig()
+# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql+psycopg://%s:%s@%s:5432/%s' % (
@@ -35,7 +36,7 @@ ma = Marshmallow(app)
 
 memcache = MemcacheClient('127.0.0.1', ignore_exc=True, no_delay=True)
 
-#Declare models 
+# Declare models
 
 @stream_with_context
 def dump_streaming(obj, schema):
@@ -51,7 +52,7 @@ def dump_streaming(obj, schema):
 
 @stream_with_context
 def arrow_streaming(qry, con, remove_fields=[]):
-    dfi = pd.read_sql(qry, con, chunksize=250000, dtype_backend='pyarrow')
+    dfi = pd.read_sql(qry, con, chunksize=240000, dtype_backend='pyarrow')
     bio = io.BytesIO()
     it = iter(dfi)
     i = next(it, None)
@@ -71,7 +72,7 @@ def arrow_streaming(qry, con, remove_fields=[]):
     yield bio.getvalue()
 
 class Station(db.Model):
-    id = db.Column(db.Integer,  primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(80), unique=True, nullable=False)
     code = db.Column(db.String, unique=True)
     longitude = db.Column(db.Text)
@@ -106,6 +107,7 @@ class Measurement(db.Model):
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station = db.relationship('Station', foreign_keys=[station_id], back_populates='measurements')
     md = db.Column(db.Text)
+
     def __repr__(self):
         return '<Measurement %r>' % self.id
 
@@ -117,6 +119,7 @@ class Runs(db.Model):
     target_time = db.Column(db.DateTime)
     state = db.Enum('created', 'finished', 'archived', 'deleted', 'uploaded', name='run_state')
     experiment = db.Column(db.Text)
+
     def __repr__(self):
         return '<Run %r>' % self.id
 
@@ -134,6 +137,7 @@ class Prediction(db.Model):
     stdev_hmf2 = db.Column(db.Numeric(asdecimal=False))
     station_id = db.Column(db.Integer, db.ForeignKey('station.id'))
     station = db.relationship('Station', foreign_keys=[station_id])
+
     def __repr__(self):
         return '<Prediction %r>' % self.id
 
@@ -145,6 +149,7 @@ class Holdout(db.Model):
     station = db.relationship('Station', foreign_keys=[station_id], lazy='joined', innerjoin=True)
     measurement_id = db.Column(db.Integer, db.ForeignKey('measurement.id'))
     measurement = db.relationship('Measurement', foreign_keys=[measurement_id], lazy='joined', innerjoin=True)
+
     def __repr__(self):
         return '<Holdout %r: %r %r %r>' % (self.id, self.run_id, self.station_id, self.measurement_id)
 
@@ -196,7 +201,7 @@ class CosmicEval(db.Model):
     modip = db.Column(db.Numeric(asdecimal=False))
     generation = db.Column(db.Integer)
 
-#Generate marshmallow Schemas from your models using ModelSchema
+# Generate marshmallow Schemas from your models using ModelSchema
 
 class StationSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
@@ -228,7 +233,7 @@ class RunsSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Runs
         load_instance = True
-    
+
 run_schema = RunsSchema()
 runs_schema = RunsSchema(many=True)
 
@@ -238,7 +243,7 @@ class HoldoutSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
 
     station = fields.Nested(StationSchema(only=['id', 'code', 'latitude', 'longitude']))
-    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
+    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2', 'hmf2', 'mufd']))
 
 holdout_schema = HoldoutSchema()
 holdouts_schema = HoldoutSchema(many=True)
@@ -258,7 +263,7 @@ class PredEvalSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
 
     holdout = fields.Nested(HoldoutSchema)
-    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2','hmf2','mufd']))
+    measurement = fields.Nested(MeasurementSchema(only=['id', 'time', 'fof2', 'hmf2', 'mufd']))
 
 pred_eval_schema = PredEvalSchema()
 pred_evals_schema = PredEvalSchema(many=True)
@@ -271,15 +276,16 @@ class CosmicEvalSchema(ma.SQLAlchemyAutoSchema):
 cosmic_eval_schema = CosmicEvalSchema()
 cosmic_evals_schema = CosmicEvalSchema(many=True)
 
-#You can now use your schema to dump and load your ORM objects.
+# You can now use your schema to dump and load your ORM objects.
 
-#Returns latest measurements for all stations in JSON
-@app.route("/stations.json" , methods=['GET'])
+# Returns latest measurements for all stations in JSON
+@app.route("/stations.json", methods=['GET'])
 def stationsjson():
     maxage = request.args.get('maxage', None)
     source = request.args.get('source', None)
 
-    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage) + ';' + ('<none>' if source is None else source)
+    cachekey = 'api;stations.json;' + ('<none>' if maxage is None else maxage) + \
+                                       ';' + ('<none>' if source is None else source)
     ret = memcache.get(cachekey)
 
     if ret is None:
@@ -301,13 +307,13 @@ def stationsjson():
             qry = qry.params(**bp)
 
         db.session.close()
-        
+
         ret = measurements_schema.dumps(qry)
         memcache.set(cachekey, ret, 60)
 
     return Response(ret, mimetype='application/json')
 
-@app.route("/pred.json" , methods=['GET'])
+@app.route("/pred.json", methods=['GET'])
 def predjson():
     run_id = request.args.get('run_id', None)
     ts = request.args.get('ts', None)
@@ -322,11 +328,11 @@ def predjson():
 
     qry = db.session.query(Prediction).from_statement(
         text("select p.* from prediction p where run_id=:run_id and time=:ts order by station_id asc")).params(
-            run_id = run_id,
-            ts = ts,
+            run_id=run_id,
+            ts=ts,
         )
     db.session.close()
-    
+
     ret = predictions_schema.dumps(qry)
     return Response(ret, mimetype='application/json')
 
@@ -336,7 +342,7 @@ def pred_sample():
 
     qry = db.session.query(Prediction).from_statement(
         text("select prediction.* from prediction, (select run_id, min(time) as time from prediction where run_id in (select run_id from prediction order by random() limit :n_samples) group by run_id) sample where prediction.run_id=sample.run_id and prediction.time=sample.time order by run_id asc, station_id asc")).params(
-            n_samples = n_samples
+            n_samples=n_samples
     )
     db.session.close()
 
@@ -349,13 +355,15 @@ def predseries():
     experiment = request.args.get('experiment', None)
     run_id = request.args.get('run_id', None)
 
-    cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id) + ';' + ('<none>' if run_id is None else run_id)
+    cachekey = 'api;pred_series.json;' + ('<none>' if station_id is None else station_id) + \
+                                          ';' + ('<none>' if run_id is None else run_id)
     ret = memcache.get(cachekey)
 
     if ret is None:
         sql = "select p.* from prediction p"
         if run_id is None:
-            sql = sql + " where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment)"
+            sql = sql + \
+                " where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment)"
         else:
             sql = sql + " where run_id=:run_id"
 
@@ -366,12 +374,12 @@ def predseries():
         qry = db.session.query(Measurement).from_statement(text(sql))
 
         if run_id is None:
-            qry = qry.params(experiment = experiment)
+            qry = qry.params(experiment=experiment)
         else:
-            qry = qry.params(run_id = int(run_id))
+            qry = qry.params(run_id=int(run_id))
 
         if station_id is not None:
-            qry = qry.params(station_id = station_id)
+            qry = qry.params(station_id=station_id)
 
         db.session.close()
 
@@ -386,7 +394,8 @@ def predseries():
 
             prev_st = row['station']['name']
 
-            out[len(out)-1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'], 'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
+            out[len(out) - 1]['pred'].append({'cs': row['cs'], 'fof2': row['fof2'],
+                    'hmf2': row['hmf2'], 'mufd': row['mufd'], 'time': row['time']})
 
         ret = json.dumps(out)
         memcache.set(cachekey, ret, 60)
@@ -403,14 +412,17 @@ def essnjson():
     if ret is None:
         with db.engine.connect() as conn:
             res = conn.execute(
-                text("select extract(epoch from e.time) as time, e.series, e.ssn, e.sfi, e.err from essn e left join runs r on e.run_id=r.id where e.time >= now() - :days * interval '1 day' and r.experiment is null order by time asc").\
-                    bindparams(days=days).\
-                    columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
+                text("select extract(epoch from e.time) as time, e.series, e.ssn, e.sfi, e.err from essn e left join runs r on e.run_id=r.id where e.time >= now() - :days * interval '1 day' and r.experiment is null order by time asc").
+                    bindparams(days=days).
+                    columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(
+                        asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
             )
             rows = res.mappings().all()
             series = {}
-            series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '24h' ]
-            series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '6h' ]
+            series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] }
+                                              for row in rows if row['series'] == '24h' ]
+            series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] }
+                                             for row in rows if row['series'] == '6h' ]
 
         ret = json.dumps(series)
         memcache.set(cachekey, ret, 60)
@@ -430,7 +442,7 @@ def irimap():
 
     cachekey = 'api;irimap.h5;%s;%s' % (run_id, ts)
     ret = memcache.get(cachekey)
-    
+
     if ret is None:
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
@@ -448,7 +460,7 @@ def irimap():
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
-        
+
 @app.route("/assimilated.h5", methods=['GET'])
 def assimilated():
     run_id = request.args.get('run_id', None)
@@ -480,7 +492,7 @@ def assimilated():
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
-        
+
 @app.route("/ipe.h5", methods=['GET'])
 def ipe():
     run_id = request.args.get('run_id', None)
@@ -512,7 +524,7 @@ def ipe():
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
-        
+
 def get_latest_run(experiment=None):
     cachekey = 'api;get_latest_run;%s' % ('<none>' if experiment is None else experiment)
     ret = memcache.get(cachekey)
@@ -840,7 +852,7 @@ def get_cosmic_eval():
     # print("qry:", qry)
     # print("qry.statement:", qry.statement)
 
-    qry = qry.yield_per(5000)
+    qry = qry.yield_per(6000)
     if fmt == 'json':
         return Response(dump_streaming(qry, cosmic_eval_schema), mimetype='application/json')
     elif fmt == 'arrow':
@@ -866,7 +878,7 @@ def sonde_export():
         ts = ts.replace(tzinfo=dt.timezone.utc)
         qry = qry.filter(Measurement.time >= ts)
 
-    qry = qry.yield_per(5000)
+    qry = qry.yield_per(6000)
     if fmt == 'json':
         return Response(dump_streaming(qry, measurement_schema), mimetype='application/json')
     elif fmt == 'arrow':
