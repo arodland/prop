@@ -189,6 +189,8 @@ class CosmicEval(db.Model):
     hmf2_irimap = db.Column(db.Numeric(asdecimal=False))
     hmf2_full = db.Column(db.Numeric(asdecimal=False))
     hmf2_irtam = db.Column(db.Numeric(asdecimal=False))
+    dip_angle = db.Column(db.Numeric(asdecimal=False))
+    modip = db.Column(db.Numeric(asdecimal=False))
     generation = db.Column(db.Integer)
 
 #Generate marshmallow Schemas from your models using ModelSchema
