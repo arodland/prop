@@ -837,13 +837,14 @@ def get_cosmic_eval():
     if generation_after is not None:
         qry = qry.filter(CosmicEval.generation > int(generation_after))
 
-    print(str(qry))
+    # print("qry:", qry)
+    # print("qry.statement:", qry.statement)
 
     qry = qry.yield_per(5000)
     if fmt == 'json':
         return Response(dump_streaming(qry, cosmic_eval_schema), mimetype='application/json')
     elif fmt == 'arrow':
-        return Response(arrow_streaming(qry.statement, qry.session.bind, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
+        return Response(arrow_streaming(qry.statement, db.engine, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
     else:
         raise("unknown format")
 
@@ -869,7 +870,7 @@ def sonde_export():
     if fmt == 'json':
         return Response(dump_streaming(qry, measurement_schema), mimetype='application/json')
     elif fmt == 'arrow':
-        return Response(arrow_streaming(qry.statement, qry.session.bind), mimetype='application/vnd.apache.arrow')
+        return Response(arrow_streaming(qry.statement, db.engine), mimetype='application/vnd.apache.arrow')
     else:
         raise("unknown format")
 
