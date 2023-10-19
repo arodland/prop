@@ -7,7 +7,7 @@ MarkupSafe==2.1.1
 marshmallow==3.19.0
 marshmallow-sqlalchemy==0.29.0
 pandas[performance]==2.1.1
-psycopg2
+psycopg[binary]==3.1.12
 pyarrow==12.0.0
 pymemcache==3.4.0
 pyparsing==2.3.0
