@@ -672,9 +672,16 @@ def ptp_json():
 @app.route("/holdout", methods=['GET'])
 def get_holdout():
     run_id = int(request.values.get('run_id'))
-    qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
-    ho = holdouts_schema.dumps(qry)
-    return Response(ho, mimetype='application/json')
+
+    cachekey = 'api;holdout;' + str(run_id)
+    ret = memcache.get(cachekey)
+
+    if ret is None:
+        qry = db.session.query(Holdout).filter(Holdout.run_id == run_id)
+        ret = holdouts_schema.dumps(qry)
+        memcache.set(cachekey, ret, 60)
+
+    return Response(ret, mimetype='application/json')
 
 @app.route("/holdout_measurements", methods=['POST'])
 def post_holdout_measurements():
