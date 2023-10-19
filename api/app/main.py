@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_file, make_response, redirect, Response
+from flask import Flask, request, jsonify, render_template, send_file, make_response, redirect, Response, stream_with_context
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from marshmallow import Schema, fields
@@ -36,6 +36,7 @@ memcache = MemcacheClient('127.0.0.1', ignore_exc=True, no_delay=True)
 
 #Declare models 
 
+@stream_with_context
 def dump_streaming(obj, schema):
     yield "["
     it = iter(obj)
@@ -47,6 +48,7 @@ def dump_streaming(obj, schema):
             yield ","
     yield "]"
 
+@stream_with_context
 def arrow_streaming(qry, con, remove_fields=[]):
     dfi = pd.read_sql(qry, con, chunksize=250000, dtype_backend='pyarrow')
     bio = io.BytesIO()
@@ -404,7 +406,7 @@ def essnjson():
                     bindparams(days=days).\
                     columns(time=db.Numeric(asdecimal=False), series=db.Text, ssn=db.Numeric(asdecimal=False), sfi=db.Numeric(asdecimal=False), err=db.Numeric(asdecimal=False))
             )
-            rows = list(res.fetchall())
+            rows = res.mappings().all()
             series = {}
             series['24h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '24h' ]
             series['6h'] = [ { 'time': round(row['time']), 'ssn': row['ssn'], 'sfi': row['sfi'] } for row in rows if row['series'] == '6h' ]
@@ -431,16 +433,17 @@ def irimap():
     if ret is None:
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
-            res = conn.execute("select dataset from irimap where run_id=%s and time=%s",
-                (run_id, ts),
+            res = conn.execute(text("select dataset from irimap where run_id=:run_id and time=:ts").\
+                               bindparams(run_id=run_id, ts=ts).\
+                               columns(dataset=db.LargeBinary)
             )
 
-            rows = list(res.fetchall())
+            rows = res.mappings().all()
 
             if len(rows) == 0:
                 return make_response('Not Found', 404)
 
-            ret = rows[0]['dataset'].tobytes()
+            ret = rows[0]['dataset']
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
@@ -462,16 +465,17 @@ def assimilated():
     if ret is None:
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
-            res = conn.execute("select dataset from assimilated where run_id=%s and time=%s",
-                (run_id, ts),
+            res = conn.execute(text("select dataset from assimilated where run_id=:run_id and time=:ts").\
+                               bindparams(run_id=run_id, ts=ts).\
+                               columns(dataset=db.LargeBinary)
             )
 
-            rows = list(res.fetchall())
+            rows = res.mappings().all()
 
             if len(rows) == 0:
                 return make_response('Not Found', 404)
 
-            ret = rows[0]['dataset'].tobytes()
+            ret = rows[0]['dataset']
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
@@ -493,16 +497,17 @@ def ipe():
     if ret is None:
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
-            res = conn.execute("select dataset from ipemap where run_id=%s and time=%s",
-                (run_id, ts),
+            res = conn.execute(text("select dataset from ipemap where run_id=:run_id and time=:ts").\
+                               bindparams(run_id=run_id, ts=ts).\
+                               columns(dataset=db.LargeBinary)
             )
 
-            rows = list(res.fetchall())
+            rows = res.mappings().all()
 
             if len(rows) == 0:
                 return make_response('Not Found', 404)
 
-            ret = rows[0]['dataset'].tobytes()
+            ret = rows[0]['dataset']
             memcache.set(cachekey, ret, 3600)
 
     return Response(ret, mimetype='application/x-hdf5')
@@ -514,8 +519,11 @@ def get_latest_run(experiment=None):
         return json.loads(ret)
 
     with db.engine.connect() as conn:
-        res = conn.execute("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from %s) order by ts asc", (experiment,))
-        rows = list(res.fetchall())
+        res = conn.execute(text("select id, run_id, extract(epoch from time) as ts from assimilated where run_id=(select max(id) from runs where state='finished' and experiment is not distinct from :experiment) order by ts asc").\
+                           bindparams(experiment=experiment).\
+                           columns(id=db.Numeric(asdecimal=False), run_id=db.Numeric(asdecimal=False), ts=db.Numeric(asdecimal=False))
+                           )
+        rows = res.mappings().all()
 
         if len(rows) == 0:
             return make_response('Not Found', 404)
@@ -547,9 +555,9 @@ def available_maps_json():
             from assimilated a
             join runs r on a.run_id=r.id
             where r.state='finished'
-            and r.experiment is not distinct from %s
-            and a.time >= now() - (%s * interval '1 hour')
-            and a.time < now() + (%s * interval '1 hour')
+            and r.experiment is not distinct from :experiment
+            and a.time >= now() - (:past_hours * interval '1 hour')
+            and a.time < now() + (:future_hours * interval '1 hour')
             and a.time >= r.started
             group by a.time
         ) a1
@@ -563,8 +571,11 @@ def available_maps_json():
         on a1.run_id=a2.run_id 
         order by a1.ts asc"""
 
-        res = conn.execute(sql, (experiment, past_hours, future_hours))
-        rows = list(res.fetchall())
+        res = conn.execute(text(sql).\
+                           bindparams(experiment=experiment, past_hours=past_hours, future_hours=future_hours).\
+                           columns(run_id=db.Numeric(asdecimal=False), ts=db.Numeric(asdecimal=False), start=db.Numeric(asdecimal=False))
+                           )
+        rows = res.mappings().all()
 
         if len(rows) == 0:
             return make_response('Not Found', 404)
@@ -586,7 +597,7 @@ def band_quality_json():
                     bindparams(days=days).\
                     columns(time=db.Numeric(asdecimal=False), band=db.Text, quality=db.Numeric(asdecimal=False))
             )
-            rows = list(res.fetchall())
+            rows = res.mappings().all()
             series = {}
             for row in rows:
                 if series.get(row['band']) is None:

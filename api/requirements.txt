@@ -1,11 +1,11 @@
 Flask==2.3.2
-flask-marshmallow==0.14.0
-Flask-SQLAlchemy==2.5.1
+flask-marshmallow==0.15.0
+Flask-SQLAlchemy==3.1.1
 kiwisolver==1.0.1
 maidenhead==1.5.0
 MarkupSafe==2.1.1
 marshmallow==3.19.0
-marshmallow-sqlalchemy==0.28.1
+marshmallow-sqlalchemy==0.29.0
 pandas[performance]==2.1.1
 psycopg2
 pyarrow==12.0.0
@@ -14,5 +14,5 @@ pyparsing==2.3.0
 python-dateutil==2.8.2
 pytz==2022.7
 six==1.16.0
-SQLAlchemy==1.4.46
+SQLAlchemy==2.0.22
 uwsgi==2.0.22
