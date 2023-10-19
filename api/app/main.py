@@ -20,10 +20,13 @@ import pyarrow as pa
 
 #logging.basicConfig()
 #logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+from werkzeug.middleware.profiler import ProfilerMiddleware
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://%s:%s@%s:5432/%s' % (os.getenv("DB_USER"),os.getenv("DB_PASSWORD"),os.getenv("DB_HOST"),os.getenv("DB_NAME"))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# app.wsgi_app = ProfilerMiddleware(app.wsgi_app, profile_dir='/profiles', stream=None)
 
 # Order matters: Initialize SQLAlchemy before Marshmallow
 db = SQLAlchemy(app)
