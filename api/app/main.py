@@ -48,7 +48,7 @@ def dump_streaming(obj, schema):
     yield "]"
 
 def arrow_streaming(qry, con, remove_fields=[]):
-    dfi = pd.read_sql(qry, con, chunksize=50000)
+    dfi = pd.read_sql(qry, con, chunksize=250000, dtype_backend='pyarrow')
     bio = io.BytesIO()
     it = iter(dfi)
     i = next(it, None)
@@ -189,6 +189,7 @@ class CosmicEval(db.Model):
     hmf2_irimap = db.Column(db.Numeric(asdecimal=False))
     hmf2_full = db.Column(db.Numeric(asdecimal=False))
     hmf2_irtam = db.Column(db.Numeric(asdecimal=False))
+    generation = db.Column(db.Integer)
 
 #Generate marshmallow Schemas from your models using ModelSchema
 
@@ -795,7 +796,7 @@ def get_pred_eval():
 
 @app.route("/cosmic_eval", methods=['GET'])
 def get_cosmic_eval():
-    experiment = request.args.get('experiment', '2023-05b-ipe-control')
+    experiments = request.args.getlist('experiment')
     sample = float(request.args.get('sample', 100))
     fmt = request.args.get('format', 'json')
 
@@ -803,19 +804,25 @@ def get_cosmic_eval():
     if sample != 100:
         table = aliased(table, tablesample(table, sample))
 
-    qry = db.session.query(table).join(Runs).filter(Runs.experiment==experiment)
-    
+    qry = db.session.query(table).join(Runs).filter(Runs.experiment.in_(experiments)).add_columns(Runs.experiment)
+
     since = request.args.get('since', None)
     if since is not None:
         ts = dateutil.parser.parse(since)
         ts = ts.replace(tzinfo=dt.timezone.utc)
         qry = qry.filter(CosmicEval.time >= ts)
 
+    generation_after = request.args.get('generation_after', None)
+    if generation_after is not None:
+        qry = qry.filter(CosmicEval.generation > int(generation_after))
+
+    print(str(qry))
+
     qry = qry.yield_per(5000)
     if fmt == 'json':
         return Response(dump_streaming(qry, cosmic_eval_schema), mimetype='application/json')
     elif fmt == 'arrow':
-        return Response(arrow_streaming(qry.statement, qry.session.bind, remove_fields=['id', 'run_id']), mimetype='application/vnd.apache.arrow')
+        return Response(arrow_streaming(qry.statement, qry.session.bind, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
     else:
         raise("unknown format")
 
