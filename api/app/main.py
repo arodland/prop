@@ -435,7 +435,7 @@ def irimap():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from irimap where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=int(run_id), ts=int(ts)).\
+                               bindparams(run_id=int(run_id), ts=ts).\
                                columns(dataset=db.LargeBinary)
             )
 
@@ -467,7 +467,7 @@ def assimilated():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from assimilated where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=int(run_id), ts=int(ts)).\
+                               bindparams(run_id=int(run_id), ts=ts).\
                                columns(dataset=db.LargeBinary)
             )
 
@@ -499,7 +499,7 @@ def ipe():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from ipemap where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=int(run_id), ts=int(ts)).\
+                               bindparams(run_id=int(run_id), ts=ts).\
                                columns(dataset=db.LargeBinary)
             )
 
