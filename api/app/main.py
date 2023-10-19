@@ -394,7 +394,7 @@ def predseries():
 
 @app.route("/essn.json", methods=['GET'])
 def essnjson():
-    days = request.args.get('days', 7)
+    days = int(request.args.get('days', 7))
 
     cachekey = 'api;essn.json;' + str(days)
     ret = memcache.get(cachekey)
@@ -434,7 +434,7 @@ def irimap():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from irimap where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=run_id, ts=ts).\
+                               bindparams(run_id=int(run_id), ts=int(ts)).\
                                columns(dataset=db.LargeBinary)
             )
 
@@ -466,7 +466,7 @@ def assimilated():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from assimilated where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=run_id, ts=ts).\
+                               bindparams(run_id=int(run_id), ts=int(ts)).\
                                columns(dataset=db.LargeBinary)
             )
 
@@ -498,7 +498,7 @@ def ipe():
         with db.engine.connect() as conn:
             ts = dt.datetime.fromtimestamp(float(ts))
             res = conn.execute(text("select dataset from ipemap where run_id=:run_id and time=:ts").\
-                               bindparams(run_id=run_id, ts=ts).\
+                               bindparams(run_id=int(run_id), ts=int(ts)).\
                                columns(dataset=db.LargeBinary)
             )
 
@@ -544,8 +544,8 @@ def latest_run():
 
 @app.route("/available_maps.json", methods=['GET'])
 def available_maps_json():
-    past_hours = request.args.get('past_hours', '24')
-    future_hours = request.args.get('future_hours', '24')
+    past_hours = int(request.args.get('past_hours', '24'))
+    future_hours = int(request.args.get('future_hours', '24'))
     experiment = request.args.get('experiment', None)
 
     with db.engine.connect() as conn:
@@ -585,7 +585,7 @@ def available_maps_json():
 
 @app.route("/band_quality.json", methods=['GET'])
 def band_quality_json():
-    days = request.args.get('days', 7)
+    days = int(request.args.get('days', 7))
 
     cachekey = 'api;band_quality.json;' + str(days)
     ret = memcache.get(cachekey)
@@ -720,14 +720,14 @@ def post_holdout():
         with db.engine.connect() as conn:
             res = conn.execute(
                 text("select m.id as id, m.station_id as station_id, extract(epoch from m.time) as time from measurement m where m.id=:id ").\
-                bindparams(id=meas).\
+                bindparams(id=int(meas)).\
                 columns(id=db.Numeric(asdecimal=False), station_id=db.Numeric(asdecimal=False), time=db.Numeric(asdecimal=False))
             )
             for row in res:
                 (measurement_id, station_id, meas_time) = row
                 res = conn.execute(
                     text("insert into holdout (station_id, measurement_id) values (:station_id, :measurement_id) returning id").\
-                        bindparams(station_id=station_id, measurement_id=measurement_id)
+                        bindparams(station_id=int(station_id), measurement_id=int(measurement_id))
                 )
                 (inserted_id,) = res.fetchone()
                 ret.append({ 'holdout': inserted_id, 'ts': meas_time })
