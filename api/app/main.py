@@ -52,7 +52,7 @@ def dump_streaming(obj, schema):
 
 @stream_with_context
 def arrow_streaming(qry, con, remove_fields=[]):
-    dfi = pd.read_sql(qry, con, chunksize=240000, dtype_backend='pyarrow')
+    dfi = pd.read_sql(qry, con, chunksize=100000)
     bio = io.BytesIO()
     it = iter(dfi)
     i = next(it, None)
@@ -60,7 +60,7 @@ def arrow_streaming(qry, con, remove_fields=[]):
         schema = pa.Schema.from_pandas(i)
         for field in remove_fields:
             schema = schema.remove(schema.get_field_index(field))
-        writer = pa.ipc.new_stream(bio, schema, options=pa.ipc.IpcWriteOptions(compression='lz4'))
+        writer = pa.ipc.new_stream(bio, schema, options=pa.ipc.IpcWriteOptions(compression='zstd'))
     while i is not None:
         batch = pa.RecordBatch.from_pandas(i, schema=schema, preserve_index=False)
         writer.write_batch(batch)
@@ -69,6 +69,7 @@ def arrow_streaming(qry, con, remove_fields=[]):
         bio.truncate(0)
         i = next(it, None)
     writer.close()
+    con.close()
     yield bio.getvalue()
 
 class Station(db.Model):
@@ -852,13 +853,15 @@ def get_cosmic_eval():
     # print("qry:", qry)
     # print("qry.statement:", qry.statement)
 
-    qry = qry.yield_per(6000)
+    qry = qry.yield_per(2000)
     if fmt == 'json':
         with db.engine.connect() as con:
             res = con.execute(qry.statement)
             return Response(dump_streaming(res, cosmic_eval_schema), mimetype='application/json')
     elif fmt == 'arrow':
-        return Response(arrow_streaming(qry.statement, db.engine, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
+        con = db.engine.connect()
+        con.execution_options(stream_results=True, yield_per=2000)
+        return Response(arrow_streaming(qry.statement, con, remove_fields=['run_id']), mimetype='application/vnd.apache.arrow')
     else:
         raise("unknown format")
 
@@ -880,7 +883,7 @@ def sonde_export():
         ts = ts.replace(tzinfo=dt.timezone.utc)
         qry = qry.filter(Measurement.time >= ts)
 
-    qry = qry.yield_per(6000)
+    qry = qry.yield_per(2000)
     if fmt == 'json':
         with db.engine.connect() as con:
             res = con.execute(qry.statement)
