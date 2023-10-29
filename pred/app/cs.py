@@ -15,19 +15,17 @@ def stdev_to_cs(sd):
 
     return round(cs)
 
-cs_coeffs = {
-    'old':  {'int': 0.185, 'sl': 0.935135, 'replace_-1': 55, 'replace_100': 85},
-    'fof2': {'int': 0.21315160999708233, 'sl': 0.9920850108292543, 'replace_-1': 75, 'replace_100': 75},
-    'hmf2': {'int': 0.24213093225134258, 'sl': 0.9459521822390862, 'replace_-1': 75, 'replace_100': 75},
-    'mufd': {'int': 0.22235171520011915, 'sl': 0.9536767599362671, 'replace_-1': 75, 'replace_100': 75},
-}
-
-def cs_to_stdev_new(cs, metric, adj100=True):
-    coeff = cs_coeffs[metric]
+def cs_to_stdev_new(cs, coeff, adj100=True):
     if cs == -1:
         cs = coeff['replace_-1']
     if cs == 100 and adj100:
         cs = coeff['replace_100']
-    return coeff['int'] * (1. - coeff['sl']*cs/100)
+    return coeff['int'] * (1. - coeff['sl'] * cs / 100)
 
-
+def stdev_to_cs_new(sd, coeff):
+    cs = 100.* (1 - sd / coeff['int']) / coeff['sl']
+    if cs < 0:
+        cs = 0
+    elif cs > 100:
+        cs = 100
+    return cs

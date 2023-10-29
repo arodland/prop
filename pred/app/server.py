@@ -3,13 +3,12 @@ from flask import Flask, request, make_response
 import os
 import datetime as dt
 import time
-import copy
-import urllib.request, json
-import pandas as pd
+import urllib.request
+import json
 import numpy as np
 import george
-from kernel import kernel, delta_kernel, delta_fof2_kernel, delta_hmf2_kernel, delta_mufd_kernel
-from cs import cs_to_stdev, cs_to_stdev_new, stdev_to_cs
+from kernel import delta_kernel, make_delta_kernel, metric_params
+from cs import cs_to_stdev, cs_to_stdev_new, stdev_to_cs, stdev_to_cs_new
 import psycopg
 import subprocess
 
@@ -26,37 +25,41 @@ def get_iri(lat, lon, ssn, ts):
 
     if iri is None:
         iri = subprocess.Popen(
-                ['/build/iri_opt'],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                universal_newlines=True,
-            )
+            ['/build/iri_opt'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+        )
 
     iri.stdin.write("%f %f %f %s\n" % (lat, lon, ssn, ts.strftime('%Y %m %d %H %M %S')))
-    iri.stdin.flush() 
+    iri.stdin.flush()
     data = [float(x) for x in iri.stdout.readline().split()]
     return data # lat, lon, nmf2, fof2, md, mufd, hmf2, foe
-                #  0    1    2     3    4    5     6     7 
+    #  0    1    2     3    4    5     6     7
 
 app = Flask(__name__)
 
 @app.route("/generate", methods=['POST'])
 def generate():
+    metrics = [
+        { 'name': 'mufd', 'iriidx': 5 },
+        { 'name': 'fof2', 'iriidx': 3 },
+        { 'name': 'hmf2', 'iriidx': 6 },
+    ]
     kernel_choice = request.form.get('kernels', 'old')
-    if kernel_choice == 'new':
-        metrics = [
-            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_mufd_kernel, 'cs': 'mufd' },
-            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_fof2_kernel, 'cs': 'fof2' },
-            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_hmf2_kernel, 'cs': 'hmf2' },
-        ]
-    else:
-        metrics = [
-            { 'name': 'mufd', 'iriidx': 5, 'kernel': delta_kernel, 'cs': 'old' },
-            { 'name': 'fof2', 'iriidx': 3, 'kernel': delta_kernel, 'cs': 'old' },
-            { 'name': 'hmf2', 'iriidx': 6, 'kernel': delta_kernel, 'cs': 'old' },
-        ]
+    for m in metrics:
+        if kernel_choice == 'new':
+            params = metric_params[m['name']]
+            cs, sl = params[:2]
+            kparams = params[2:]
+            m['kernel'] = make_delta_kernel(kparams)
+            m['cs'] = { 'int': cs, 'sl': sl, 'replace_-1': 75, 'replace_100': 75 }
+        else:
+            m['kernel'] = delta_kernel
+            m['cs'] = { 'int': 0.185, 'sl': 0.935135, 'replace_-1': 55, 'replace_100': 85 }
 
-    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
+        os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg.connect(dsn)
 
     station = request.form.get('station', None)
@@ -69,7 +72,8 @@ def generate():
     run_id = int(request.form.get('run_id', -1))
 
     station_q = '' if station is None else 'station=%d&' % int(station)
-    data = get_data('http://localhost:%s/history_v2.json?days=14&%s%s' % (os.getenv('HISTORY_PORT'), station_q, '&'.join(['metrics=' + x['name'] for x in metrics])))
+    data = get_data('http://localhost:%s/history_v2.json?days=14&%s%s' %
+                    (os.getenv('HISTORY_PORT'), station_q, '&'.join(['metrics=' + x['name'] for x in metrics])))
 
     with con.cursor() as cur:
         cur.execute('select ssn from essn where run_id=%s and series=%s order by time desc nulls last limit 1', (run_id, '24h'))
@@ -83,7 +87,7 @@ def generate():
         for pt in station['history']:
             tm = pt[0]
             cs = pt[1]
-            yval = pt[2+mi]
+            yval = pt[2 + mi]
             if yval is None:
                 continue
 
@@ -114,7 +118,7 @@ def generate():
             out['gp'] = george.GP(m['kernel'])
             out['gp'].compute(out['x'], out['sigma'] + 1e-3)
 
-            pred, sd = out['gp'].predict(out['y'], predtm / 86400., return_var = True)
+            pred, sd = out['gp'].predict(out['y'], predtm / 86400., return_var=True)
             out['pred'] = pred
             out['sd'] = sd ** 0.5
 
@@ -131,7 +135,7 @@ def generate():
                     continue
                 irival = iridata[m['iriidx']]
                 col_names.append(m['name'])
-                stdev_names.append('stdev_'+m['name'])
+                stdev_names.append('stdev_' + m['name'])
                 yout = np.exp(np.log(irival) + out['pred'][i])
                 col_vals.append(yout)
                 stdev_vals.append(out['sd'][i])
@@ -139,7 +143,8 @@ def generate():
                 if stdev is None:
                     stdev = out['sd'][i]
 
-            print('run_id: {run_id} time: {time} stdev_vals: {stdev_vals}'.format(run_id=run_id, time=time, stdev_vals=stdev_vals))
+            print('run_id: {run_id} time: {time} stdev_vals: {stdev_vals}'.format(
+                run_id=run_id, time=times[i], stdev_vals=stdev_vals))
 
             placeholders = ['%s'] * len(col_names)
             upserts = ['{col}=excluded.{col}'.format(col=col) for col in col_names + stdev_names]
@@ -156,11 +161,10 @@ def generate():
                     run_id,
                     station['id'],
                     times[i],
-                    stdev_to_cs(stdev),
+                    stdev_to_cs_new(stdev, m['cs']),
                     *stdev_vals,
                     *col_vals
                 ))
         con.commit()
-
 
     return make_response("OK")
