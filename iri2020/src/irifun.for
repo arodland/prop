@@ -10435,7 +10435,7 @@ c
 c----------------------------------------------------------------
 c Reads the Rz12 and IG12 indices file IG_RZ.DAT from I/O UNIT=12 
 c and stores the indices in COMMON:
-c		common/igrz/aig,arziyst,iyed   with aig(806),arz(806),
+c		common/igrz/aig,arziyst,iyed   with aig(877),arz(877),
 c											start year (iyst)
 c                                           end year (iyed)
 c 
@@ -10471,7 +10471,7 @@ c predictions.
 c----------------------------------------------------------------
 
            integer	iyst,iyend,iymst,iupd,iupm,iupy,imst,imend
-           real		aig(806),arz(806)
+           real		aig(877),arz(877)
            
            common /igrz/aig,arz,iymst,iymend
            common/folders/datadir
@@ -10550,7 +10550,7 @@ c----------------------------------------------------------------
 
            integer	yr,mm,day,iyst,iyend,iymst
            integer	imst,iymend
-           real		ionoindx(806),indrz(806)
+           real		ionoindx(877),indrz(877)
            real		ig(3),rz(3)
            logical	mess
            
