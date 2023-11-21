@@ -1,5 +1,5 @@
 requires 'Mojolicious::Lite';
-requires 'Minion' => '10.22';
+requires 'Minion' => '10.27';
 requires 'Minion::Notifier';
 requires 'Net::Statsd::Client';
 requires 'Mojo::Pg';
