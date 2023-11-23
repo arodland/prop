@@ -17,5 +17,6 @@ podman -r build --tag prop-storm storm
 podman -r build --tag prop-raytrace raytrace
 
 podman -r build --tag prop-holdout-eval holdout-eval
+podman -r build --tag prop-cosmic cosmic
 
 podman -r build --tag prop-loader loader
