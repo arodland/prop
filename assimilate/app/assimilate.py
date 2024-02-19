@@ -38,18 +38,23 @@ def filter_holdouts(df, holdouts):
 
     return df
 
-def get_scale(base, target):
+def get_scale(base, target, minval):
     base_trimmed = base[1:180, 0:360].flatten()
     target_trimmed = target[1:180, 0:360].flatten()
     weight = np.repeat(np.cos(np.linspace(-np.pi / 2, np.pi / 2, 181)[1:180]), 360) # cos(latitude)
 
     base_med = wquantiles.quantile(base_trimmed, weight, 0.5)
     target_med = wquantiles.quantile(target_trimmed, weight, 0.5)
+    target_min = target_trimmed.min()
 
     iqr_ratio = (
         (wquantiles.quantile(base_trimmed, weight, 0.75) - wquantiles.quantile(base_trimmed, weight, 0.25)) /
         (wquantiles.quantile(target_trimmed, weight, 0.75) - wquantiles.quantile(target_trimmed, weight, 0.25))
     )
+
+    # Clamp iqr_ratio to never produce a value < minval.
+    if (target_min - target_med) * iqr_ratio + base_med < minval:
+        iqr_ratio = (base_med - minval) / (target_med - target_min)
 
     return (base_med, target_med, iqr_ratio)
 
@@ -74,12 +79,12 @@ def assimilate(run_id, ts, holdout, basemap_type, cs_type):
 
         if basemap_type.endswith('_scaled'):
             basemap_type = basemap_type[:len(basemap_type) - len('_scaled')]
-            fof2_scale = get_scale(irimap['/maps/fof2'], ipemap['/maps/fof2'])
+            fof2_scale = get_scale(irimap['/maps/fof2'], ipemap['/maps/fof2'], 0.5)
             ipemap['/maps/fof2'] = rescale(ipemap['/maps/fof2'], fof2_scale)
             ipemap['/maps/mufd'] = rescale(ipemap['/maps/mufd'], fof2_scale)
         elif basemap_type.endswith('_logscaled'):
             basemap_type = basemap_type[:len(basemap_type) - len('_logscaled')]
-            fof2_scale = get_scale(np.log(irimap['/maps/fof2']), np.log(ipemap['/maps/fof2']))
+            fof2_scale = get_scale(np.log(irimap['/maps/fof2']), np.log(ipemap['/maps/fof2']), np.log(0.5))
             new_fof2 = np.exp(rescale(np.log(ipemap['/maps/fof2']), fof2_scale))
             fof2_ratio = new_fof2 / ipemap['/maps/fof2'][:]
             ipemap['/maps/fof2'] = new_fof2
