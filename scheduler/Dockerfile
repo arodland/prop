@@ -1,5 +1,5 @@
-FROM perl:5 AS perl-cpm
-RUN cpanm --notest App::cpm
+FROM perl:5.38.2 AS perl-cpm
+RUN wget -O /usr/local/bin/cpm https://raw.githubusercontent.com/skaji/cpm/0.997015/cpm && chmod +x /usr/local/bin/cpm
 
 FROM perl-cpm AS final
 RUN apt-get update && apt-get install dumb-init
