@@ -13,15 +13,20 @@ from scipy.interpolate import RectBivariateSpline
 import psycopg
 
 import subprocess
-import urllib.request, urllib.error
+import urllib.request
+import urllib.error
 import sys
 
 from flask import Flask, request, make_response
 
 def get_ncdata(ts):
     ts = ts.replace(second=0)
-    ts = ts - timedelta(minutes = ts.minute % 5)
-    run_ts = ts - timedelta(hours = ts.hour % 6)
+    ts = ts - timedelta(minutes=ts.minute % 5)
+    baseline = ts
+    now = datetime.now(tz=timezone.utc)
+    if baseline > now:
+        baseline = now
+    run_ts = baseline - timedelta(hours=baseline.hour % 6)
     for i in range(7):
         if i == 6:
             raise "file not found"
@@ -65,7 +70,8 @@ def resample(ilat, ilon, ds):
 
 def get_foe(ts):
     iri = subprocess.Popen(
-        ['/build/irimap', str(ts.year), str(ts.month), str(ts.day), str(ts.hour), str(ts.minute), str(ts.second), '-100'],
+        ['/build/irimap', str(ts.year), str(ts.month), str(ts.day), str(ts.hour),
+         str(ts.minute), str(ts.second), '-100'],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         universal_newlines=True,
@@ -82,7 +88,8 @@ def get_foe(ts):
 app = Flask(__name__)
 @app.route('/generate', methods=['POST'])
 def generate():
-    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
+        os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg.connect(dsn)
 
     run_id = int(request.form.get('run_id', -1))
@@ -90,7 +97,7 @@ def generate():
     ts = datetime.fromtimestamp(float(tgt), tz=timezone.utc)
 
     data = get_ncdata(ts)
-    
+
     # Repair holes at the south geomagnetic pole (8, 31) and north geomagnetic pole (86, 68-72)
     for ds in (data['nmf2'], data['hmf2']):
         ds[8, 31] = (ds[7, 30] + ds[8, 30] + ds[9, 30] + ds[7, 31] + ds[9, 31] + ds[7, 32] + ds[8, 32] + ds[9, 32]) / 8
@@ -103,8 +110,8 @@ def generate():
 
     # Replicate lon=0 data at lon=360
     data['lon'] = np.append(data['lon'], 360)
-    data['hmf2'] = np.column_stack(( data['hmf2'], data['hmf2'][:,0] ))
-    data['nmf2'] = np.column_stack(( data['nmf2'], data['nmf2'][:,0] ))
+    data['hmf2'] = np.column_stack(( data['hmf2'], data['hmf2'][:, 0] ))
+    data['nmf2'] = np.column_stack(( data['nmf2'], data['nmf2'][:, 0] ))
     # Upscale to 1°x1°
     data['hmf2'] = resample(data['lat'], data['lon'], data['hmf2'])
     data['nmf2'] = resample(data['lat'], data['lon'], data['nmf2'])
@@ -115,7 +122,7 @@ def generate():
     # Shimazaki/Dudeney using IRI-estimated foE
     data['M'] = 1490. / (data['hmf2'] + 176)
     data['foe'] = get_foe(ts)
-    data['dM'] = 0.253/np.clip(data['fof2'] / data['foe'] - 1.215, 0.01, None) - 0.012
+    data['dM'] = 0.253 / np.clip(data['fof2'] / data['foe'] - 1.215, 0.01, None) - 0.012
 
     data['mufd'] = data['fof2'] * (data['M'] + data['dM'])
 
