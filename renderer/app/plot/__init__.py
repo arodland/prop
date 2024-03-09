@@ -365,10 +365,10 @@ class Plot:
     def write(self, filename, format=None):
         if self.decorations:
             plt.tight_layout()
-            plt.savefig(filename, format=format, dpi=180, bbox_inches='tight')
+            self.fig.savefig(filename, format=format, dpi=180, bbox_inches='tight')
         else:
             plt.tight_layout(pad=0.0)
-            plt.savefig(filename, format=format, dpi=256, bbox_inches='tight', pad_inches=0.0)
+            self.fig.savefig(filename, format=format, dpi=256, bbox_inches='tight', pad_inches=0.0)
 
 
     def close(self):
