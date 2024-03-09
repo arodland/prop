@@ -63,8 +63,8 @@ else:
 sources = [
     {'name': 'cosmic-2',
         'url': 'https://data.cosmic.ucar.edu/gnss-ro/cosmic2/provisional/spaceWeather/level2/%d/%03d/ionPrf_prov1_%d_%03d.tar.gz' % (year, doy, year, doy) },
-    {'name': 'planetiq',
-        'url': 'https://data.cosmic.ucar.edu/gnss-ro/planetiq/noaa/nrt/level2/%d/%03d/ionPrf_nrt_%d_%03d.tar.gz' % (year, doy, year, doy) },
+    # {'name': 'planetiq',
+    #     'url': 'https://data.cosmic.ucar.edu/gnss-ro/planetiq/noaa/nrt/level2/%d/%03d/ionPrf_nrt_%d_%03d.tar.gz' % (year, doy, year, doy) },
 ]
 
 bins = {}
