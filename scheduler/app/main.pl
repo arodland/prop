@@ -149,6 +149,7 @@ sub one_run {
     [
       series => '24h',
       holdouts => [ @holdout_ids ],
+      v2 => $jobs->{essn_v2},
     ],
     {
       attempts => 2,
@@ -165,6 +166,7 @@ sub one_run {
     [
       series => '6h',
       run_id => $run_id,
+      v2 => $jobs->{essn_v2},
     ],
     {
       expire => 18 * 60,
@@ -409,17 +411,64 @@ sub queue_job {
 
   my @experiments = (
     sub {
-      one_run($run_time, $state, '2023-07-control', {
+      one_run($run_time, $state, '2024-03-ipe-control', {
+          no_holdout => 1,
       });
     },
-#    sub {
-#      one_run($run_time, $state, '2023-05b-ipe-logscale-blend', {
-#        ipe => 1,
-#        make_maps => 1,
-#        renderhtml => 1,
-#        basemap_type => 'iri-ipe_logscaled',
-#      });
-#    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-ipe', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'ipe',
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-blend', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'iri-ipe',
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-linscale', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'ipe_scaled',
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-linscale-blend', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'iri-ipe_scaled',
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-logscale', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'ipe_logscaled',
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2024-03-ipe-logscale-blend', {
+          no_holdout => 1,
+          ipe => 1,
+          make_maps => 1,
+          renderhtml => 1,
+          basemap_type => 'iri-ipe_logscaled',
+      });
+    },
   );
 
   $_->() for shuffle @experiments;
