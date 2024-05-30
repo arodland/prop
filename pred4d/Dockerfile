@@ -1,0 +1,28 @@
+FROM debian:12
+
+RUN apt-get update && apt-get -y install unzip build-essential dumb-init libgfortran5 curl
+
+WORKDIR /
+
+RUN curl -fsSL https://pixi.sh/install.sh | PIXI_HOME=/usr/local bash
+
+RUN pixi init pixi_env
+WORKDIR /pixi_env
+RUN pixi add python=3.12 pip statsmodels pandas cython xarray sympy networkx scikit-learn scikit-optimize uwsgi matplotlib
+
+ENV PATH /pixi_env/.pixi/envs/default/bin:$PATH
+ENV PYTHON_EGG_CACHE=/tmp/egg-cache
+
+COPY --from=iri2020 /build/ /build/
+
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+COPY app /app
+
+# ENV OPENBLAS_NUM_THREADS=4
+# ENV OMP_NUM_THREADS=4
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
+WORKDIR /app
+CMD uwsgi --http :${PRED_PORT} --master --need-app --single-interpreter --enable-threads --max-requests 100 --http-timeout 300 --wsgi server:app --processes 6 --enable-metrics --carbon-use-metrics --carbon-name-resolve --carbon ${STATSD_HOST}:2003 --carbon-id prop-pred --die-on-term
