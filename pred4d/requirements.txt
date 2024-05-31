@@ -4,3 +4,4 @@ pyyaml
 pybind11
 jax
 tinygp
+wmm2020

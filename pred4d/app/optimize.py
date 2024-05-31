@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import sys
 import urllib.request
 import json
@@ -8,7 +11,7 @@ import scipy.optimize as op
 
 from kernel import make_4d_kernel
 from tinygp import GaussianProcess
-from spherical import gen_coords
+from magnetic import gen_coords
 import subprocess
 
 import matplotlib.pyplot as plt
@@ -58,7 +61,7 @@ def make_dataset(s):
         if irival <= 0 or not jnp.isfinite(irival):
             continue
 
-        x.append(gen_coords(pt['latitude'], pt['longitude'], tm))
+        x.append(gen_coords(pt['latitude'], pt['longitude'], tm, dt))
         y.append(jnp.log(meas) - jnp.log(irival))
         cslist.append(cs)
         if last_tm is None or tm > last_tm:
@@ -150,11 +153,14 @@ if __name__ == '__main__':
         datasets.append(ds)
     print("Done")
 
-    p0 = [0.29299994963751924, 0.9339611355466666, 91.33358674469656, 62.8620226691346, -3.9125304614642507, -2.47062901626771, -1.4736148890377028, -4.470977507843641, 2.779054297221808, -1.4527475109003556]
+    p0 = [0.29299994963751924, 0.9339611355466666, 91.33358674469656, 62.8620226691346, -3.9125304614642507, -2.47062901626771, -1.4736148890377028, -4.470977507843641, 2.779054297221808, -1.4527475109003556] ## normal
+    p0 = [0.2725382544115033, 0.9120031164350116, 89.63015988387366, 53.03401695395304, -4.006802444628401, -2.371871944983995, -1.9363557124552864, -4.022075407817175, 2.8353169179907534, -1.4005409771772919] ## magnetic
+    p0 = [0.2674932172249701, 0.95, 89.35260462962106, 57.31572533546511, -4.032045549631885, -1.5365809976138542, -1.8864088552524167, -4.15896249414504, 4.119095605294825, -1.279660328874693, -4.620761100246483, 5.67729376555193, -1.3054204059986398] ## a bit of both
     print("# Init: ", p0)
 
     bounds = [
         (0.1, None), (0.01, 0.95), (50., 100.), (50., 100.),
+        (-20., 20.), (-20., 20.), (-20., 20.),
         (-20., 20.), (-20., 20.), (-20., 20.),
         (-20., 20.), (-20., 20.), (-20., 20.),
     ]
@@ -198,7 +204,7 @@ if __name__ == '__main__':
 
         for lat in range(-90, 91):
             for lon in range(-180, 181):
-                x.append(gen_coords(lat, lon, tm))
+                x.append(gen_coords(lat, lon, tm, dt))
                 iri.stdin.write("%f %f %f %s\n" % (lat, lon, -100.0, iritime))
                 iri.stdin.flush()
                 iridata = [float(x) for x in iri.stdout.readline().split()]

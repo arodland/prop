@@ -1,6 +1,6 @@
 FROM debian:12
 
-RUN apt-get update && apt-get -y install unzip build-essential dumb-init libgfortran5 curl
+RUN apt-get update && apt-get -y install unzip build-essential cmake dumb-init libgfortran5 curl
 
 WORKDIR /
 
@@ -17,6 +17,7 @@ COPY --from=iri2020 /build/ /build/
 
 COPY requirements.txt ./
 RUN pip install -r requirements.txt
+RUN python3 -c 'import wmm2020'
 
 COPY app /app
 
