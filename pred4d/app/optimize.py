@@ -1,11 +1,12 @@
 from collections import namedtuple
 import matplotlib.pyplot as plt
 import subprocess
-from magnetic import gen_coords
+from magnetic import gen_coords, gen_coords_flat
 from tinygp import GaussianProcess
-from kernel import make_4d_kernel
+from kernel import make_4d_kernel, metric_params
 import scipy.optimize as op
 import jax.numpy as jnp
+import numpy as np
 import jax
 import pandas as pd
 import json
@@ -18,8 +19,8 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 jax.config.update('jax_enable_x64', True)
 
 metric = sys.argv[1]
-iriidx_table = { 'fof2': 3, 'mufd': 5, 'hmf2': 6 }
-metricmax = { 'fof2': 14, 'mufd': 30, 'hmf2': 400 }
+iriidx_table = { 'fof2': 3, 'mufd': 5, 'hmf2': 6, 'md': 0 }
+metricmax = { 'fof2': 14, 'mufd': 30, 'hmf2': 400, 'md': 4 }
 
 iriidx = iriidx_table[metric]
 
@@ -54,11 +55,16 @@ def make_dataset(s):
         iri.stdin.flush()
         iridata = [float(x) for x in iri.stdout.readline().split()]
 
-        irival = iridata[iriidx]
+        if metric == 'md':
+            if iridata[3] <= 0 or not jnp.isfinite(iridata[3]):
+                continue
+            irival = iridata[5] / iridata[3]
+        else:
+            irival = iridata[iriidx]
         if irival <= 0 or not jnp.isfinite(irival):
             continue
 
-        x.append(gen_coords(pt['latitude'], pt['longitude'], tm, dt))
+        x.append(gen_coords_flat(pt['latitude'], pt['longitude'], tm, dt))
         y.append(jnp.log(meas) - jnp.log(irival))
         cslist.append(cs)
         if last_tm is None or tm > last_tm:
@@ -67,13 +73,12 @@ def make_dataset(s):
     iri.stdin.close()
     iri.wait()
     ds = {}
-    ds['x'] = jax.device_put(jnp.array(x))
+    ds['x'] = jnp.array(x)
     ds['last_tm'] = last_tm
     ds['y'] = jnp.array(y)
-    ds['mean'] = jnp.mean(ds['y'])
-    ds['y'] -= ds['mean']
-    ds['y'] = jax.device_put(ds['y'])
-    ds['cs'] = jax.device_put(jnp.array(cslist))
+    ds['mean'] = 0
+    # ds['y'] -= ds['mean']
+    ds['cs'] = jnp.array(cslist)
 
     return ds
 
@@ -150,13 +155,7 @@ if __name__ == '__main__':
         datasets.append(ds)
     print("Done")
 
-    p0 = [
-        0.27965685195673856, 0.95, 90.08050977244054, 65.83964838139649,
-        -3.973522698703435, -1.4255706715749759, -1.713874124356025,
-        -3.7098246830605572, 4.1771638760011545, -0.7053225390616294,
-        -4.807779539403842, 6.442619748075302, -1.0820920039196478
-    ]
-
+    p0 = metric_params[metric]
     print("# Init: ", p0)
 
     bounds = [
@@ -168,13 +167,14 @@ if __name__ == '__main__':
 
     # opt_result = op.minimize(nll, p0, jac=True, method='TNC', callback=cb, options={'maxfun': 200})
     opt_result = op.minimize(nll, p0, jac=True, method='L-BFGS-B', bounds=bounds,
-                             callback=cb, options={'maxfun': 1000 })
+                             callback=cb, options={'maxfun': 500 })
 
     print("# RESULT ", list(opt_result.x))
 
+    datasets = None
     # opt_result = namedtuple('OR', ['x'])(p0)
 
-    with urllib.request.urlopen(f"https://prop.kc2g.com/api/4d_sample?metric={metric}&min_cs=25&count=10000&span=4") as res:
+    with urllib.request.urlopen(f"https://prop.kc2g.com/api/4d_sample?metric={metric}&min_cs=25&count=3000&span=4") as res:
         data = json.loads(res.read().decode())
         ds = make_dataset(data)
 
@@ -203,19 +203,27 @@ if __name__ == '__main__':
         dt = pd.to_datetime(tm, unit='s')
         iritime = dt.strftime('%Y %m %d %H %M %S')
 
+        lat, lon = np.meshgrid(np.linspace(-90, 90, 181), np.linspace(-180, 180, 361), indexing='ij')
+        x = gen_coords(lat, lon, tm, dt)
+
         for lat in range(-90, 91):
             for lon in range(-180, 181):
-                x.append(gen_coords(lat, lon, tm, dt))
                 iri.stdin.write("%f %f %f %s\n" % (lat, lon, -100.0, iritime))
                 iri.stdin.flush()
                 iridata = [float(x) for x in iri.stdout.readline().split()]
-                irival.append(jnp.log(iridata[iriidx]))
+                if metric == 'md':
+                    irival.append(jnp.log(iridata[5] / iridata[3]))
+                else:
+                    irival.append(jnp.log(iridata[iriidx]))
 
         iri.stdin.close()
         iri.wait()
 
-        x = jax.device_put(jnp.array(x))
-        irival = jax.device_put(jnp.array(irival))
+        x = jnp.array(x)
+        irival = jnp.array(irival)
+
+        x = x.reshape((10, 181 * 361)).T
+
         p_delta, sd = gp.predict(ds['y'], x, return_var=True)
         p_delta += ds['mean']
         pred = jnp.exp(irival + p_delta)
