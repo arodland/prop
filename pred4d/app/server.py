@@ -29,8 +29,8 @@ app = Flask(__name__)
 
 iriidx_table = { 'fof2': 3, 'mufd': 5, 'hmf2': 6, 'md': 0 }
 
-def get_history(metric, max_points):
-    with urllib.request.urlopen(f"http://localhost:{os.getenv('HISTORY_PORT')}/4d_history.json?metric={metric}&max_points={max_points}") as res:
+def get_history(metric, max_points, max_span):
+    with urllib.request.urlopen(f"http://localhost:{os.getenv('HISTORY_PORT')}/4d_history.json?metric={metric}&max_points={max_points}&max_span={max_span}") as res:
         data = json.loads(res.read().decode())
     return data
 
@@ -115,6 +115,7 @@ def generate():
     tss = [ float(ts) for ts in tss ]
 
     max_points = int(request.form.get('max_points', 10000))
+    max_span = int(request.form.get('max_span', 7))
     metric = request.form.get('metric')
     kp = kernel.metric_params[metric]
 
@@ -127,7 +128,7 @@ def generate():
         (essn,) = cur.fetchone()
 
     modip_spline = magnetic.ModipSpline(dt.datetime.now())
-    history = get_history(metric, max_points)
+    history = get_history(metric, max_points, max_span)
     ds = make_dataset(history, metric, kp, essn, modip_spline)
     gp = make_gp(kp, ds['x'], ds['sigma'])
 
