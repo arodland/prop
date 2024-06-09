@@ -7,6 +7,7 @@ use Web::Simple;
 use JSON::MaybeXS qw(encode_json);
 use DateTime;
 use DateTime::Format::Strptime;
+use feature 'postderef';
 
 my $dbh = DBI->connect(
   "dbi:Pg:dbname=$ENV{DB_NAME};host=$ENV{DB_HOST}",
@@ -22,6 +23,22 @@ my $strp = DateTime::Format::Strptime->new(
   locale => 'en_US',
   time_zone => 'UTC',
 );
+
+sub filter_down {
+  my ($target, $arr) = @_;
+  my $ratio = $target / @$arr;
+  my $accum = 0;
+  my @ret;
+
+  for my $elem (@$arr) {
+    $accum += $ratio;
+    if ($accum >= 1) {
+      push @ret, $elem;
+      $accum -= 1;
+    }
+  }
+  return @ret;
+}
 
 sub dispatch_request {
   'GET + /' => sub {
@@ -76,7 +93,7 @@ sub dispatch_request {
             $writer->write(",") unless $first_measurement;
             $first_measurement = 0;
             $writer->write(encode_json($measurement));
-          };
+          }
           $writer->write(q(]}));
         };
         $writer->write("\n]\n");
@@ -311,6 +328,87 @@ sub dispatch_request {
     }
 
     [ 200, ['Content-Type' => 'application/json'], [encode_json($stations)] ];
+  },
+  'GET + /4d_history.json + ?metric=&min_cs~&max_points~&max_span~' => sub {
+      my ($self, $metric, $min_cs, $max_points, $max_span) = @_;
+      if ($metric !~ /^(?:fof2|hmf2|mufd|md)$/) {
+          return [400, ['Content-Type' => 'text/plain'], ['invalid metric']];
+      }
+
+      $min_cs = 25 unless defined $min_cs;
+      $max_points = 4000 unless defined $max_points;
+      $max_points = 0 + int($max_points);
+      $max_span = 7 unless defined $max_span;
+
+      my $start_time = DateTime->now(time_zone => "UTC")->subtract(days => $max_span)->strftime('%Y-%m-%d %H:%M:%S');
+
+      my ($meas_query, $null_query);
+      if ($metric eq 'md') {
+          $meas_query = 'm.mufd / m.fof2';
+          $null_query = 'm.mufd is not null and m.fof2 is not null';
+      } else {
+          $meas_query = "m.$metric";
+          $null_query = "m.$metric is not null";
+      }
+
+      my $sql = qq{select m.station_id, extract(epoch from m.time) as time, $meas_query as meas, m.cs, s.latitude, s.longitude
+      from measurement m
+      join station s on m.station_id=s.id
+      where m.time >= ?
+      and $null_query
+      and (m.cs >= ? or m.cs = -1)
+      and s.use_for_maps=true
+      order by m.time asc
+      };
+      my $sth = $dbh->prepare($sql);
+      $sth->execute($start_time, $min_cs);
+      my %by_station;
+      my $total = 0;
+      while (my $row = $sth->fetchrow_arrayref) {
+        my ($station_id, @rest) = @$row;
+        push $by_station{$station_id}->@*, \@rest;
+        $total++;
+      }
+
+      # Sort from fewest entries to most
+      my @stations = sort { $by_station{$a}->@* <=> $by_station{$b}->@* } keys %by_station;
+
+      my @rows;
+      while (@stations) {
+        my $s = shift @stations;
+        my $size = $by_station{$s}->@*;
+        my $target = $max_points / (1 + @stations);
+        if ($size <= $target) {
+          push @rows, (delete $by_station{$s})->@*;
+          $total -= $size;
+          $max_points -= $size;
+          warn "Station $s: accept all $size\n";
+        } else {
+          my @filtered = filter_down($target, delete $by_station{$s});
+          my $accepted = @filtered;
+          push @rows, @filtered;
+          $total -= $size;
+          $max_points -= $accepted;
+          warn "Station $s: accept $accepted out of $size\n";
+        }
+      }
+
+      [ sub {
+          my $responder = shift;
+          my $writer = $responder->([ 200, ['Content-Type' => 'application/json' ] ]);
+          $writer->write("[\n");
+          my $first_row = 1;
+          for my $row (@rows) {
+            $writer->write(",\n") unless $first_row;
+            $first_row = 0;
+            $_ = 0+$_ for @$row;
+            $row->[0] = int $row->[0];
+            $writer->write(encode_json($row));
+          }
+          $writer->write("\n]\n");
+        $writer->close;
+      }
+    ]
   },
 }
 
