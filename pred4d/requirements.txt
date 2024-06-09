@@ -5,3 +5,5 @@ pybind11
 jax
 tinygp
 wmm2020
+h5py
+hdf5plugin
