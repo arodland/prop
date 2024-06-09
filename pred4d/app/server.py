@@ -19,6 +19,7 @@ import hdf5plugin
 import time
 import kernel
 import datetime as dt
+import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -59,12 +60,16 @@ def get_iri(metric, lat, lon, ssn, ts):
 IriMap = namedtuple('IriMap', ['raw', 'spline'])
 
 def get_irimap(metric, run_id, ts):
-    url = "http://localhost:{os.getenv('API_PORT')}/irimap.h5?run_id={run_id}&ts={ts}"
+    url = f"http://localhost:{os.getenv('API_PORT')}/irimap.h5?run_id={run_id}&ts={ts}"
     with urllib.request.urlopen(url) as res:
         content = res.read()
         bio = io.BytesIO(content)
         h5 = h5py.File(bio, 'r')
-    ds = h5[f"/maps/{metric}"]
+
+    if metric == 'md':
+        ds = h5['/maps/mufd'][:] / h5['/maps/fof2'][:]
+    else:
+        ds = h5[f"/maps/{metric}"][:]
     lat = np.linspace(-90, 90, 181)
     lon = np.linspace(-180, 180, 361)
     spline = RectBivariateSpline(lat, lon, ds)
@@ -78,9 +83,7 @@ def cs_to_stdev(p, cs):
         cs = replace_m1
     return cs_int * (1. - cs_sl * cs / 100)
 
-def make_dataset(metric, essn, modip_spline, max_points):
-    history = get_history(metric, max_points)
-    p = kernel.metric_params[metric]
+def make_dataset(history, metric, kp, essn, modip_spline):
     x = []
     y = []
     sigma = []
@@ -89,7 +92,7 @@ def make_dataset(metric, essn, modip_spline, max_points):
         irival = get_iri(metric, lat, lon, essn, ts)
         x.append(magnetic.gen_coords_pluggable(lat, lon, ts, None, modip_spline.modip))
         y.append(np.log(meas) - np.log(irival))
-        sigma.append(cs_to_stdev(p, cs))
+        sigma.append(cs_to_stdev(kp, cs))
 
     return {
         'x': jnp.array(x),
@@ -97,15 +100,23 @@ def make_dataset(metric, essn, modip_spline, max_points):
         'sigma': jnp.array(sigma),
     }
 
+@jax.jit
+def make_gp(kp, X, sigma):
+    kern = kernel.make_4d_kernel(kp[4:])
+    gp = GaussianProcess(kern, X, diag=jnp.power(sigma, 2.))
+    return gp
+
 @app.route("/generate", methods=['POST'])
 def generate():
     run_id = request.form.get('run_id')
     tss = request.form.getlist('target')
     if len(tss) == 0:
         tss = [ time.time() ]
+    tss = [ float(ts) for ts in tss ]
 
     max_points = int(request.form.get('max_points', 10000))
     metric = request.form.get('metric')
+    kp = kernel.metric_params[metric]
 
     dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
         os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
@@ -116,8 +127,27 @@ def generate():
         (essn,) = cur.fetchone()
 
     modip_spline = magnetic.ModipSpline(dt.datetime.now())
+    history = get_history(metric, max_points)
+    ds = make_dataset(history, metric, kp, essn, modip_spline)
+    gp = make_gp(kp, ds['x'], ds['sigma'])
 
-    ds = make_dataset(metric, essn, modip_spline, max_points)
-    kern = kernel.make_4d_kernel(kernel.metric_params[metric][4:])
-    gp = GaussianProcess(kern, ds['x'], diag=jnp.power(ds['sigma'], 2.))
+    out = []
+    for ts in tss:
+        irimap = get_irimap(metric, run_id, ts)
+        lat, lon = jnp.meshgrid(jnp.linspace(-90, 90, 181), jnp.linspace(-180, 180, 361), indexing='ij')
+        x = magnetic.gen_coords_pluggable(lat, lon, ts, None, modip_spline.modip)
+        x = jnp.array(x).reshape((10, 181*361)).T
 
+        p_delta, sd = gp.predict(ds['y'], x, return_var=True)
+        irivals = irimap.spline(lat.flatten(), lon.flatten(), grid=False)
+        pred = jnp.exp(jnp.log(irivals) + p_delta).reshape((181, 361))
+        sd = sd.reshape((181, 361))
+        p_delta = p_delta.reshape((181, 361))
+
+    fig = plt.figure(figsize=(24, 16))
+    plt.imshow(pred, extent=(-180, 180, -90, 90), origin='lower')
+    bio = io.BytesIO()
+    plt.savefig(bio, format='jpg')
+    resp = make_response(bio.getvalue())
+    resp.mimetype = 'image/jpeg'
+    return resp
