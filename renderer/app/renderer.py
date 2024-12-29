@@ -93,13 +93,13 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
     maps = { name: dataset['/maps/' + name][:] for name in dataset['/maps'].keys() }
 
     if metric.startswith('mof_') or metric.startswith('muf_'):
-        plt.scale_mufd('turbo', warc=warc)
+        plt.scale_mufd('turbo_mod', warc=warc)
     elif metric.startswith('lof_') or metric.startswith('luf_'):
-        plt.scale_fof2('turbo', warc=warc)
+        plt.scale_fof2('turbo_mod', warc=warc)
     elif metric == 'ratio':
         plt.scale_ratio('viridis')
     else:
-        plt.scale_generic('turbo')
+        plt.scale_generic('turbo_mod')
 
     if metric in ['mof_combined', 'lof_combined']:
         base_metric = metric[:len(metric)-9]
