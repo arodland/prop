@@ -53,11 +53,10 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
 
     dotjson, dot_df = None, None
 
-    if dots == 'curr':
+    if dots == 'curr' and '/stationdata/curr' in dataset:
         dotjson = (dataset['/stationdata/curr'][...]).item().decode('utf-8')
-    elif dots == 'pred':
+    elif dots == 'pred' and '/stationdata/pred' in dataset:
         dotjson = (dataset['/stationdata/pred'][...]).item().decode('utf-8')
-
 
     if dotjson is not None:
         dot_df = pd.read_json(dotjson)
