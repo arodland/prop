@@ -101,7 +101,7 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
         plt.scale_generic('turbo_mod')
 
     if metric in ['mof_combined', 'lof_combined']:
-        base_metric = metric[:len(metric)-9]
+        base_metric = metric[:len(metric) - 9]
         sp = maps[base_metric + '_sp']
         sp_valid = maps['mof_sp'] > maps['lof_sp']
 
@@ -120,7 +120,7 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
         hatch = lp_valid
         blackout = ~(sp_valid | lp_valid)
     elif metric in ['muf_combined', 'luf_combined']:
-        base_metric = metric[:len(metric)-9]
+        base_metric = metric[:len(metric) - 9]
         sp = maps[base_metric + '_sp']
         sp_valid = maps['muf_sp'] > maps['luf_sp']
 
@@ -142,10 +142,10 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
         contour = maps[metric]
         hatch = None
         if metric.startswith('mof_') or metric.startswith('lof_'):
-            path = metric[len(metric)-3:]
+            path = metric[len(metric) - 3:]
             blackout = maps['lof' + path] >= maps['mof' + path]
         elif metric.startswith('muf_') or metric.startswith('luf_'):
-            path = metric[len(metric)-3:]
+            path = metric[len(metric) - 3:]
             blackout = maps['luf' + path] >= maps['muf' + path]
         else:
             blackout = None
@@ -181,20 +181,20 @@ def rendersvg():
 
     if metric.endswith('_ipe'):
         dataset = 'ipe'
-        metric = metric[:len(metric)-4]
+        metric = metric[:len(metric) - 4]
     else:
         dataset = 'assimilated'
 
     h5 = get_dataset('http://localhost:%s/%s.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), dataset, run_id, ts))
 
     draw_map(
-        out_path = out_path,
-        dataset = h5,
-        metric = metric,
-        ts = ts,
-        format = format,
-        file_formats = file_formats,
-        dots = dots,
+        out_path=out_path,
+        dataset=h5,
+        metric=metric,
+        ts=ts,
+        format=format,
+        file_formats=file_formats,
+        dots=dots,
     )
 
     return make_response("OK\n")
@@ -225,10 +225,12 @@ def moflof():
     res = float(request.values.get('res', '2'))
     ipe = request.values.get('ipe', '0')
 
-    if metric.startswith('muf_') or metric.startswith('luf_') or metric=='ratio':
-        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f&ipe=%s' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res, ipe))
+    if metric.startswith('muf_') or metric.startswith('luf_') or metric == 'ratio':
+        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f&ipe=%s' %
+                         (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res, ipe))
     else:
-        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' % (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' %
+                         (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
 
     svg = mof_lof(h5, metric, ts, lat, lon, centered, warc, 'svg')
     resp = make_response(svg)
