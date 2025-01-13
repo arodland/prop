@@ -86,7 +86,7 @@ def draw_map(out_path, dataset, metric, ts, format, dots, file_formats):
 
     plt.close()
 
-def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
+def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format, out_path=None):
     tm = datetime.fromtimestamp(ts, timezone.utc)
     plt = plot.Plot(metric, tm, decorations=True, centered=((lon, lat) if centered else None))
     maps = { name: dataset['/maps/' + name][:] for name in dataset['/maps'].keys() }
@@ -158,10 +158,15 @@ def mof_lof(dataset, metric, ts, lat, lon, centered, warc, file_format):
     plt.draw_dot(lon, lat, text='\u2605', color='red', alpha=0.6)
 
     plt.draw_title(metric, 'eSFI: %.1f, eSSN: %.1f' % (dataset['/essn/sfi'][...], dataset['/essn/ssn'][...]))
-    bio = io.BytesIO()
-    plt.write(bio, format=file_format)
-    plt.close()
-    return bio.getvalue()
+
+    if out_path is not None:
+        plt.write(out_path, format=file_format)
+        plt.close()
+    else:
+        bio = io.BytesIO()
+        plt.write(bio, format=file_format)
+        plt.close()
+        return bio.getvalue()
 
 app = Flask(__name__)
 
@@ -236,6 +241,33 @@ def moflof():
     resp = make_response(svg)
     resp.mimetype = 'image/svg+xml'
     return resp
+
+@app.route('/moflof.svg', methods=['POST'])
+def moflof_generate():
+    run_id = int(request.form['run_id'])
+    ts = int(request.form['target'])
+    metric = request.form['metric']
+    lat = float(request.form['lat'])
+    lon = float(request.form['lon'])
+    name = request.form['name']
+    centered = request.form.get('centered') in ('true', '1')
+    warc = request.form.get('warc') in ('true', '1', None)
+    res = float(request.form.get('res', '2'))
+    ipe = 0
+
+    if metric.startswith('muf_') or metric.startswith('luf_') or metric == 'ratio':
+        h5 = get_dataset('http://localhost:%s/rec533.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f&ipe=%s' %
+                         (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res, ipe))
+    else:
+        h5 = get_dataset('http://localhost:%s/moflof.h5?run_id=%d&ts=%d&lat=%f&lon=%f&res=%f' %
+                         (os.getenv('RAYTRACE_PORT'), run_id, ts, lat, lon, res))
+
+    job_path = '/output/%d' % (run_id)
+    pathlib.Path(job_path).mkdir(parents=True, exist_ok=True)
+    out_path = '%s/%s-%s.svg' % (job_path, metric, name)
+    mof_lof(h5, metric, ts, lat, lon, centered, warc, 'svg', out_path=out_path)
+    subprocess.run(['/usr/local/bin/svgo', '--multipass', out_path], check=True)
+    return make_response("OK\n")
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('RENDERER_PORT')), threaded=False, processes=16)

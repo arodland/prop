@@ -127,6 +127,26 @@ sub make_maps {
     }
   }
 
+  for my $metric (qw(muf_sp)) {
+    for my $loc (keys %Task::Render::LOCATIONS) {
+      push @jobs, app->minion->enqueue('rendermuf',
+        [
+          $loc,
+          run_id => $args{run_id},
+          target => $args{target},
+          metric => $metric,
+          name => "$loc-$args{name}",
+          res => 1,
+        ],
+        {
+          parents => $args{parents},
+          attempts => 2,
+          expire => 18 * 60,
+        },
+      );
+    }
+  }
+
   return @jobs;
 }
 
