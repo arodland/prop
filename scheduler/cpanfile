@@ -6,3 +6,4 @@ requires 'Mojo::Pg';
 requires 'Path::Tiny';
 requires 'WWW::Google::Cloud::Auth::ServiceAccount';
 requires 'LWP::Protocol::https';
+requires 'DateTime';

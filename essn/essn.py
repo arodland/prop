@@ -50,7 +50,7 @@ def recency_weight(tm, now, recency):
         if hours >= 24:
             return 0
         else:
-            return np.power(2.0, -(hours/6))
+            return np.power(2.0, -(hours / 6))
     else:
         if hours >= 25:
             return 0
@@ -152,14 +152,14 @@ def get_holdouts(run_id):
 
     return data
 
-def generate_essn(run_id, series, holdout_ids):
-    now = datetime.utcnow()
+def generate_essn(run_id, now, series, holdout_ids):
     recency = True if series.startswith('6h') else False
 
-    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
+        os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
     con = psycopg.connect(dsn)
 
-    with urllib.request.urlopen('http://localhost:%s/history.json?days=2' % (os.getenv('HISTORY_PORT'))) as res:
+    with urllib.request.urlopen('http://localhost:%s/history.json?days=2&end_at=%d' % (os.getenv('HISTORY_PORT'), now.timestamp())) as res:
         data = json.loads(res.read().decode())
 
     data = [ station for station in data if station['use_for_essn'] == 1 ]
@@ -191,8 +191,8 @@ def generate_essn(run_id, series, holdout_ids):
             record.append(datetime.strptime(record[0], '%Y-%m-%d %H:%M:%S'))
             record.append(datetime.strftime(record[5], '%Y %m %d %H %M %S'))
 
-
-    res = minimize_scalar(err, args=(data, recency, now), bounds=(-20.0, 200.0), method='Bounded', options={'xatol':0.01, 'maxiter': 1000})
+    res = minimize_scalar(err, args=(data, recency, now), bounds=(-20.0, 200.0),
+                          method='Bounded', options={'xatol': 0.01, 'maxiter': 1000})
     ssn = res.x
     sfi = 63.75 + ssn * (0.728 + ssn*0.000089)
 
@@ -216,8 +216,13 @@ def generate():
     run_id = request.form.get('run_id', -1)
     series = request.form.get('series', '24h')
     holdouts = request.form.getlist('holdouts')
+    ts = request.form.get('ts', None)
+    if ts is None:
+        dt = datetime.utcnow()
+    else:
+        dt = datetime.fromtimestamp(float(ts))
 
-    return jsonify(generate_essn(run_id, series, holdouts))
+    return jsonify(generate_essn(run_id, dt, series, holdouts))
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.getenv('ESSN_PORT')))

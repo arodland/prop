@@ -409,8 +409,131 @@ sub one_run {
   );
 }
 
+sub fallback_run {
+  my ($run_time, $last_data) = @_;
+  my @target_times = target_times($run_time);
+  my $first_target_time = $target_times[0]{target_time};
+
+  my @stations = app->pg->db->query("select distinct(station_id) from measurement where time > now() - interval '14 day' and time <= now()")->hashes->map(sub { $_->{station_id} })->each;
+
+  my $essn_24h = app->minion->enqueue('essn',
+    [
+      series => '24h',
+      ts => $last_data,
+    ],
+    {
+      attempts => 2,
+      expire => 18 * 60,
+    },
+  );
+
+  my $run_id = $essn_24h;
+  app->pg->db->query('insert into runs (id, started, target_time, experiment, state) values (?, to_timestamp(?), to_timestamp(?), ?, ?)',
+    $run_id, time(), $first_target_time, 'stale_data', 'created'
+  );
+
+  my $essn_6h = app->minion->enqueue('essn',
+    [
+      series => '6h',
+      run_id => $run_id,
+      ts => $last_data,
+    ]
+  );
+
+  my @pred_times = pred_times($run_time);
+
+  my @preds;
+  for my $station (@stations) {
+    my $pred = app->minion->enqueue('pred',
+      [
+        run_id => $run_id,
+        target => [ @pred_times ],
+        station => $station,
+      ],
+      {
+        parents => [ $essn_24h ],
+        attempts => 2,
+        queue => 'pred',
+        expire => 18 * 60,
+      },
+    );
+    push @preds, $pred;
+  }
+
+  my @html_deps;
+
+  for my $render (@target_times) {
+    my $irimap = app->minion->enqueue('irimap',
+      [
+        run_id => $run_id,
+        target => $render->{target_time},
+        series => '24h',
+      ],
+      {
+        parents => [ $essn_24h ],
+        attempts => 2,
+        expire => 18 * 60,
+      },
+    );
+
+    my $assimilate = app->minion->enqueue('assimilate',
+      [
+        run_id => $run_id,
+        target => $render->{target_time},
+      ],
+      {
+        parents => [ @preds, $irimap ],
+        attempts => 2,
+        expire => 18 * 60,
+        queue => 'assimilate',
+      },
+    );
+
+    my @map_jobs = make_maps(
+      run_id => $run_id,
+      target => $render->{target_time},
+      name => $render->{name},
+      dots => 'none',
+      parents => [ $assimilate ],
+    );
+    push @html_deps, @map_jobs;
+  }
+
+  my $renderhtml = app->minion->enqueue('renderhtml',
+    [
+      run_id => $run_id,
+      last_data => $last_data,
+      fallback_banner => 1,
+    ],
+    {
+      parents => [ @html_deps ],
+      expire => 18 * 60,
+      attempts => 2,
+    },
+  );
+
+  app->minion->enqueue('finish_run',
+    [
+      run_id => $run_id,
+    ],
+    {
+      parents => [ $renderhtml ],
+      attempts => 2,
+      expire => 3 * 60 * 60,
+    },
+  );
+}
+
+
+
 sub queue_job {
   my ($run_time, $resched) = @_;
+
+  my $last_data = app->pg->db->query("select extract(epoch from min(time) + interval '1 hour') from (select time from measurement order by time desc limit 100)")->array->[0];
+  if ($last_data < $run_time - 3*3600) {
+    fallback_run($run_time, 0 + $last_data);
+    goto RESCHED;
+  }
 
   my $num_holdouts = 1;
 
@@ -495,7 +618,7 @@ sub queue_job {
 
   app->minion->enqueue('cleanup');
 
-  if ($resched) {
+  RESCHED: if ($resched) {
     my ($next, $wait) = next_run();
     Mojo::IOLoop->timer($wait => sub { queue_job($next, 1) });
   }

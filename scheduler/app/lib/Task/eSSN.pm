@@ -15,6 +15,7 @@ sub register {
           run_id => $run_id,
           holdouts => $args{holdouts},
           ($args{v2} ? (v2 => 1) : ()),
+          ($args{ts} ? (ts => $args{ts}) : ()),
         },
       )->result;
       $res->is_success or die $res->error;

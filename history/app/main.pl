@@ -27,11 +27,17 @@ sub dispatch_request {
   'GET + /' => sub {
     [ 200, ['Content-Type' => 'text/plain'], ['hello, world!'] ],
   },
-  'GET + /history.json + ?station~&days~' => sub {
-    my ($self, $station, $days) = @_;
+  'GET + /history.json + ?station~&days~&end_at~' => sub {
+    my ($self, $station, $days, $end_at) = @_;
+
+    if (defined $end_at) {
+        $end_at = DateTime->from_epoch(epoch => $end_at, time_zone => "UTC");
+    } else {
+        $end_at = DateTime->now(time_zone => "UTC");
+    }
 
     $days = 7 unless defined $days;
-    my $start_time = DateTime->now(time_zone => "UTC")->subtract(days => $days)->strftime('%Y-%m-%d %H:%M:%S');
+    my $start_time = $end_at->subtract(days => $days)->strftime('%Y-%m-%d %H:%M:%S');
 
     my $sql = 'SELECT * FROM STATION';
     if (defined $station) {

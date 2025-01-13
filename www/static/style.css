@@ -159,3 +159,20 @@ footer {
     padding-right: 0;
   }
 }
+
+.notice {
+    width: auto;
+    padding: .5em;
+    border: 2px solid darkred;
+    border-left-width: 1em;
+    font-size: 125%;
+    margin-bottom: .5em;
+}
+
+.notice h2 {
+    width: auto;
+    background-color: darkred;
+    color: white;
+    margin: -0.4em -0.4em 0.5em -0.4em;
+    padding-left: 0.1em;
+}
