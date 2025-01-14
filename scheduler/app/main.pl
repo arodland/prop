@@ -529,7 +529,7 @@ sub fallback_run {
 sub queue_job {
   my ($run_time, $resched) = @_;
 
-  my $last_data = app->pg->db->query("select extract(epoch from min(time) + interval '1 hour') from (select time from measurement order by time desc limit 100)")->array->[0];
+  my $last_data = app->pg->db->query("select extract(epoch from min(last_meas) + interval '1 hour') from (select max(time) as last_meas from measurement group by station_id order by last_meas desc limit 8)")->array->[0];
   if ($last_data < $run_time - 3*3600) {
     fallback_run($run_time, 0 + $last_data);
     goto RESCHED;
