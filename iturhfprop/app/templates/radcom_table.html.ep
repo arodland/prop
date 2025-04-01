@@ -1,0 +1,45 @@
+<%
+if (($start_hour // 'ZERO') eq 'CURRENT') {
+    $start_hour = $run_info->{hour};
+} else {
+    $start_hour = 0;
+}
+%>
+<table>
+<colgroup>
+  <col/>
+  % for my $hh (0 .. 23) {
+      % my $hour = ($start_hour + $hh) % 24;
+      % if ($hour == $run_info->{hour}) {
+          <col class="curr_hour" />
+      % } else {
+          <col />
+      % }
+  % }
+</colgroup>
+<tr>
+<th></th>
+% for my $hh (0 .. 23) {
+    % my $hour = ($start_hour + $hh) % 24;
+    <th scope="col"><%= sprintf("%02d", $hour) %></th>
+% }
+</tr>
+% my $i = 0;
+% for my $row (@$table) {
+    % my $band = $bands->[$i++];
+    <tr class="<%= $band->[2] %>">
+    <th scope="row"><%= $band->[0] %></th>
+    % for my $hh (0 .. 23) {
+        % my $hour = ($start_hour + $hh) % 24;
+        % my $col = $row->[$hour];
+        <td class="<%= $col->{color} %>" title="<%=
+            sprintf("BCR: %.1f%% POP: %.1f%% PR: %.1fdBm",
+                    $col->{bcr}, $col->{pop}, $col->{pr}) %>">
+        % if(!$col->{blank}) {
+            <span><%= $col->{smeter} %></span>
+        % }
+        </td>
+    % }
+    </tr>
+% }
+</table>

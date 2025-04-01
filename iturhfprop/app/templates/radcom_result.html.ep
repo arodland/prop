@@ -1,0 +1,12 @@
+<html>
+<head>
+<title>Result</title>
+%= asset_tag '/radcom.css'
+</head>
+<body>
+% for my $target (@$results) {
+    <div class="result">
+    <h3><%= $target->{name} %></h3>
+    %= include 'radcom_table', table => $target->{table}
+    </div>
+% }
