@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-use Mojolicious::Lite -signatures;
+use Mojolicious::Lite -signatures, -async_await;
 use Mojo::File;
 use Mojo::UserAgent;
 use Mojo::IOLoop::ReadWriteFork;
@@ -94,7 +94,7 @@ sub prop_prob($freq, $muf90, $muf50, $muf10) {
 }
 
 
-sub one_run {
+async sub one_run {
     my ($c, %params) = @_;
 
     my ($txlat, $txlon) = parse_locator($params{txloc});
@@ -137,28 +137,27 @@ sub one_run {
         }
     }
 
-    # my $rwf = Mojo::IOLoop::ReadWriteFork->new;
-    # $c->stash(rwf => $rwf);
-    #
-    # $rwf->conduit({ type => 'pipe' });
-    # $rwf->on(read => sub ($rwf, $bytes) {
-    #     STDOUT->syswrite($bytes);
-    # });
-    # $rwf->on(error => sub ($rwf, $err) {
-    #     warn $err;
-    # });
-    # $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file)->catch(sub($err) { die $err })->wait;
-    # system("ls", "-l", $data_dir);
-    # system("ls", "-l", $params{iono_bin});
-    system("ITURHFProp", $input_file, $output_file);
+    my $rwf = Mojo::IOLoop::ReadWriteFork->new;
+    $c->stash(rwf => $rwf);
 
-    my $output = $output_file->slurp;
-    $output =~ s/\A.*\* Calculated Parameters.*?\n.*?\n//s;
-    $output =~ s/\s*\**End Calculated Parameters.*//s;
-    my @lines = split /^/, $output;
-    my @table;
-    my %freq2row;
-    for my $line (@lines) {
+    $rwf->conduit({ type => 'pipe' });
+    $rwf->on(read => sub ($rwf, $bytes) {
+        STDOUT->syswrite($bytes);
+    });
+    $rwf->on(error => sub ($rwf, $err) {
+        warn $err;
+    });
+    await $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file);
+    # system("ITURHFProp", $input_file, $output_file);
+
+    my $fh = $output_file->open('<');
+    my (@table, %freq2row, $seen_header);
+    for my $line (<$fh>) {
+        chomp $line;
+        last if $line =~ /\*End Calculated Parameters/;
+        $seen_header = 1 and next if $line =~ /\* Calculated Parameters/;
+        next unless $line =~ /\S/;
+        next unless $seen_header;
         my @fields = split /\s*,\s*/, $line;
         my (undef, $hour, $freq, $muf50, $muf90, $muf10, $pr, $bcr) = @fields;
         my $pop = prop_prob($freq, $muf90, $muf50, $muf10);
@@ -187,7 +186,7 @@ get '/radcom' => sub ($c) {
     $c->stash(targets => \@TARGETS);
 };
 
-post '/radcom' => sub ($c) {
+post '/radcom' => async sub ($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
@@ -202,11 +201,13 @@ post '/radcom' => sub ($c) {
     my $out = "";
     my @results;
 
+    my $tx = $c->render_later->tx;
+
     for my $target (@TARGETS) {
         my ($name, $rxloc) = @$target;
         push @results, {
             name => $name,
-            table => one_run(
+            table => await one_run(
                 $c,
                 %{ $c->req->params->to_hash },
                 rxloc => $rxloc,
@@ -221,7 +222,7 @@ post '/radcom' => sub ($c) {
     $c->render(template => 'radcom_result');
 };
 
-get '/radcom_table' => sub($c) {
+get '/radcom_table' => async sub($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
@@ -234,7 +235,9 @@ get '/radcom_table' => sub($c) {
     my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_info->{run_id} }));
     $res->result->save_to($iono_bin->to_string);
 
-    my $table = one_run(
+    my $tx = $c->render_later->tx;
+
+    my $table = await one_run(
         $c,
         %{ $c->req->params->to_hash },
         iono_bin => $iono_bin,
@@ -248,7 +251,7 @@ get '/radcom_table' => sub($c) {
     $c->render(template => 'radcom_table');
 };
 
-get '/radcom.json' => sub ($c) {
+get '/radcom.json' => async sub ($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
@@ -260,7 +263,9 @@ get '/radcom.json' => sub ($c) {
     my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_info->{run_id} }));
     $res->result->save_to($iono_bin->to_string);
 
-    my $table = one_run(
+    my $tx = $c->render_later->tx;
+
+    my $table = await one_run(
         $c,
         %{ $c->req->params->to_hash },
         iono_bin => $iono_bin,
