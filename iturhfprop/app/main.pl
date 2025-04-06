@@ -5,6 +5,8 @@ use Mojo::UserAgent;
 use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
 
+app->helper(cache => sub { state $cache = Mojo::Cache->new });
+
 my @TARGETS = (
     [ 'UA Moscow', '55.76, 37.62' ],
     [ 'UA Yakutsk, Siberia', '62.04, 129.74' ],
@@ -186,6 +188,20 @@ get '/radcom' => sub ($c) {
     $c->stash(targets => \@TARGETS);
 };
 
+sub get_iono_bin($c, $run_id) {
+    my $iono_bin = Mojo::File::tempfile;
+    my $contents = $c->cache->get("iono_bin;$run_id");
+    if (!defined $contents) {
+        my $ua = Mojo::UserAgent->new;
+        my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
+        my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_id }))->result;
+        $contents = $res->body;
+        $c->cache->set("iono_bin;$run_id" => $contents);
+    }
+    $iono_bin->spew($contents);
+    return $iono_bin;
+}
+
 post '/radcom' => async sub ($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
@@ -194,9 +210,7 @@ post '/radcom' => async sub ($c) {
     my $run_info = $ua->get(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))->result->json;
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
-    my $iono_bin = Mojo::File::tempfile;
-    my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_info->{run_id} }));
-    $res->result->save_to($iono_bin->to_string);
+    my $iono_bin = get_iono_bin($c, $run_info->{run_id});
 
     my $out = "";
     my @results;
@@ -230,10 +244,8 @@ get '/radcom_table' => async sub($c) {
     my $run_info = $ua->get(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))->result->json;
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
-    my $iono_bin = Mojo::File::tempfile;
+    my $iono_bin = get_iono_bin($c, $run_info->{run_id});
     $c->stash(iono_bin => $iono_bin);
-    my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_info->{run_id} }));
-    $res->result->save_to($iono_bin->to_string);
 
     my $tx = $c->render_later->tx;
 
