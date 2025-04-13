@@ -1,5 +1,7 @@
 import os
 import io
+import gzip
+import struct
 from datetime import datetime, timezone
 
 import numpy as np
@@ -26,6 +28,9 @@ def get_irimap(run_id, ts):
 
 def get_ipe(run_id, ts):
     return hdf5.get_data('http://localhost:%s/ipe.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
+
+def get_assimilated(run_id, ts):
+    return hdf5.get_data('http://localhost:%s/assimilated.h5?run_id=%d&ts=%d' % (os.getenv('API_PORT'), run_id, ts))
 
 def get_holdouts(run_id):
     return json.get_data('http://localhost:%s/holdout?run_id=%d' % (os.getenv('API_PORT'), run_id))
@@ -172,6 +177,30 @@ def assimilate(run_id, ts, holdout, basemap_type, cs_type):
 
     return bio.getvalue()
 
+def iongrid(run_id, tss):
+    models = [ {} for hour in range(24) ]
+
+    for ts in tss:
+        uthour = (ts % 86400) // 3600
+        ds = get_assimilated(run_id, ts)
+        models[uthour] = {
+            'fof2': ds['/maps/fof2'],
+            'md': ds['/maps/md'],
+        }
+
+    bio = io.BytesIO()
+    gz = gzip.open(bio, mode='wb')
+
+    for metric in ['fof2', 'md']:
+        for hour in range(24):
+            model = models[hour][metric]
+            for lati in range(181):
+                for loni in range(361):
+                    gz.write(struct.pack('<f', model[lati, loni]))
+
+    gz.close()
+    return bio.getvalue()
+
 app = Flask(__name__)
 
 @app.route('/generate', methods=['POST'])
@@ -195,6 +224,29 @@ def generate():
                     values (%s, %s, %s)
                     on conflict (run_id, time) do update set dataset=excluded.dataset""",
                     (tm, run_id, dataset)
+                    )
+        con.commit()
+
+    con.close()
+
+    return make_response("OK\n")
+
+@app.route('/generate_iongrid', methods=['POST'])
+def generate_iongrid():
+    dsn = "dbname='%s' user='%s' host='%s' password='%s'" % (
+        os.getenv("DB_NAME"), os.getenv("DB_USER"), os.getenv("DB_HOST"), os.getenv("DB_PASSWORD"))
+    con = psycopg.connect(dsn)
+
+    run_id = int(request.form.get('run_id', -1))
+    tgts = [ int(ts) for ts in request.form.getlist('target') ]
+
+    dataset = iongrid(run_id, tgts)
+
+    with con.cursor() as cur:
+        cur.execute("""insert into iongrid (run_id, dataset)
+                    values (%s, %s)
+                    on conflict (run_id) do update set dataset=excluded.dataset""",
+                    (run_id, dataset)
                     )
         con.commit()
 
