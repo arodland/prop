@@ -1,11 +1,13 @@
 <%
-if (($start_hour // 'ZERO') eq 'CURRENT') {
+if ($start_hour eq 'CURRENT') {
     $start_hour = $run_info->{hour};
+} elsif ($start_hour = 'ZERO_LOCAL') {
+    $start_hour = (0-$tz_offset) % 24;
 } else {
     $start_hour = 0;
 }
 %>
-<table>
+<table class="planner_result">
 <colgroup>
   <col/>
   % for my $hh (0 .. 23) {
@@ -20,9 +22,10 @@ if (($start_hour // 'ZERO') eq 'CURRENT') {
 <tr>
 <th></th>
 % for my $hh (0 .. 23) {
-    % my $hour = ($start_hour + $hh) % 24;
+    % my $hour = ($start_hour + $hh + $tz_offset) % 24;
     <th scope="col"><%= sprintf("%02d", $hour) %></th>
 % }
+<th scope="col" class="noise">N</th>
 </tr>
 % my $i = 0;
 % for my $row (@$table) {
@@ -32,7 +35,7 @@ if (($start_hour // 'ZERO') eq 'CURRENT') {
     % for my $hh (0 .. 23) {
         % my $hour = ($start_hour + $hh) % 24;
         % my $col = $row->[$hour];
-        <td class="<%= $col->{color} %>" title="<%=
+        <td class="<%= $col->{color} %><%= $col->{pr} > $col->{noise} && ' noise-ok' %>" title="<%=
             sprintf("BCR: %.1f%% POP: %.1f%% PR: %.1fdBm",
                     $col->{bcr}, $col->{pop}, $col->{pr}) %>">
         % if(!$col->{blank}) {
@@ -40,6 +43,7 @@ if (($start_hour // 'ZERO') eq 'CURRENT') {
         % }
         </td>
     % }
+    <td class="noise-<%= $row->[0]{noise_s} %>"><%= $row->[0]{noise_s} %></td>
     </tr>
 % }
 </table>

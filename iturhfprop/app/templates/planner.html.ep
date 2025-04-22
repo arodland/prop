@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>24-hour prediction</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+%= asset_tag '/planner.css'
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script>
+    const modes = [
+        { name: "WSPR", bw: 2500, snr: -29 },
+        { name: "FT8", bw: 50, snr: -3 },
+        { name: "CW", bw: 500, snr: 0 },
+        { name: "SSB (Usable)", bw: 3000, snr: 6 },
+        { name: "SSB (Marginal)", bw: 3000, snr: 15 },
+        { name: "SSB (Commercial)", bw: 3000, snr: 33 },
+        { name: "AM (Fair)", bw: 5000, snr: 36 },
+        { name: "AM (Good)", bw: 5000, snr: 48 },
+        // { name: "SWBC (Fair)", bw: 5000, snr: 36 },
+        // { name: "SWBC (Good)", bw: 5000, snr: 48 },
+        // { name: "Voice(1)/600bps Data", bw: 3000, snr: 15 },
+        // { name: "Voice(3)/1200bps Data", bw: 3000, snr: 17 },
+        // { name: "Voice(5)/2400bps Data", bw: 3000, snr: 19 },
+        // { name: "4800bps MIL-110b Data", bw: 3000, snr: 22 },
+        // { name: "9600bps MIL-110b Data", bw: 3000, snr: 33 }
+    ];
+    const antenna_types = [
+        { key: 'ISOTROPIC', name: 'Isotropic' },
+        { key: 'dipole', name: 'Dipole' },
+        { key: '135doublet', name: "135' Doublet" },
+        { key: 'vert-quarter', name: 'Vertical (1/4 WL)' },
+        { key: 'vert-fiveeight', name: 'Vertical (5/8 WL)' },
+        { key: 'vert-43foot', name: "Vertical (43')" },
+        { key: 'yagi-2el', name: 'Yagi (2el)' },
+        { key: 'yagi-3el', name: 'Yagi (3el)' },
+        { key: 'yagi-4el', name: 'Yagi (4el)' },
+        { key: 'yagi-5el', name: 'Yagi (5el)' },
+        { key: 'yagi-7el', name: 'Yagi (7el)' },
+        { key: 'yagi-9el', name: 'Yagi (9el)' },
+        { key: 'yagi-11el', name: 'Yagi (11el)' },
+    ];
+
+    const ant_meta = {
+        'ISOTROPIC': { gos: true },
+        'dipole': { height: true },
+        '135doublet': { height: true },
+        'yagi-2el': { height: true },
+        'yagi-3el': { height: true },
+        'yagi-4el': { height: true },
+        'yagi-5el': { height: true },
+        'yagi-7el': { height: true },
+        'yagi-9el': { height: true },
+        'yagi-11el': { height: true },
+    };
+
+    const antenna_heights = [
+        { key: '0.125wl', name: '1/8 wavelength' },
+        { key: '0.25wl', name: '1/4 wavelength' },
+        { key: '0.375wl', name: '3/8 wavelength' },
+        { key: '0.5wl', name: '1/2 wavelength' },
+        { key: '0.75wl', name: '3/4 wavelength' },
+        { key: '1wl', name: '1 wavelength' },
+        { key: '1.5wl', name: '1½ wavelength' },
+        { key: '2wl', name: '2 wavelengths' },
+        { key: '2.5wl', name: '2½ wavelengths '},
+        { key: '10ft', name: '10 feet (3m)' },
+        { key: '20ft', name: '20 feet (6m)' },
+        { key: '35ft', name: '35 feet (10m)' },
+        { key: '50ft', name: '50 feet (15m)' },
+        { key: '75ft', name: '75 feet (23m)' },
+        { key: '100ft', name: '100 feet (30m)' },
+        { key: '125ft', name: '125 feet (38m)' },
+        { key: '150ft', name: '150 feet (46m)' },
+        { key: '200ft', name: '200 feet (61m)' },
+    ];
+
+    document.addEventListener('alpine:init', () => {
+        Alpine.store('targets', <%== Mojo::JSON::encode_json($targets) %>);
+    });
+    async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset, start_hour, rxnoise, results, bw, snrr, custom_rx_enable, custom_rx_loc}) {
+        tgts = [...Alpine.store('targets')];
+        if (custom_rx_enable) {
+            tgts.unshift([ 'Custom', custom_rx_loc ]);
+        }
+
+        let results_by_name = {};
+        for (const result of results) {
+            results_by_name[result.name] = result;
+        }
+
+        let latest_run_id = await fetch('/api/latest_hourly.json').then(res => res.json()).then(d => d.run_id);
+
+        results.length = 0;
+        for (const [i, target] of tgts.entries()) {
+            if (results_by_name[target[0]]) {
+                results[i] = results_by_name[target[0]];
+            } else {
+                results[i] = {
+                    name: target[0],
+                };
+            }
+            results[i].loading = true;
+            let params = new URLSearchParams({
+                txpow, txloc, txant, txgos,
+                rxnoise, rxant, rxgos,
+                bw, snrr,
+                rxloc: target[1],
+                tz_offset, start_hour,
+                _: latest_run_id,
+            });
+            fetch(`planner_table?${params}`).then((res) => {
+                results[i].content = res.text();
+                results[i].loading = false;
+            });
+        }
+    }
+</script>
+</head>
+<body>
+<div x-data="{ results: [] }">
+    <div class="container">
+<form method="post" x-data="{
+    txloc: $persist(''),
+    txant: 'ISOTROPIC',
+    txant_type: $persist('ISOTROPIC'),
+    txgos: $persist(2.16),
+    txant_height: $persist('35ft'),
+    rxant: 'ISOTROPIC',
+    rxant_type: $persist('ISOTROPIC'),
+    rxgos: $persist(2.16),
+    rxant_height: $persist('35ft'),
+    txpow: $persist(100),
+    rxnoise: $persist('RURAL'),
+    custom_rx_enable: false,
+    custom_rx_loc: '',
+    tz_offset: $persist(0),
+    start_hour: 'ZERO',
+    traffic: $persist(3),
+    bw: 3000,
+    snrr: 6,
+    }"
+    x-effect="if (traffic != -1) {
+        bw = modes[traffic].bw;
+        snrr = modes[traffic].snr;
+    }
+    txant = txant_type;
+    if (ant_meta[txant_type]?.height) { txant += '@' + txant_height }
+    rxant = rxant_type;
+    if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
+    "
+    @submit.prevent="await loadResults($data)"
+    >
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">Global</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="txpow">Power (W)</label>
+                    <div class="col-md-4">
+                        <input type="text" inputmode="numeric" class="form-control"  name="txpow" id="txpow" value="100" x-model.lazy.number="txpow">
+                    </div>
+
+                    <label class="col-md-2 col-form-label text-md-end" for="traffic">Traffic</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="traffic" name="traffic" x-model.number="traffic">
+                            <option value="-1">User Defined</option>
+                            <template x-for="(mode, modeidx) in modes">
+                                <option :value="modeidx" x-text="`${mode.name} (BW=${mode.bw}Hz / SNR=${mode.snr}dB)`" :selected="modeidx == traffic && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="rxnoise">Man Made Noise</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
+                            <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
+                            <option value="CITY">City (-145 dBW/Hz @ 3 MHz)</option>
+                            <option value="RESIDENTIAL">Residental (-150 dBW/Hz @ 3 MHz)</option>
+                            <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
+                            <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
+                            <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
+                        </select>
+                    </div>
+                    <template x-if="traffic == -1" x-collapse>
+                        <label class="col-md-2 col-form-label text-md-end" for="bw">Bandwidth (Hz)</label>
+                    </template>
+                    <template x-if="traffic == -1" x-collapse>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" inputmode="numeric" name="bw" id="bw" x-model="bw">
+                        </div>
+                    </template>
+                </div>
+                <template x-if="traffic == -1" x-collapse>
+                    <div class="row mb-3">
+                        <label class="col-md-2 offset-md-6 text-md-end" for="snrr">SNR (dB)</label>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" inputmode="numeric" name="snrr" id="snrr" x-model="snrr">
+                        </div>
+                    </div>
+                </template>
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="tz_offset">Timezone Offset</label>
+                    <div class="col-md-2">
+                        <input type="number" class="form-control" min="-12" max="14" name="tz_offset" id="tz_offset" x-model="tz_offset">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary" @click.prevent="tz_offset = Math.floor((new Date()).getTimezoneOffset() / -60)">Get from Browser</button>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="start_hour">Starting Hour</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="start_hour" name="start_hour" x-model="start_hour">
+                            <option value="ZERO">00Z</option>
+                            <option value="ZERO_LOCAL">00 Local</option>
+                            <option value="CURRENT">Current</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">TX Site</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="txloc">Locator</label>
+                    <div class="col-md-8">
+                        <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="txant_type">Antenna</label>
+                    <div class="col-md-8">
+                        <select class="form-select" id="txant_type" name="txant_type" x-model="txant_type">
+                            <template x-for="ant in antenna_types">
+                                <option :value="ant.key" x-text="ant.name" :selected="ant.key == txant_type && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="ant_meta[txant_type]?.height">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="txant_height">Height</label>
+                        <div class="col-md-8">
+                            <select class="form-select" id="txant_height" name="txant_height" x-model="txant_height">
+                                <template x-for="height in antenna_heights">
+                                    <option :value="height.key" x-text="height.name" :selected="height.key == txant_height && 'selected'">
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="ant_meta[txant_type]?.gos">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="txgos">Gain (dBi)</label>
+                        <div class="col-md-8">
+                            <input class="form-control" type="text" inputmode="numeric" name="gos" id="txgos" x-model.lazy.number="txgos">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">RX Sites</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="custom_rx_enable">Custom Site</label>
+                    <div class="col-md-8">
+                        <div class="form-switch">
+                            <input class="form-check-input" type="checkbox" name="custom_rx_enable" id="custom_rx_enable" x-model="custom_rx_enable">
+                        </div>
+                    </div>
+                </div>
+                <template x-if="custom_rx_enable">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="custom_rx_loc">Locator</label>
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" name="custom_rx_loc" pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="custom_rx_loc" x-model.lazy="custom_rx_loc" placeholder="4 to 8 character grid locator">
+                        </div>
+                    </div>
+                </template>
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="rxant_type">Antenna</label>
+                    <div class="col-md-8">
+                        <select class="form-select" id="rxant_type" name="rxant_type" x-model="rxant_type">
+                            <template x-for="ant in antenna_types">
+                                <option :value="ant.key" x-text="ant.name" :selected="ant.key == rxant_type && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="ant_meta[rxant_type]?.height">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="rxant_height">Height</label>
+                        <div class="col-md-8">
+                            <select class="form-select" id="rxant_height" name="rxant_height" x-model="rxant_height">
+                                <template x-for="height in antenna_heights">
+                                    <option :value="height.key" x-text="height.name" :selected="height.key == rxant_height && 'selected'">
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="ant_meta[rxant_type]?.gos">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="rxgos">Gain (dBi)</label>
+                        <div class="col-md-8">
+                            <input class="form-control" type="text" inputmode="numeric" name="gos" id="rxgos" x-model.lazy.number="rxgos">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-4">
+    <button class="btn btn-primary" type="submit">Run Prediction</button>
+</div>
+</form>
+<div class="row d-block d-sm-none">
+    <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>
+</div>
+<div class="row d-none d-sm-block">
+    <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
+</div>
+<div class="row d-flex">
+<template x-for="result in results">
+    <div class="col mb-3">
+        <div class="card" :class="result.loading && 'loading'">
+            <div class="card-header"><h4 x-text="result.name"></div>
+            <div class="card-body">
+                <div class="overlay-wrapper">
+                    <div class="overlay"><div class="loader"></div></div>
+                </div>
+                <div x-show="result.content" x-html="result.content"></div>
+            </div>
+        </div>
+    </div>
+</template>
+</div>
+</div>
+</div>
+</body>
+</html>

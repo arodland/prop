@@ -29,6 +29,7 @@ COPY --from=build-iturhfprop /src/ITURHFProp/Linux/ITURHFProp /usr/local/bin
 COPY --from=build-iturhfprop /src/P372/Linux/libp372.so /usr/local/lib
 COPY --from=build-iturhfprop /src/P533/Linux/libp533.so /usr/local/lib
 COPY ITU-R-HF/ITURHFProp/Data /opt/iturhfprop/data
+COPY antennas /opt/antennas
 RUN ldconfig
 
 COPY --from=perl-deps /usr/local/lib/perl5 /usr/local/lib/perl5

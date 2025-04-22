@@ -4,6 +4,7 @@ use Mojo::File;
 use Mojo::UserAgent;
 use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
+use FU::Validate;
 
 app->helper(cache => sub { state $cache = Mojo::Cache->new });
 
@@ -95,7 +96,6 @@ sub prop_prob($freq, $muf90, $muf50, $muf10) {
     return $prob;
 }
 
-
 async sub one_run {
     my ($c, %params) = @_;
 
@@ -116,12 +116,22 @@ async sub one_run {
             year => (gmtime)[5]+1900,
             month => (gmtime)[4]+1,
             ssn => $params{run_info}{essn},
-            txant => $c->param('txant'),
-            txpow => 10 * log($c->param('txpow') / 1000) / log(10),
+            ($params{txant} eq 'ISOTROPIC'
+                ? (txant => 'ISOTROPIC', txgos => $params{txgos})
+                : (txant => "/opt/antennas/$params{txant}.mbp", txgos => 0)
+            ),
+            ($params{rxant} eq 'ISOTROPIC'
+                ? (rxant => 'ISOTROPIC', rxgos => $params{rxgos})
+                : (rxant => "/opt/antennas/$params{rxant}.mbp", rxgos => 0)
+            ),
+            txpow => 10 * log($params{txpow} / 1000) / log(10),
             txlat => $txlat,
             txlon => $txlon,
             rxlat => $rxlat,
             rxlon => $rxlon,
+            rxnoise => $params{rxnoise},
+            snrr => $params{snrr},
+            bw => $params{bw},
             data_dir => $data_dir->to_string . "/",
             freqs => [ map $_->[1], @BANDS ],
         });
@@ -155,14 +165,17 @@ async sub one_run {
     my $fh = $output_file->open('<');
     my (@table, %freq2row, $seen_header);
     for my $line (<$fh>) {
+        # print($line);
         chomp $line;
         last if $line =~ /\*End Calculated Parameters/;
         $seen_header = 1 and next if $line =~ /\* Calculated Parameters/;
         next unless $line =~ /\S/;
         next unless $seen_header;
         my @fields = split /\s*,\s*/, $line;
-        my (undef, $hour, $freq, $muf50, $muf90, $muf10, $pr, $bcr) = @fields;
+        my (undef, $hour, $freq, $muf50, $muf90, $muf10, $pr, $grw, undef, $noise, undef, $bcr) = @fields;
         my $pop = prop_prob($freq, $muf90, $muf50, $muf10);
+
+        $noise = $noise - 204 + 10 * log($params{bw}) / log(10);
 
         if (!defined $freq2row{$freq}) {
             $freq2row{$freq} = @table;
@@ -171,9 +184,11 @@ async sub one_run {
         $table[$row][$hour-1] = {
             color => color($bcr),
             smeter => smeter($pr),
-            pr => $pr,
-            bcr => $bcr,
-            pop => $pop,
+            pr => 0+$pr,
+            bcr => 0+$bcr,
+            noise => 0+$noise,
+            noise_s => smeter($noise),
+            pop => 0+$pop,
         };
         if ($pr < -151 || $bcr < 10 || $pop < 10) {
             $table[$row][$hour-1]{blank} = Mojo::JSON->true;
@@ -185,6 +200,20 @@ async sub one_run {
 }
 
 get '/radcom' => sub ($c) {
+    $c->res->code(301);
+    $c->redirect_to('/planner');
+};
+
+get '/radcom_beta' => sub ($c) {
+    $c->res->code(301);
+    $c->redirect_to('/planner_beta');
+};
+
+get '/planner' => sub ($c) {
+    $c->stash(targets => \@TARGETS);
+};
+
+get '/planner_beta' => sub ($c) {
     $c->stash(targets => \@TARGETS);
 };
 
@@ -202,41 +231,35 @@ sub get_iono_bin($c, $run_id) {
     return $iono_bin;
 }
 
-post '/radcom' => async sub ($c) {
-    my $ua = Mojo::UserAgent->new;
-    my $hl = Ham::Locator->new;
-    my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
+my $locator_pattern = qr/^
+    (?:[a-r]{2}\d{2}(?:[a-x]{2}(?:\d{2})?)?
+    |-?\d+(?:\.\d+)\s*,\s*-?\d+(?:\.\d+))
+$/xi;
 
-    my $run_info = $ua->get(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))->result->json;
-    $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
+my $antenna_pattern = qr/^[a-z0-9_\@.-]+$/i;
 
-    my $iono_bin = get_iono_bin($c, $run_info->{run_id});
-
-    my $out = "";
-    my @results;
-
-    my $tx = $c->render_later->tx;
-
-    for my $target (@TARGETS) {
-        my ($name, $rxloc) = @$target;
-        push @results, {
-            name => $name,
-            table => await one_run(
-                $c,
-                %{ $c->req->params->to_hash },
-                rxloc => $rxloc,
-                iono_bin => $iono_bin,
-                run_info => $run_info,
-            ),
-        };
-    }
-    $c->stash(results => \@results);
-    $c->stash(bands => \@BANDS);
-    $c->stash(run_info => $run_info);
-    $c->render(template => 'radcom_result');
+my $validation_schema = {
+    type => 'hash',
+    unknown => 'remove',
+    keys => {
+        txloc => { regex => $locator_pattern },
+        rxloc => { regex => $locator_pattern },
+        txgos => { num => 1, default => 0 },
+        rxgos => { num => 1, default => 0 },
+        txant => { regex => $antenna_pattern },
+        rxant => { regex => $antenna_pattern },
+        txpow => { num => 1, min => 0.01 },
+        rxnoise => { enum => [ qw(CITY RESIDENTIAL RURAL QUIETRURAL QUIET NOISY) ], default => 'RURAL' },
+        snrr => { num => 1, default => 6 },
+        bw => { num => 1, default => 3000 },
+        start_hour => { enum => [ qw(ZERO ZERO_LOCAL CURRENT) ], default => 'ZERO' },
+        tz_offset => { int => 1, min => -24, max => 24, default => 0 },
+    },
 };
 
-get '/radcom_table' => async sub($c) {
+my $validator = FU::Validate->compile($validation_schema);
+
+get '/planner_table' => async sub($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
@@ -249,9 +272,11 @@ get '/radcom_table' => async sub($c) {
 
     my $tx = $c->render_later->tx;
 
+    my $params = $validator->validate($c->req->params->to_hash);
+
     my $table = await one_run(
         $c,
-        %{ $c->req->params->to_hash },
+        %$params,
         iono_bin => $iono_bin,
         run_info => $run_info,
     );
@@ -259,11 +284,13 @@ get '/radcom_table' => async sub($c) {
     $c->stash(table => $table);
     $c->stash(bands => \@BANDS);
     $c->stash(run_info => $run_info);
-    $c->stash(start_hour => $c->param('start_hour'));
-    $c->render(template => 'radcom_table');
+    $c->stash(start_hour => $params->{start_hour});
+    $c->stash(tz_offset => $params->{tz_offset});
+    $c->res->headers->header('Access-Control-Allow-Origin' => '*');
+    $c->render(template => 'planner_table');
 };
 
-get '/radcom.json' => async sub ($c) {
+get '/planner.json' => async sub ($c) {
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
@@ -279,7 +306,7 @@ get '/radcom.json' => async sub ($c) {
 
     my $table = await one_run(
         $c,
-        %{ $c->req->params->to_hash },
+        %{ $validator->validate($c->req->params->to_hash) },
         iono_bin => $iono_bin,
         run_info => $run_info,
     );
