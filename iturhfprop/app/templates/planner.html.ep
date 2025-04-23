@@ -178,8 +178,8 @@
                     <div class="col-md-4">
                         <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
                             <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
-                            <option value="CITY">City (-145 dBW/Hz @ 3 MHz)</option>
-                            <option value="RESIDENTIAL">Residental (-150 dBW/Hz @ 3 MHz)</option>
+                            <option value="CITY">City (-140 dBW/Hz @ 3 MHz)</option>
+                            <option value="RESIDENTIAL">Residential (-145 dBW/Hz @ 3 MHz)</option>
                             <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
                             <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
                             <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
