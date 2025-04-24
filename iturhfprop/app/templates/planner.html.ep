@@ -119,8 +119,44 @@
 </script>
 </head>
 <body>
+%= include 'header'
+<div class="container">
+<h2>HF Propagation Planner</h2>
+<div class="row mb-3"><div class="col"><div class="card">
+    <div class="card-header"><h4><a data-bs-toggle="collapse" href="#helptext" class="stretched-link text-reset text-decoration-none">Help</a></h4></div>
+    <div class="collapse" id="helptext">
+        <div class="card-body">
+            <p>This is an HF propagation planning tool, similar to the [Radcom
+            Predictions](https://soundbytes.asia/proppy/radcom) found on Proppy (which are in turn based on the
+            charts found in the back of RSGB's RadCom magazine). While other tools, like VOACAP and Proppy, are
+            based on sunspot-number curves and tables of "monthly average" ionospheric conditions, this planner uses
+            a 24-hour prediction based on the prop.kc2g.com realtime model. In other words, they're the Farmer's
+            Almanac, and we're the weather forecast.</p>
+            <p>Enter your location and click the button, and you will see charts presented for a variety of
+            locations around the globe. Each chart has a column for each hour of the day, and a row for each amateur
+            band. The cell at that row and column indicates the predicted probability of communication being
+            possible on the selected mode (BCR, indicated by color from blue to red), and the predicted signal
+            strength, in S-units. The number will be bold if it exceeds the predicted manmade noise strength (in the
+            25th column).</p>
+            <p>By default the times shown are in UTC, with midnight UTC on the left. You can also choose to have the
+            headings in local time for your time zone, and to have the table start at midnight local time, or at the
+            current hour.</p>
+            <p>You can adjust the antennas on each side of the path. You can choose an antenna type, and for horizontal
+            antennas you can also choose a height above ground. A height in feet or meters will be the same height above
+            ground for all bands, whereas a height in wavelengths represents a different antenna for each band. If you
+            select the "Isotropic" antenna you can input a gain value, which will be used for <i>every</i> direction and
+            elevation. An isotropic antenna with positive gain is completely impossible, but it comes in handy for
+            simulating an antenna that you can't find on the list.</p>
+            <p>With the "Custom Site" option you can add one more RX site which will show up at the start of the
+            list.</p>
+            <p>As with all forecasts these aren't 100% reliable, and you shouldn't be surprised if you can't make a
+            contact that it says you should, or if the band is open when it says it isn't. But I hope that you will find
+            this a useful tool both for casual use and for planning contest weekends.</p>
+        </div>
+    </div>
+</div></div></div>
+
 <div x-data="{ results: [] }">
-    <div class="container">
 <form method="post" x-data="{
     txloc: $persist(''),
     txant: 'ISOTROPIC',
@@ -233,7 +269,7 @@
                 <div class="row mb-3">
                     <label class="col-md-4 col-form-label text-md-end" for="txloc">Locator</label>
                     <div class="col-md-8">
-                        <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator">
+                        <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator" autofocus>
                     </div>
                 </div>
                 <div class="row mb-3">
@@ -323,21 +359,10 @@
         </div>
     </div>
 </div>
-<div class="row mb-3">
+<div class="row mb-4">
     <button class="btn btn-primary" type="submit">Run Prediction</button>
 </div>
 </form>
-
-<div class="row mb-4">
-    <div class="card">
-        <div class="card-header"><h4><a data-bs-toggle="collapse" href="#helptext" class="stretched-link">Help</a></h4></div>
-        <div class="collapse" id="helptext">
-            <div class="card-body">
-                Words words lots of words.
-            </div>
-        </div>
-    </div>
-</div>
 
 <div class="row d-block d-sm-none">
     <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>

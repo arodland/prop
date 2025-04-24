@@ -5,3 +5,4 @@ requires 'EV';
 requires 'Net::DNS::Native';
 requires 'Future::AsyncAwait';
 requires 'FU::Validate';
+requires 'Mojolicious::Plugin::AccessLog';

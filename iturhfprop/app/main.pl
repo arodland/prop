@@ -6,6 +6,7 @@ use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
 use FU::Validate;
 
+plugin 'AccessLog';
 app->helper(cache => sub { state $cache = Mojo::Cache->new });
 
 my @TARGETS = (
@@ -153,19 +154,14 @@ async sub one_run {
     $c->stash(rwf => $rwf);
 
     $rwf->conduit({ type => 'pipe' });
-    $rwf->on(read => sub ($rwf, $bytes) {
-        STDOUT->syswrite($bytes);
-    });
     $rwf->on(error => sub ($rwf, $err) {
         warn $err;
     });
     await $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file);
-    # system("ITURHFProp", $input_file, $output_file);
 
     my $fh = $output_file->open('<');
     my (@table, %freq2row, $seen_header);
     for my $line (<$fh>) {
-        # print($line);
         chomp $line;
         last if $line =~ /\*End Calculated Parameters/;
         $seen_header = 1 and next if $line =~ /\* Calculated Parameters/;

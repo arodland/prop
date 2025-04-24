@@ -1,0 +1,31 @@
+<header>
+    <input type="checkbox" id="nav-input" class="nav-burger">
+    <label id="nav-label" for="nav-input">
+      <nav class="ui menu">
+        <ul>
+          <li id="nav-closer"></li>
+          <li>
+            <a class="item" href="/">MUF</a>
+          </li>
+          <li>
+            <a class="item" href="/fof2/">foF2</a>
+          </li>
+          <li>
+            <a class="item" href="/stations/">Data</a>
+          </li>
+          <li>
+            <a class="item" href="/essn/">eSSN</a>
+          </li>
+          <li>
+              <a class="item active" href="/hfprop/planner">Planner</a>
+          </li>
+          <li>
+            <a class="item" href="/about/">About</a>
+          </li>
+          <li>
+            <a class="item" id="acknowledgments-nav" href="/acknowledgments/">Acknowledgments</a>
+          </li>
+      </nav>
+    </label>
+    <div id="nav-overlay"></div>
+</header>
