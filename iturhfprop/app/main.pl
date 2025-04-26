@@ -137,7 +137,7 @@ async sub run_iturhfprop($c, $iono_bin, $template, $template_args) {
     return $output_file;
 }
 
-async sub one_run($c, %params) {
+async sub one_run_p2p($c, %params) {
     my ($txlat, $txlon) = parse_locator($params{txloc});
     my ($rxlat, $rxlon) = parse_locator($params{rxloc});
 
@@ -241,7 +241,7 @@ $/xi;
 
 my $antenna_pattern = qr/^[a-z0-9_\@.-]+$/i;
 
-my $validation_schema = {
+my $validation_schema_p2p = {
     type => 'hash',
     unknown => 'remove',
     keys => {
@@ -260,7 +260,7 @@ my $validation_schema = {
     },
 };
 
-my $validator = FU::Validate->compile($validation_schema);
+my $validator_p2p = FU::Validate->compile($validation_schema_p2p);
 
 get '/planner_table' => async sub($c) {
     my $ua = Mojo::UserAgent->new;
@@ -275,9 +275,9 @@ get '/planner_table' => async sub($c) {
 
     my $tx = $c->render_later->tx;
 
-    my $params = $validator->validate($c->req->params->to_hash);
+    my $params = $validator_p2p->validate($c->req->params->to_hash);
 
-    my $table = await one_run(
+    my $table = await one_run_p2p(
         $c,
         %$params,
         iono_bin => $iono_bin,
@@ -307,9 +307,9 @@ get '/planner.json' => async sub ($c) {
 
     my $tx = $c->render_later->tx;
 
-    my $table = await one_run(
+    my $table = await one_run_p2p(
         $c,
-        %{ $validator->validate($c->req->params->to_hash) },
+        %{ $validator_p2p->validate($c->req->params->to_hash) },
         iono_bin => $iono_bin,
         run_info => $run_info,
     );
