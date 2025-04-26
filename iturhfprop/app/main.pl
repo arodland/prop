@@ -97,12 +97,7 @@ sub prop_prob($freq, $muf90, $muf50, $muf10) {
     return $prob;
 }
 
-async sub one_run {
-    my ($c, %params) = @_;
-
-    my ($txlat, $txlon) = parse_locator($params{txloc});
-    my ($rxlat, $rxlon) = parse_locator($params{rxloc});
-
+async sub run_iturhfprop($c, $iono_bin, $template, $template_args) {
     my $data_dir = Mojo::File::tempdir;
 
     my $mt = Mojo::Template->new->escape(sub {
@@ -111,8 +106,43 @@ async sub one_run {
             $in =~ s/\n//g;
             return qq{"$in"};
         })->vars(1);
-
     my $input = $mt->render_file(
+        $template,
+        {
+            %$template_args,
+            data_dir => $data_dir->to_string . "/"
+        }
+    );
+    my $input_file = $data_dir->child('p2p.txt')->spew($input, 'UTF-8');
+
+    my $output_file = Mojo::File::tempfile(DIR => $data_dir);
+    my $template_dir = Mojo::File::path('/opt/iturhfprop/data');
+
+    for my $child ($template_dir->list->each) {
+        if ($child->basename =~ /^ionos\d+\.bin$/i) {
+            symlink($iono_bin, $data_dir->child($child->basename));
+        } else {
+            symlink($child, $data_dir->child($child->basename));
+        }
+    }
+
+    my $rwf = Mojo::IOLoop::ReadWriteFork->new;
+    $c->stash(rwf => $rwf);
+
+    $rwf->conduit({ type => 'pipe' });
+    $rwf->on(error => sub ($rwf, $err) {
+        warn $err;
+    });
+    await $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file);
+    return $output_file;
+}
+
+async sub one_run($c, %params) {
+    my ($txlat, $txlon) = parse_locator($params{txloc});
+    my ($rxlat, $rxlon) = parse_locator($params{rxloc});
+
+    my $output_file = await run_iturhfprop(
+        $c, $params{iono_bin},
         $c->app->home->child('templates', 'p2p.ep'), {
             year => (gmtime)[5]+1900,
             month => (gmtime)[4]+1,
@@ -133,31 +163,8 @@ async sub one_run {
             rxnoise => $params{rxnoise},
             snrr => $params{snrr},
             bw => $params{bw},
-            data_dir => $data_dir->to_string . "/",
             freqs => [ map $_->[1], @BANDS ],
         });
-
-    my $input_file = $data_dir->child('p2p.txt')->spew($input, 'UTF-8');
-    my $output_file = Mojo::File::tempfile(DIR => $data_dir);
-
-    my $template_dir = Mojo::File::path('/opt/iturhfprop/data');
-
-    for my $child ($template_dir->list->each) {
-        if ($child->basename =~ /^ionos\d+\.bin$/i) {
-            symlink($params{iono_bin}, $data_dir->child($child->basename));
-        } else {
-            symlink($child, $data_dir->child($child->basename));
-        }
-    }
-
-    my $rwf = Mojo::IOLoop::ReadWriteFork->new;
-    $c->stash(rwf => $rwf);
-
-    $rwf->conduit({ type => 'pipe' });
-    $rwf->on(error => sub ($rwf, $err) {
-        warn $err;
-    });
-    await $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file);
 
     my $fh = $output_file->open('<');
     my (@table, %freq2row, $seen_header);
