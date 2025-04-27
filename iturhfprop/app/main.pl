@@ -167,7 +167,7 @@ async sub one_run_p2p($c, %params) {
     for my $line (<$fh>) {
         chomp $line;
         last if $line =~ /\*End Calculated Parameters/;
-        $seen_header = 1 and next if $line =~ /\* Calculated Parameters/;
+        $seen_header = 1, next if $line =~ /\* Calculated Parameters/;
         next unless $line =~ /\S/;
         next unless $seen_header;
         my @fields = split /\s*,\s*/, $line;
