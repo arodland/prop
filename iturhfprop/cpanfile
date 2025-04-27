@@ -1,4 +1,5 @@
 requires 'Mojolicious::Lite';
+requires 'Mojo::IOLoop::ReadWriteFork';
 requires 'Ham::Locator';
 requires 'EV';
 requires 'Net::DNS::Native';

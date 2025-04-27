@@ -2,6 +2,7 @@
 use Mojolicious::Lite -signatures, -async_await;
 use Mojo::File;
 use Mojo::UserAgent;
+use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
 use FU::Validate;
 
@@ -125,11 +126,14 @@ async sub run_iturhfprop($c, $iono_bin, $template, $template_args) {
         }
     }
 
-    await Mojo::IOLoop->subprocess->run_p(sub {
-        open STDOUT, '>', '/dev/null';
-        open STDIN, '<', '/dev/null';
-        system "/usr/local/bin/ITURHFProp", $input_file, $output_file;
+    my $rwf = Mojo::IOLoop::ReadWriteFork->new;
+    $c->stash(rwf => $rwf);
+
+    $rwf->conduit({ type => 'pipe' });
+    $rwf->on(error => sub ($rwf, $err) {
+        warn $err;
     });
+    await $rwf->run_p("/usr/local/bin/ITURHFProp", $input_file, $output_file);
     return $output_file;
 }
 
