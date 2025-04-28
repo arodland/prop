@@ -220,14 +220,14 @@ get '/planner_beta' => sub ($c) {
     $c->stash(targets => \@TARGETS);
 };
 
-sub get_iono_bin($c, $run_id) {
+async sub get_iono_bin($c, $run_id) {
     my $iono_bin = Mojo::File::tempfile;
     my $contents = $c->cache->get("iono_bin;$run_id");
     if (!defined $contents) {
         my $ua = Mojo::UserAgent->new;
         my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
-        my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_id }))->result;
-        $contents = $res->body;
+        my $res = await $ua->get_p(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_id }));
+        $contents = $res->result->body;
         $c->cache->set("iono_bin;$run_id" => $contents);
     }
     $iono_bin->spew($contents);
@@ -263,17 +263,18 @@ my $validation_schema_p2p = {
 my $validator_p2p = FU::Validate->compile($validation_schema_p2p);
 
 get '/planner_table' => async sub($c) {
+    my $tx = $c->render_later->tx;
+
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
 
-    my $run_info = $ua->get(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))->result->json;
+    my $run_info = await $ua->get_p(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))
+        ->then(sub { $_[0]->result->json });
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
-    my $iono_bin = get_iono_bin($c, $run_info->{run_id});
+    my $iono_bin = await get_iono_bin($c, $run_info->{run_id});
     $c->stash(iono_bin => $iono_bin);
-
-    my $tx = $c->render_later->tx;
 
     my $params = $validator_p2p->validate($c->req->params->to_hash);
 
@@ -294,18 +295,17 @@ get '/planner_table' => async sub($c) {
 };
 
 get '/planner.json' => async sub ($c) {
+    my $tx = $c->render_later->tx;
+
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
     my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
 
-    my $run_info = $ua->get(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))->result->json;
+    my $run_info = await $ua->get_p(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))
+        ->then(sub { $_[0]->result->json });
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
-    my $iono_bin = Mojo::File::tempfile;
-    my $res = $ua->get(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_info->{run_id} }));
-    $res->result->save_to($iono_bin->to_string);
-
-    my $tx = $c->render_later->tx;
+    my $iono_bin = await get_iono_bin($c, $run_info->{run_id});
 
     my $table = await one_run_p2p(
         $c,
