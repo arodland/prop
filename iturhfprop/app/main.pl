@@ -9,6 +9,13 @@ use FU::Validate;
 plugin 'AccessLog';
 app->helper(cache => sub { state $cache = Mojo::Cache->new });
 
+my $API_URL;
+if (defined $ENV{KC2G_API}) {
+    $API_URL = Mojo::URL->new($ENV{KC2G_API});
+} else {
+    $API_URL = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
+}
+
 my @TARGETS = (
     [ '5W Western Samoa', '-13.76, -172.11' ],
     [ 'KH6 Honolulu', '21.31, -157.86' ],
@@ -128,8 +135,10 @@ async sub run_iturhfprop($c, $iono_bin, $template, $template_args) {
 
     my $rwf = Mojo::IOLoop::ReadWriteFork->new;
     $c->stash(rwf => $rwf);
-
     $rwf->conduit({ type => 'pipe' });
+    $rwf->on(read => sub ($rwf, $bytes) {
+        STDOUT->syswrite($bytes);
+    });
     $rwf->on(error => sub ($rwf, $err) {
         warn $err;
     });
@@ -225,8 +234,7 @@ async sub get_iono_bin($c, $run_id) {
     my $contents = $c->cache->get("iono_bin;$run_id");
     if (!defined $contents) {
         my $ua = Mojo::UserAgent->new;
-        my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
-        my $res = await $ua->get_p(Mojo::URL->new('/iongrid.bin')->to_abs($api_url)->query({ run_id => $run_id }));
+        my $res = await $ua->get_p(Mojo::URL->new('iongrid.bin')->to_abs($API_URL)->query({ run_id => $run_id }));
         $contents = $res->result->body;
         $c->cache->set("iono_bin;$run_id" => $contents);
     }
@@ -267,10 +275,15 @@ get '/planner_table' => async sub($c) {
 
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
-    my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
 
-    my $run_info = await $ua->get_p(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))
-        ->then(sub { $_[0]->result->json });
+    my $run_info;
+    if (defined($c->param('run_id'))) {
+        $run_info = await $ua->get_p(Mojo::URL->new('run_info.json')->to_abs($API_URL)->query({run_id => $c->param('run_id')}))
+            ->then(sub { $_[0]->result->json });
+    } else {
+        $run_info = await $ua->get_p(Mojo::URL->new('latest_hourly.json')->to_abs($API_URL))
+            ->then(sub { $_[0]->result->json });
+    }
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
     my $iono_bin = await get_iono_bin($c, $run_info->{run_id});
@@ -299,9 +312,8 @@ get '/planner.json' => async sub ($c) {
 
     my $ua = Mojo::UserAgent->new;
     my $hl = Ham::Locator->new;
-    my $api_url = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
 
-    my $run_info = await $ua->get_p(Mojo::URL->new('/latest_hourly.json')->to_abs($api_url))
+    my $run_info = await $ua->get_p(Mojo::URL->new('latest_hourly.json')->to_abs($API_URL))
         ->then(sub { $_[0]->result->json });
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
@@ -320,10 +332,12 @@ get '/planner.json' => async sub ($c) {
     });
 };
 
-app->hook('before_dispatch' => sub {
-    my $self = shift;
-    $self->req->url->base->path('/hfprop/');
-});
+if (defined $ENV{PATH_PREFIX}) {
+    app->hook('before_dispatch' => sub {
+        my $self = shift;
+        $self->req->url->base->path($ENV{PATH_PREFIX});
+    });
+}
 
 app->start;
 

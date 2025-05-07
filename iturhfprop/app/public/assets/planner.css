@@ -36,6 +36,11 @@ table.planner_result {
     margin-right: auto;
 }
 
+.result-card .card-body {
+    min-width: 30em;
+    min-height: 15em;
+}
+
 .loader {
   width: 50px;
   aspect-ratio: 1;

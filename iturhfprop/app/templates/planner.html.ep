@@ -90,7 +90,7 @@
             results_by_name[result.name] = result;
         }
 
-        let latest_run_id = await fetch('/api/latest_hourly.json').then(res => res.json()).then(d => d.run_id);
+        let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json').then(res => res.json()).then(d => d.run_id);
 
         results.length = 0;
         for (const [i, target] of tgts.entries()) {
@@ -108,7 +108,7 @@
                 bw, snrr,
                 rxloc: target[1],
                 tz_offset, start_hour,
-                _: latest_run_id,
+                run_id: latest_run_id,
             });
             fetch(`planner_table?${params}`).then((res) => {
                 results[i].content = res.text();

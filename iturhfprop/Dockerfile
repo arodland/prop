@@ -1,11 +1,10 @@
-FROM perl:5.38.2 AS perl-base
+FROM perl:5.40.2 AS perl-base
+RUN apt-get update && apt-get install -y build-essential libhdf5-dev
 
 FROM perl-base AS perl-cpm
 RUN wget -O /usr/local/bin/cpm https://raw.githubusercontent.com/skaji/cpm/0.997015/cpm && chmod +x /usr/local/bin/cpm
 
-FROM perl-cpm as build-iturhfprop
-
-RUN apt-get update && apt-get install build-essential
+FROM perl-base as build-iturhfprop
 
 COPY ITU-R-HF /src
 
@@ -33,9 +32,11 @@ COPY antennas /opt/antennas
 RUN ldconfig
 
 COPY --from=perl-deps /usr/local/lib/perl5 /usr/local/lib/perl5
+COPY --from=perl-deps /usr/local/bin/* /usr/local/bin
 COPY ./app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 ENV MOJO_REVERSE_PROXY=1
 CMD perl -I/app/lib /app/main.pl prefork -m production -w 2 -s 16 -l "http://*:$ITURHFPROP_PORT"
+ENV PATH_PREFIX=/hfprop/
 # CMD perl -I/app/lib /app/main.pl daemon -l "http://*:$ITURHFPROP_PORT"
