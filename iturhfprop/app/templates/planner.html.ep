@@ -132,12 +132,12 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
         <div class="card-header"><h4><a data-bs-toggle="collapse" href="#helptext" class="stretched-link text-reset text-decoration-none">Help</a></h4></div>
         <div class="collapse" id="helptext">
             <div class="card-body">
-                <p>This is an HF propagation planning tool, similar to the [Radcom
-                Predictions](https://soundbytes.asia/proppy/radcom) found on Proppy (which are in turn based on the
-                charts found in the back of RSGB's RadCom magazine). While other tools, like VOACAP and Proppy, are
-                based on sunspot-number curves and tables of "monthly average" ionospheric conditions, this planner uses
-                a 24-hour prediction based on the prop.kc2g.com realtime model. In other words, they're the Farmer's
-                Almanac, and we're the weather forecast.</p>
+                <p>This is an HF propagation planning tool, similar to the
+                <a href="https://soundbytes.asia/proppy/radcom">Radcom Predictions]</a> found on Proppy (which are in
+                turn based on the charts found in the back of RSGB's RadCom magazine). While other tools, like VOACAP
+                and Proppy, are based on sunspot-number curves and tables of "monthly average" ionospheric conditions,
+                this planner uses a 24-hour prediction based on the prop.kc2g.com realtime model. In other words,
+                they're the Farmer's Almanac, and we're the weather forecast.</p>
                 <p>Enter your location and click the button, and you will see charts presented for a variety of
                 locations around the globe. Each chart has a column for each hour of the day, and a row for each amateur
                 band. The cell at that row and column indicates the predicted probability of communication being
