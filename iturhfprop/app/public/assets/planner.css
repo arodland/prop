@@ -36,15 +36,17 @@ table.planner_result {
     margin-right: auto;
 }
 
-
-
 table.planner_result {
-  font-size: calc(17vw / 10);
+  font-size: calc(22vw / 10);
+}
+
+.card {
+    --bs-card-spacer-x: 0.5rem;
 }
 
 @media (min-width: 400px) {
     table.planner_result {
-      font-size: calc(19vw / 10);
+      font-size: calc(23vw / 10);
     }
 }
 
@@ -62,26 +64,29 @@ table.planner_result {
 
 @media (min-width: 992px) {
     table.planner_result {
-      font-size: 62%;
+      font-size: 78%;
+    }
+}
+
+@media (min-width: 1080px) {
+    table.planner_result {
+      font-size: 85%;
     }
 }
 
 @media (min-width: 1200px) {
     table.planner_result {
-      font-size: 75%;
+      font-size: 90%;
     }
 }
 
-@media (min-width: 1400px) {
-    table.planner_result {
-      font-size: 55%;
-    }
+.result-card h4 {
+    font-size: 1.25rem;
 }
-
 
 .result-card .card-body {
-    min-width: 30em;
-    min-height: 15em;
+    min-width: 5rem;
+    min-height: 5rem;
 }
 
 .loader {

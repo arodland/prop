@@ -125,7 +125,7 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
 
 %= include 'header'
 
-<div class="container">
+<div class="container-xxl">
     <h2>HF Propagation Planner</h2>
 
     <div class="card mb-4">
@@ -381,10 +381,10 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
             <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR2: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
         </div>
 
-        <div class="row d-flex">
+        <div class="row row-cols-1 row-cols-lg-2 gx-2 gx-lg-3 gx-xl-4 gx-xxl-5 d-flex">
             <template x-for="result in results">
-                <div class="col-xxl-4 col-lg-6 col-md-12 mb-3">
-                    <div class="card" :class="result.loading && 'loading'">
+                <div class="col mb-3">
+                    <div class="card result-card" :class="result.loading && 'loading'">
                         <div class="card-header"><h4 x-text="result.name"></div>
                         <div class="card-body">
                             <div class="overlay-wrapper">
