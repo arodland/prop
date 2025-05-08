@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap');
+
 .bcr-0 { background-color: #ffffff !important }
 .bcr-1 { background-color: #0b599b !important }
 .bcr-2 { background-color: #0a7fb4 !important }
@@ -21,7 +23,7 @@
 .noise-9 { background-color: #808080 !important }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-family: "Open Sans", Roboto, sans-serif;
 }
 
 table { border-collapse: separate; border-spacing: 1px }
@@ -64,7 +66,7 @@ table.planner_result {
 
 @media (min-width: 992px) {
     table.planner_result {
-      font-size: 78%;
+      font-size: 75%;
     }
 }
 
