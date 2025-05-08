@@ -143,10 +143,14 @@ nav span.heading {
 }
 
 @media screen and (max-width: 800px) {
+  header {
+    background-color: white;
+    padding: 10px;
+  }
+
   #nav-label {
     width: 30px;
     height: 30px;
-    margin: 10px 0 10px 2px;
     display: block;
     border: none;
     background: linear-gradient(
@@ -157,12 +161,12 @@ nav span.heading {
       white 60%, white 80%,
       black 80%, black 100%
     );
+    z-index: 10003;
   }
 
   #nav-closer {
     width: 30px;
     height: 30px;
-    margin: 10px 0 10px 10px;
     display: block;
     border: none;
     background: linear-gradient(
@@ -183,6 +187,9 @@ nav span.heading {
     width: 200px;
     height: 100%;
     transition: 0.3s;
+    background-color: #888;
+    padding: 10px;
+    z-index: 10004;
   }
 
   #nav-input:checked + #nav-label nav {
