@@ -125,7 +125,7 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
 
 %= include 'header'
 
-<div class="container">
+<div class="container-xxl">
     <h2>HF Propagation Planner</h2>
 
     <div class="card mb-4">
@@ -383,8 +383,8 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
 
         <div class="row d-flex">
             <template x-for="result in results">
-                <div class="col-xxl-4 col-lg-6 col-md-12 mb-3">
-                    <div class="card" :class="result.loading && 'loading'">
+                <div class="col mb-3">
+                    <div class="card result-card" :class="result.loading && 'loading'">
                         <div class="card-header"><h4 x-text="result.name"></div>
                         <div class="card-body">
                             <div class="overlay-wrapper">
