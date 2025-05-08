@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
 const modes = [
@@ -81,7 +82,25 @@ const antenna_heights = [
 document.addEventListener('alpine:init', () => {
     Alpine.store('targets', <%== Mojo::JSON::encode_json($targets) %>);
 });
-async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset, start_hour, rxnoise, results, bw, snrr, custom_rx_enable, custom_rx_loc}) {
+
+function elementInViewport(el) {
+    var rect = el.getBoundingClientRect();
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    var w = window.innerWidth || document.documentElement.clientWidth
+    return (
+        (
+            ( rect.top >= 0 && rect.top <= h ) ||
+            ( rect.bottom >= 0 && rect.bottom <= h ) ||
+            ( rect.top < 0 && rect.bottom > h )
+        ) && (
+            ( rect.left >= 0 && rect.left <= w ) ||
+            ( rect.right >= 0 && rect.right <= w ) ||
+            ( rect.left < 0 && rect.right > w)
+        )
+    );
+}
+
+async function populateResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset, start_hour, rxnoise, results, bw, snrr, custom_rx_enable, custom_rx_loc}) {
     tgts = [...Alpine.store('targets')];
     if (custom_rx_enable) {
         tgts.unshift([ 'Custom', custom_rx_loc ]);
@@ -103,8 +122,9 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
                 name: target[0],
             };
         }
-        results[i].loading = true;
-        let params = new URLSearchParams({
+        results[i].needs_load = true;
+        results[i].loading = false;
+        results[i].params = new URLSearchParams({
             txpow, txloc, txant, txgos,
             rxnoise, rxant, rxgos,
             bw, snrr,
@@ -112,11 +132,22 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
             tz_offset, start_hour,
             run_id: latest_run_id,
         });
-        fetch(`planner_table?${params}`).then((res) => {
-            results[i].content = res.text();
-            results[i].loading = false;
-        });
     }
+}
+
+async function loadResult(result) {
+    if (result.loading || !result.needs_load) {
+        return;
+    }
+    result.needs_load = false;
+    result.loading = true;
+    fetch(`planner_table?${result.params}`).then((res) => {
+        result.content = res.text();
+        result.loading = false;
+    }, (err) => {
+        result.content = "Error"
+        result.loading = false;
+    });
 }
     </script>
 </head>
@@ -195,7 +226,7 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
                 rxant = rxant_type;
                 if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
             "
-            @submit.prevent="await loadResults($data)"
+            @submit.prevent="await populateResults($data)"
         >
 
             <div class="card card-form mb-3">
@@ -381,9 +412,10 @@ async function loadResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset,
             <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR2: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
         </div>
 
-        <div class="row row-cols-1 row-cols-lg-2 gx-2 gx-lg-3 gx-xl-4 gx-xxl-5 d-flex">
+        <div class="row row-cols-1 row-cols-lg-2 gx-2 gx-lg-3 gx-xl-4 gx-xxl-5 d-flex" id="results-row">
             <template x-for="result in results">
-                <div class="col mb-3">
+                <div class="col mb-3" x-intersect="await loadResult(result)"
+                    x-effect="if (result.needs_load && elementInViewport($el)) { loadResult(result) }">
                     <div class="card result-card" :class="result.loading && 'loading'">
                         <div class="card-header"><h4 x-text="result.name"></div>
                         <div class="card-body">
