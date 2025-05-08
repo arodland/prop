@@ -21,7 +21,7 @@
 .noise-9 { background-color: #808080 !important }
 
 body {
-    font-family: sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
 }
 
 table { border-collapse: separate; border-spacing: 1px }
@@ -35,6 +35,49 @@ table.planner_result {
     margin-left: auto;
     margin-right: auto;
 }
+
+
+
+table.planner_result {
+  font-size: calc(17vw / 10);
+}
+
+@media (min-width: 400px) {
+    table.planner_result {
+      font-size: calc(19vw / 10);
+    }
+}
+
+@media (min-width: 576px) {
+    table.planner_result {
+      font-size: 60%;
+    }
+}
+
+@media (min-width: 768px) {
+    table.planner_result {
+      font-size: 70%;
+    }
+}
+
+@media (min-width: 992px) {
+    table.planner_result {
+      font-size: 62%;
+    }
+}
+
+@media (min-width: 1200px) {
+    table.planner_result {
+      font-size: 75%;
+    }
+}
+
+@media (min-width: 1400px) {
+    table.planner_result {
+      font-size: 55%;
+    }
+}
+
 
 .result-card .card-body {
     min-width: 30em;
@@ -74,7 +117,7 @@ table.planner_result {
     display: block;
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 992px) {
     .smaller {
         font-size: 80%;
     }
@@ -142,7 +185,7 @@ nav span.heading {
   z-index: 10002;
 }
 
-@media screen and (max-width: 800px) {
+@media screen and (max-width: 768px) {
   header {
     background-color: white;
     padding: 10px;
@@ -215,4 +258,3 @@ nav span.heading {
     padding-right: 0;
   }
 }
-
