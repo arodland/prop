@@ -411,7 +411,9 @@ async function loadResult(result) {
             </div> <!-- tx/rx row -->
 
             <div class="row mb-4 px-3">
-                <button class="btn btn-primary" type="submit">Run Prediction</button>
+                <div class="d-grid col-sm-8 col-md-6 col-lg-4 mx-auto">
+                    <button class="btn btn-primary" type="submit">Run Prediction</button>
+                </div>
             </div>
 
         </form>
