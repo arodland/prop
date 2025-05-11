@@ -149,6 +149,39 @@ async function loadResult(result) {
         result.loading = false;
     });
 }
+
+function getGridSquare() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject('Geolocation is not supported by this browser.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition((position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            // Field calculation (A-R)
+            const lon_field = String.fromCharCode(65 + Math.floor((lon + 180) / 20));
+            const lat_field = String.fromCharCode(65 + Math.floor((lat + 90) / 10));
+
+            // Square calculation (0-9)
+            const lon_square = Math.floor(((lon + 180) % 20) / 2).toString();
+            const lat_square = Math.floor(((lat + 90) % 10) / 1).toString();
+
+            // Subsquare calculation (a-x)
+            const lon_subsquare = String.fromCharCode(97 + Math.floor(((lon + 180) % 2) * 12));
+            const lat_subsquare = String.fromCharCode(97 + Math.floor(((lat + 90) % 1) * 24));
+
+            // Combine all parts to form the 6-character grid square
+            const grid_square = lon_field + lat_field + lon_square + lat_square + lon_subsquare + lat_subsquare;
+
+            resolve(grid_square);
+        }, (error) => {
+            reject(error.message);
+        });
+    });
+}
+
     </script>
 </head>
 
@@ -318,8 +351,11 @@ async function loadResult(result) {
                         <div class="card-body">
                             <div class="row mb-3">
                                 <label class="col-md-4 col-form-label text-md-end" for="txloc">Locator</label>
-                                <div class="col-md-8">
+                                <div class="col-md-4">
                                     <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator" autofocus>
+                                </div>
+                                <div class="col-md-4 col-sm-4">
+                                    <button class="btn btn-primary" @click.prevent="txloc = await getGridSquare()">Get from Browser</button>
                                 </div>
                             </div>
                             <div class="row mb-3">
