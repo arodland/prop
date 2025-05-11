@@ -229,75 +229,87 @@ async function loadResult(result) {
             @submit.prevent="await populateResults($data)"
         >
 
-            <div class="card card-form mb-3">
-                <div class="card-header"><h4 class="card-title">Global</h4></div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <label class="col-md-2 col-form-label text-md-end" for="txpow">Power (W)</label>
-                        <div class="col-md-4">
-                            <input type="text" inputmode="numeric" class="form-control"  name="txpow" id="txpow" value="100" x-model.lazy.number="txpow">
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="card card-form mb-3">
+                    <div class="card-header"><h4 class="card-title">Global</h4></div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="txpow">Power (W)</label>
+                            <div class="col-md-8">
+                                <input type="text" inputmode="numeric" class="form-control"  name="txpow" id="txpow" value="100" x-model.lazy.number="txpow">
+                            </div>
                         </div>
-
-                        <label class="col-md-2 col-form-label text-md-end" for="traffic">Traffic</label>
-                        <div class="col-md-4">
-                            <select class="form-select" id="traffic" name="traffic" x-model.number="traffic">
-                                <option value="-1">User Defined</option>
-                                <template x-for="(mode, modeidx) in modes">
-                                    <option :value="modeidx" x-text="`${mode.name} (BW=${mode.bw}Hz / SNR=${mode.snr}dB)`" :selected="modeidx == traffic && 'selected'">
-                                </template>
-                            </select>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="rxnoise">Man Made Noise</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
+                                    <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
+                                    <option value="CITY">City (-140 dBW/Hz @ 3 MHz)</option>
+                                    <option value="RESIDENTIAL">Residential (-145 dBW/Hz @ 3 MHz)</option>
+                                    <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
+                                    <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
+                                    <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="tz_offset">Timezone Offset</label>
+                            <div class="col-md-4">
+                                <input type="number" class="form-control" min="-12" max="14" name="tz_offset" id="tz_offset" x-model="tz_offset">
+                            </div>
+                            <div class="col-md-4 col-sm-4">
+                                <button class="btn btn-primary" @click.prevent="tz_offset = Math.floor((new Date()).getTimezoneOffset() / -60)">Get from Browser</button>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="start_hour">Starting Hour</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="start_hour" name="start_hour" x-model="start_hour">
+                                    <option value="ZERO">00Z</option>
+                                    <option value="ZERO_LOCAL">00 Local</option>
+                                    <option value="CURRENT">Current</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
-                    <div class="row mb-3">
-                        <label class="col-md-2 col-form-label text-md-end" for="rxnoise">Man Made Noise</label>
-                        <div class="col-md-4">
-                            <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
-                                <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
-                                <option value="CITY">City (-140 dBW/Hz @ 3 MHz)</option>
-                                <option value="RESIDENTIAL">Residential (-145 dBW/Hz @ 3 MHz)</option>
-                                <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
-                                <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
-                                <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
-                            </select>
+                </div> <!-- global card -->
+            </div>
+            <div class="col-md-6">
+                <div class="card card-form mb-3">
+                    <div class="card-header"><h4 class="card-title">Traffic</div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="traffic">Mode</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="traffic" name="traffic" x-model.number="traffic">
+                                    <option value="-1">User Defined</option>
+                                    <template x-for="(mode, modeidx) in modes">
+                                        <option :value="modeidx" x-text="`${mode.name} (BW=${mode.bw}Hz / SNR=${mode.snr}dB)`" :selected="modeidx == traffic && 'selected'">
+                                    </template>
+                                </select>
+                            </div>
                         </div>
                         <template x-if="traffic == -1" x-collapse>
-                            <label class="col-md-2 col-form-label text-md-end" for="bw">Bandwidth (Hz)</label>
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-form-label text-md-end" for="bw">Bandwidth (Hz)</label>
+                                <div class="col-md-8">
+                                    <input type="text" class="form-control" inputmode="numeric" name="bw" id="bw" x-model="bw">
+                                </div>
+                            </div>
                         </template>
                         <template x-if="traffic == -1" x-collapse>
-                            <div class="col-md-4">
-                                <input type="text" class="form-control" inputmode="numeric" name="bw" id="bw" x-model="bw">
+                            <div class="row mb-3">
+                                <label class="col-md-4 text-md-end" for="snrr">SNR (dB)</label>
+                                <div class="col-md-8">
+                                    <input type="text" class="form-control" inputmode="numeric" name="snrr" id="snrr" x-model="snrr">
+                                </div>
                             </div>
                         </template>
                     </div>
-                    <div class="row mb-3">
-                        <label class="col-md-2 col-form-label text-md-end" for="tz_offset">Timezone Offset</label>
-                        <div class="col-md-2">
-                            <input type="number" class="form-control" min="-12" max="14" name="tz_offset" id="tz_offset" x-model="tz_offset">
-                        </div>
-                        <div class="col-md-2 col-sm-2">
-                            <button class="btn btn-primary" @click.prevent="tz_offset = Math.floor((new Date()).getTimezoneOffset() / -60)">Get from Browser</button>
-                        </div>
-                        <template x-if="traffic == -1" x-collapse>
-                            <label class="col-md-2 text-md-end" for="snrr">SNR (dB)</label>
-                        </template>
-                        <template x-if="traffic == -1" x-collapse>
-                            <div class="col-md-4">
-                                <input type="text" class="form-control" inputmode="numeric" name="snrr" id="snrr" x-model="snrr">
-                            </div>
-                        </template>
-                    </div>
-                    <div class="row mb-3">
-                        <label class="col-md-2 col-form-label text-md-end" for="start_hour">Starting Hour</label>
-                        <div class="col-md-4">
-                            <select class="form-select" id="start_hour" name="start_hour" x-model="start_hour">
-                                <option value="ZERO">00Z</option>
-                                <option value="ZERO_LOCAL">00 Local</option>
-                                <option value="CURRENT">Current</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div> <!-- global card -->
+                </div> <!-- traffic card -->
+            </div>
+        </div> <!-- global / traffic row -->
 
             <div class="row mb-3">
                 <div class="col-md-6">
