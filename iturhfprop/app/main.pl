@@ -27,7 +27,7 @@ my @TARGETS = (
     [ 'OA Lima', '-12.05, -77.04' ],
     [ 'LU Buenos Aires', '-34.63, -58.38' ],
     [ 'VE Quebec', '46.82, -71.21' ],
-    [ 'PY Rio de Janiero', '-22.91, -43.17' ],
+    [ 'PY Rio de Janeiro', '-22.91, -43.17' ],
     [ 'EA8 Canary Isles', '28.29, -16.63' ],
     [ 'F Paris', '48.86, 2.35' ],
     [ 'LA Trondheim', '63.34, 10.40' ],
