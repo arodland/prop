@@ -111,8 +111,19 @@ async function populateResults() {
         results_by_name[result.name] = result;
     }
 
-    let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json').then(res => res.json()).then(d => d.run_id);
+    let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json')
+        .then(res => res.json())
+        .then(d => d.run_id)
+        .catch(err => {
+            this.global_error = "Error fetching latest run, GIRO may be down. Please try again later.";
+            console.error(err);
+        });
+
     this.results.length = 0;
+
+    if (!latest_run_id) {
+        return;
+    }
 
     for (const [i, target] of tgts.entries()) {
         if (results_by_name[target[0]]) {
@@ -226,7 +237,7 @@ function getGridSquare() {
         </div> <!-- helptext -->
     </div> <!-- help card -->
 
-    <div x-data="{ results: [] }">
+    <div x-data="{ results: [], global_error: null }">
         <form
             method="post"
             x-data="{
@@ -454,6 +465,12 @@ function getGridSquare() {
             </div>
 
         </form>
+
+        <template x-if="global_error">
+            <div class="alert alert-danger" role="alert">
+                <strong>Error:</strong> <span x-text="global_error"></span>
+            </div>
+        </template>
 
         <div class="row d-block d-md-none" id="bcr-table-normal">
             <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR1: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>
