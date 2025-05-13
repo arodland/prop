@@ -100,36 +100,36 @@ function elementInViewport(el) {
     );
 }
 
-async function populateResults({txpow, txloc, txant, txgos, rxant, rxgos, tz_offset, start_hour, rxnoise, results, bw, snrr, custom_rx_enable, custom_rx_loc}) {
+async function populateResults() {
     tgts = [...Alpine.store('targets')];
-    if (custom_rx_enable) {
-        tgts.unshift([ 'Custom', custom_rx_loc ]);
+    if (this.custom_rx_enable) {
+        tgts.unshift([ 'Custom', this.custom_rx_loc ]);
     }
 
     let results_by_name = {};
-    for (const result of results) {
+    for (const result of this.results) {
         results_by_name[result.name] = result;
     }
 
     let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json').then(res => res.json()).then(d => d.run_id);
+    this.results.length = 0;
 
-    results.length = 0;
     for (const [i, target] of tgts.entries()) {
         if (results_by_name[target[0]]) {
-            results[i] = results_by_name[target[0]];
+            this.results[i] = results_by_name[target[0]];
         } else {
-            results[i] = {
+            this.results[i] = {
                 name: target[0],
             };
         }
-        results[i].needs_load = true;
-        results[i].loading = false;
-        results[i].params = new URLSearchParams({
-            txpow, txloc, txant, txgos,
-            rxnoise, rxant, rxgos,
-            bw, snrr,
+        this.results[i].needs_load = true;
+        this.results[i].loading = false;
+        this.results[i].params = new URLSearchParams({
+            txpow: this.txpow, txloc: this.txloc, txant: this.txant, txgos: this.txgos,
+            rxnoise: this.rxnoise, rxant: this.rxant, rxgos: this.rxgos,
+            bw: this.bw, snrr: this.snrr,
             rxloc: target[1],
-            tz_offset, start_hour,
+            tz_offset: this.tz_offset, start_hour: this.start_hour,
             run_id: latest_run_id,
         });
     }
@@ -248,6 +248,7 @@ function getGridSquare() {
                 traffic: $persist(3),
                 bw: 3000,
                 snrr: 6,
+                populateResults: populateResults,
             }"
             x-effect="
                 if (traffic != -1) {
@@ -259,7 +260,7 @@ function getGridSquare() {
                 rxant = rxant_type;
                 if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
             "
-            @submit.prevent="await populateResults($data)"
+            @submit.prevent="await populateResults()"
         >
 
         <div class="row mb-3">
