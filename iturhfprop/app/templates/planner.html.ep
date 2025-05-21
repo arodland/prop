@@ -111,6 +111,8 @@ async function populateResults() {
         results_by_name[result.name] = result;
     }
 
+    this.global_error = null;
+
     let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json')
         .then(res => res.json())
         .then(d => d.run_id)
