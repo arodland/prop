@@ -37,7 +37,7 @@ if ($start_hour eq 'CURRENT') {
         % my $col = $row->[$hour];
         <td class="<%= $col->{color} %><%= $col->{pr} > $col->{noise} && ' noise-ok' %>" title="<%=
             sprintf("BCR: %.1f%% POP: %.1f%% PR: %.1fdBm",
-                    $col->{bcr}, $col->{pop}, $col->{pr}) %>">
+                    $col->{bcr}, $col->{pop}, 30+$col->{pr}) %>">
         % if(!$col->{blank}) {
             <span><%= $col->{smeter} %></span>
         % }
