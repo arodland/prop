@@ -6,13 +6,14 @@ maidenhead==1.5.0
 MarkupSafe==2.1.1
 marshmallow==3.19.0
 marshmallow-sqlalchemy==0.29.0
-pandas[performance]==2.1.1
+numpy==2.2.6
+pandas[performance]==2.2.3
 psycopg[binary]==3.1.12
-pyarrow==12.0.0
+pyarrow==20.0.0
 pymemcache==3.4.0
 pyparsing==2.3.0
 python-dateutil==2.8.2
 pytz==2022.7
 six==1.16.0
 SQLAlchemy==2.0.22
-uwsgi==2.0.22
+uwsgi==2.0.29
