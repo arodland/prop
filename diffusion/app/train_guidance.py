@@ -10,10 +10,10 @@ if __name__ == "__main__":
     else:
         model = GuidanceModel()
 
-    data = IRIData("combined", train_batch=128)
+    data = IRIData("combined", train_batch=128, add_noise=0.2)
     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints", filename='guidance-' +
                                           '-{v_num}-{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
-    trainer = L.Trainer(max_epochs=250,
+    trainer = L.Trainer(max_epochs=350,
                         precision="bf16-mixed", callbacks=[checkpoint_callback],
                         logger=TensorBoardLogger("lightning_logs", name="guidance"))
     trainer.fit(model, data)

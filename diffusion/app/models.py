@@ -107,6 +107,11 @@ class DiffusionModel(L.LightningModule):
         tv.utils.save_image(image_grid, filename)
         print(f"Generated images saved to {filename}")
 
+def guidance_loss(prediction, target):
+    return F.mse_loss(prediction, target)
+    # weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0], device=prediction.device)
+    # return F.mse_loss(prediction * weight, target * weight)
+
 class GuidanceModel(L.LightningModule):
     def __init__(self):
         super().__init__()
@@ -153,21 +158,40 @@ class GuidanceModel(L.LightningModule):
         return [optimizer], [scheduler]
 
 class IRIData(L.LightningDataModule):
-    def __init__(self, metric="combined", train_batch=8, test_batch=8, val_batch=8):
+    def __init__(self, metric="combined", train_batch=8, test_batch=8, val_batch=8, add_noise=0.0):
         super().__init__()
         self.metric = metric
         self.train_batch = train_batch
         self.test_batch = test_batch
         self.val_batch = val_batch
-        self.augment = transforms.Compose([
+        self.augment_test = transforms.Compose([
             transforms.ToImage(),
             transforms.RGB(),
-            transforms.Pad(padding=(0, 0, 7, 3), fill=0, padding_mode='constant'), # from 361x181 to 368x184
             transforms.ToDtype(torch.float32, scale=True),
+            transforms.Pad(padding=(0, 0, 7, 3), fill=0, padding_mode='constant'), # from 361x181 to 368x184
         ])
+        if add_noise > 0.0:
+            self.augment_train = transforms.Compose([
+                transforms.ToImage(),
+                transforms.RGB(),
+                transforms.ToDtype(torch.float32, scale=True),
+                transforms.RandomChoice([
+                    transforms.Pad(0), # no-op
+                    transforms.GaussianNoise(sigma=0.25 * add_noise),
+                    transforms.GaussianNoise(sigma=0.5 * add_noise),
+                    transforms.GaussianNoise(sigma=0.75 * add_noise),
+                    transforms.GaussianNoise(sigma=add_noise),
+                ]),
+                transforms.Pad(padding=(0, 0, 7, 3), fill=0, padding_mode='constant'), # from 361x181 to 368x184
+            ])
+        else:
+            # Don't waste CPU adding a gaussian blur of 0.
+            self.augment_train = self.augment_test
 
-    def dataset_row(self, sample):
-        images = [ self.augment(image) for image in sample["image"]]
+    def dataset_row(self, sample, augment, which):
+        images = None
+        images = [ augment(image) for image in sample["image"]]
+
         dts = [ datetime.datetime.fromisoformat(dt) for dt in sample["datetime"] ]
         toys = [ (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) /
                  datetime.timedelta(days=365) for dt in dts ]
@@ -185,12 +209,15 @@ class IRIData(L.LightningDataModule):
 
     def setup(self, stage=None):
         dataset = load_dataset("arodland/IRI-iono-maps", self.metric)["train"]
-        dataset.set_transform(self.dataset_row)
         self.train_dataset, test_dataset = dataset.train_test_split(test_size=0.2, seed=42).values()
         self.test_dataset, self.val_dataset = test_dataset.train_test_split(test_size=0.5, seed=42).values()
 
+        self.train_dataset.set_transform(lambda sample: self.dataset_row(sample, self.augment_train, "train"))
+        self.test_dataset.set_transform(lambda sample: self.dataset_row(sample, self.augment_test, "test"))
+        self.val_dataset.set_transform(lambda sample: self.dataset_row(sample, self.augment_test, "val"))
+
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch, shuffle=True, num_workers=4)
+        return torch.utils.data.DataLoader(self.train_dataset, batch_size=self.train_batch, shuffle=True, num_workers=16)
 
     def test_dataloader(self):
         return torch.utils.data.DataLoader(self.test_dataset, batch_size=self.test_batch, shuffle=False, num_workers=4)
