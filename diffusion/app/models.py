@@ -124,13 +124,17 @@ class GuidanceModel(L.LightningModule):
         self.model = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.MaxPool2d(3),
             nn.ReLU(),
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.MaxPool2d(3),
             nn.Flatten(),
-            nn.Linear(128 * 46 * 92, 5),
+            nn.Linear(128 * 40 * 20, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 25),
+            nn.Tanh(),
+            nn.Linear(25, 5),  # Output layer for 5 targets
         )
         self.model = torch.compile(self.model, mode="max-autotune")
 
