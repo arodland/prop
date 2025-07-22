@@ -85,8 +85,14 @@ class DiffusionModel(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
+        optimizer = torch.optim.NAdam(self.parameters(), lr=1e-4, decoupled_weight_decay=True)
+        # gamma=0.93 will lose about one order of magnitude in 30 epochs
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.93)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=10,
+            eta_min=1e-5,
+        )
         return [optimizer], [scheduler]
 
     def on_save_checkpoint(self, checkpoint):
@@ -153,8 +159,13 @@ class GuidanceModel(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
+        optimizer = torch.optim.NAdam(self.parameters(), lr=5e-5, decoupled_weight_decay=True)
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.99)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=50,
+            eta_min=1e-5,
+        )
         return [optimizer], [scheduler]
 
 class IRIData(L.LightningDataModule):
