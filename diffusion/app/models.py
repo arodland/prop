@@ -127,7 +127,7 @@ class GuidanceModel(L.LightningModule):
         images = batch["images"]
         pred = self.model(images)
         target = batch["target"]
-        loss = F.mse_loss(pred, target)
+        loss = guidance_loss(pred, target)
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -135,7 +135,7 @@ class GuidanceModel(L.LightningModule):
         images = batch["images"]
         pred = self.model(images)
         target = batch["target"]
-        loss = F.mse_loss(pred, target)
+        loss = guidance_loss(pred, target)
         self.log("test_loss", loss, prog_bar=True)
         return loss
 
@@ -143,7 +143,7 @@ class GuidanceModel(L.LightningModule):
         images = batch["images"]
         pred = self.model(images)
         target = batch["target"]
-        loss = F.mse_loss(pred, target)
+        loss = guidance_loss(pred, target)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
@@ -177,7 +177,7 @@ class IRIData(L.LightningDataModule):
         cos_toy = torch.cos(torch.tensor(toys) * 2 * math.pi)
         sin_tod = torch.sin(torch.tensor(tods) * 2 * math.pi)
         cos_tod = torch.cos(torch.tensor(tods) * 2 * math.pi)
-        targets = torch.stack([sin_toy, cos_toy, sin_tod, cos_tod, torch.tensor(sample["ssn"]) / 200.], dim=1)
+        targets = torch.stack([sin_toy, cos_toy, sin_tod, cos_tod, torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
         return {"images": images, "target": targets}
 
     def prepare_data(self):

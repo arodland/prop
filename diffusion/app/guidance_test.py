@@ -32,8 +32,8 @@ if __name__ == "__main__":
             pred_tod_str = (dt_base + datetime.timedelta(hours=pred_tod.item() * 24)).strftime("%H:%M")
             target_tod_str = (dt_base + datetime.timedelta(hours=target_tod.item() * 24)).strftime("%H:%M")
 
-            pred_ssn = pred[:, 4] * 200
-            target_ssn = target[:, 4] * 200
+            pred_ssn = pred[:, 4] * 100 + 100
+            target_ssn = target[:, 4] * 100 + 100
 
             print(f"Predicted: XXXX-{pred_toy_str} {pred_tod_str} SSN {pred_ssn.item():.2f}, "
                 f"Target: XXXX-{target_toy_str} {target_tod_str} SSN {target_ssn.item():.2f}, "
