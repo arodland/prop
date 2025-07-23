@@ -7,6 +7,7 @@ import torchvision as tv
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
+from diffusers.utils import numpy_to_pil
 import datetime
 
 torch.set_float32_matmul_precision("high")
@@ -53,6 +54,10 @@ class DiffusionModel(L.LightningModule):
             thresholding=True,
             rescale_betas_zero_snr=True,
         )
+        self.inference_scheduler = diffusers.schedulers.DDPMScheduler(
+            thresholding=True,
+            rescale_betas_zero_snr=True,
+        )
 
     def training_step(self, batch, batch_idx):
         images = batch["images"]
@@ -96,22 +101,22 @@ class DiffusionModel(L.LightningModule):
         return [optimizer], [scheduler]
 
     def on_save_checkpoint(self, checkpoint):
-        pipe = diffusers.DDPMPipeline(self.model, self.scheduler)
-        pipe = pipe.to(device=self.device)
-        with torch.inference_mode():
-            (pil_images, ) = pipe(
-                batch_size=9,
-                num_inference_steps=20,
-                output_type="pil",
-                return_dict=False
-            )
-        images = torch.stack([tv.transforms.functional.to_tensor(pil_image.crop((0, 0, 361, 181)))
-                              for pil_image in pil_images])
-        image_grid = tv.utils.make_grid(images, nrow=3)
+        with torch.no_grad():
+            image = torch.randn(9, 3, 184, 368, device=self.device)
+            self.inference_scheduler.set_timesteps(20, device=self.device)
+            for t in self.inference_scheduler.timesteps:
+                model_output = self.model(image, t).sample
+                image = self.inference_scheduler.step(model_output, t, image).prev_sample
 
-        filename = "out/checkpoint.png"
-        tv.utils.save_image(image_grid, filename)
-        print(f"Generated images saved to {filename}")
+            pil_images = numpy_to_pil(image.cpu().permute(0, 2, 3, 1).detach().numpy())
+
+            images = torch.stack([tv.transforms.functional.to_tensor(pil_image.crop((0, 0, 361, 181)))
+                                  for pil_image in pil_images])
+            image_grid = tv.utils.make_grid(images, nrow=3)
+
+            filename = "out/checkpoint.png"
+            tv.utils.save_image(image_grid, filename)
+            print(f"Generated images saved to {filename}")
 
 def guidance_loss(prediction, target):
     return F.mse_loss(prediction, target)
