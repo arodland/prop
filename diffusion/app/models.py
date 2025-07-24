@@ -29,7 +29,7 @@ class DiffusionModel(L.LightningModule):
         self.model = diffusers.models.UNet2DModel(
             sample_size=(184, 368),
             block_out_channels=(128, 128, 256, 256),
-            dropout=0.1,
+            # dropout=0.1,
             down_block_types=(
                 "DownBlock2D",       # a regular ResNet downsampling block
                 "DownBlock2D",
@@ -51,11 +51,11 @@ class DiffusionModel(L.LightningModule):
         #     rescale_betas_zero_snr=True,
         # )
         self.scheduler = diffusers.schedulers.DDPMScheduler(
-            thresholding=True,
+            thresholding=False,
             rescale_betas_zero_snr=True,
         )
         self.inference_scheduler = diffusers.schedulers.DDPMScheduler(
-            thresholding=True,
+            thresholding=False,
             rescale_betas_zero_snr=True,
         )
 
@@ -65,7 +65,7 @@ class DiffusionModel(L.LightningModule):
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        loss = F.mse_loss(residual, noise)
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -75,7 +75,7 @@ class DiffusionModel(L.LightningModule):
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        loss = F.mse_loss(residual, noise)
         self.log("test_loss", loss, prog_bar=True)
         return loss
 
@@ -85,7 +85,7 @@ class DiffusionModel(L.LightningModule):
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        loss = F.mse_loss(residual, noise)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
@@ -176,6 +176,22 @@ class GuidanceModel(L.LightningModule):
             eta_min=1e-5,
         )
         return [optimizer], [scheduler]
+
+# class GuidedModel(L.LightningModule):
+#     def __init__(self, diffusion_model, guidance_model):
+#         super().__init__()
+#         self.diffusion_model = diffusion_model
+#         self.guidance_model = guidance_model
+#
+#     def forward(self, batch):
+#         images = batch["images"]
+#         noise = torch.randn_like(images)
+#         steps = torch.randint(self.diffusion_model.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
+#         noisy_images = self.diffusion_model.scheduler.add_noise(images, noise, steps)
+#         residual = self.diffusion_model.model(noisy_images, steps).sample
+#         pred = self.guidance_model.model(images)
+#         return residual + pred
+#
 
 class IRIData(L.LightningDataModule):
     def __init__(self, metric="combined", train_batch=8, test_batch=8, val_batch=8, add_noise=0.0):

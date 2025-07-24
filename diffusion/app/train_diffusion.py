@@ -11,9 +11,11 @@ if __name__ == "__main__":
         model = DiffusionModel()
 
     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints", filename='diffusion-' +
-                                          '{v_num}-{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
+                                          '{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
     data = IRIData("combined", train_batch=8)
     trainer = L.Trainer(max_epochs=30,
+                        log_every_n_steps=10,
+                        # accumulate_grad_batches=4,
                         precision="bf16-mixed", callbacks=[checkpoint_callback],
                         logger=TensorBoardLogger("lightning_logs", name="diffusion"))
     trainer.fit(model, data)
