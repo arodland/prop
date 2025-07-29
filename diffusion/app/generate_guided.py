@@ -15,6 +15,7 @@ def main(
     num_timesteps: int = 20,
     num_samples: int = 9,
     seed: int = 0,
+    year: float = 2023.0,
     day: float = 123.0,
     hour: float = 12.0,
     ssn: float = 100.0,
@@ -28,10 +29,11 @@ def main(
     dm.eval()
     gm.eval()
 
-    scheduler = diffusers.schedulers.DDPMScheduler()
+    scheduler = diffusers.schedulers.DDIMScheduler(rescale_betas_zero_snr=True)
     scheduler.set_timesteps(num_timesteps, device=dm.device)
 
     target = torch.tensor([
+        (year - 2000. + day / 365.) / 50.,
         math.sin(day * 2 * math.pi / 365),
         math.cos(day * 2 * math.pi / 365),
         math.sin(hour * 2 * math.pi / 24),
@@ -51,13 +53,17 @@ def main(
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
 
-        guidance_out = gm.model(x0)
+        # tv.utils.save_image((x0[0, :, :, :] + 1.0) / 2.0, f"out/step_{i:03d}.png")
+
+        guidance_out = gm.model((x0 + 1.0) / 2.0)
         print(guidance_out)
         guidance_loss = F.mse_loss(guidance_out, target)
         print(guidance_loss)
-        guidance_grad = -torch.autograd.grad(guidance_loss * guidance_scale, x)[0]
-        x = x.detach() + guidance_grad
+        guidance_grad = -torch.autograd.grad(guidance_loss, x)[0]
+        x = x.detach() + guidance_grad * guidance_scale
         x = scheduler.step(noise_pred, t, x).prev_sample
+
+    x = (x + 1.0) / 2.0
 
     image_grid = tv.utils.make_grid(x, nrow=math.ceil(math.sqrt(num_samples)))
 
@@ -65,6 +71,8 @@ def main(
     tv.utils.save_image(image_grid, filename)
     print(f"Generated images saved to {filename}")
 
+    ensemble = torch.quantile(x, 0.5, dim=0)
+    tv.utils.save_image(ensemble, "out/ensemble.png")
 
 if __name__ == "__main__":
     jsonargparse.CLI(main)

@@ -21,22 +21,25 @@ if __name__ == "__main__":
             target = sample["target"].to(device=model.device)
             loss = F.mse_loss(pred, target)
 
-            pred_toy = torch.atan2(pred[:, 0], pred[:, 1]) / (2 * math.pi)
-            target_toy = torch.atan2(target[:, 0], target[:, 1]) / (2 * math.pi)
-            pred_tod = torch.atan2(pred[:, 2], pred[:, 3]) / (2 * math.pi)
-            target_tod = torch.atan2(target[:, 2], target[:, 3]) / (2 * math.pi)
+            pred_toy = torch.atan2(pred[:, 1], pred[:, 2]) / (2 * math.pi)
+            target_toy = torch.atan2(target[:, 1], target[:, 2]) / (2 * math.pi)
+            pred_tod = torch.atan2(pred[:, 3], pred[:, 4]) / (2 * math.pi)
+            target_tod = torch.atan2(target[:, 3], target[:, 4]) / (2 * math.pi)
+            pred_year = int(round((pred[:, 0] * 50. + 2000 - pred_toy).item()))
+            target_year = int(round((target[:, 0] * 50. + 2000 - target_toy).item()))
 
-            dt_base = datetime.datetime(year=2025, month=1, day=1)
-            pred_toy_str = (dt_base + datetime.timedelta(days=pred_toy.item() * 365)).strftime("%m-%d")
-            target_toy_str = (dt_base + datetime.timedelta(days=target_toy.item() * 365)).strftime("%m-%d")
-            pred_tod_str = (dt_base + datetime.timedelta(hours=pred_tod.item() * 24)).strftime("%H:%M")
-            target_tod_str = (dt_base + datetime.timedelta(hours=target_tod.item() * 24)).strftime("%H:%M")
+            pred_base = datetime.datetime(year=pred_year, month=1, day=1)
+            target_base = datetime.datetime(year=target_year, month=1, day=1)
+            pred_date_str = (pred_base + datetime.timedelta(days=pred_toy.item() * 365)).strftime("%Y-%m-%d")
+            target_date_str = (target_base + datetime.timedelta(days=target_toy.item() * 365)).strftime("%Y-%m-%d")
+            pred_tod_str = (pred_base + datetime.timedelta(hours=pred_tod.item() * 24)).strftime("%H:%M")
+            target_tod_str = (target_base + datetime.timedelta(hours=target_tod.item() * 24)).strftime("%H:%M")
 
             pred_ssn = pred[:, 4] * 100 + 100
             target_ssn = target[:, 4] * 100 + 100
 
-            print(f"Predicted: XXXX-{pred_toy_str} {pred_tod_str} SSN {pred_ssn.item():.2f}, "
-                f"Target: XXXX-{target_toy_str} {target_tod_str} SSN {target_ssn.item():.2f}, "
-                f"Loss: {loss.item():.4f}")
+            print(f"Predicted: {pred_date_str} {pred_tod_str} SSN {pred_ssn.item():.2f}, "
+                  f"Target: {target_date_str} {target_tod_str} SSN {target_ssn.item():.2f}, "
+                  f"Loss: {loss.item():.4f}")
             if i >= 10:
                 break

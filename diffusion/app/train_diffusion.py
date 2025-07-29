@@ -12,8 +12,8 @@ if __name__ == "__main__":
 
     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints", filename='diffusion-' +
                                           '{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
-    data = IRIData("combined", train_batch=8)
-    trainer = L.Trainer(max_epochs=30,
+    data = IRIData("combined", train_batch=8, add_noise=0.001)
+    trainer = L.Trainer(max_epochs=100,
                         log_every_n_steps=10,
                         # accumulate_grad_batches=4,
                         precision="bf16-mixed", callbacks=[checkpoint_callback],

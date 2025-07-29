@@ -52,51 +52,53 @@ class DiffusionModel(L.LightningModule):
         # )
         self.scheduler = diffusers.schedulers.DDPMScheduler(
             thresholding=False,
-            rescale_betas_zero_snr=True,
+            rescale_betas_zero_snr=False,
         )
         self.inference_scheduler = diffusers.schedulers.DDPMScheduler(
             thresholding=False,
-            rescale_betas_zero_snr=True,
+            rescale_betas_zero_snr=False,
         )
 
     def training_step(self, batch, batch_idx):
-        images = batch["images"]
+        images = batch["images"] * 2.0 - 1.0
         noise = torch.randn_like(images)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = F.mse_loss(residual, noise)
+        loss = modified_mse_loss(residual, noise)
         self.log("train_loss", loss, prog_bar=True)
+        self.log("lr", self.optimizers().param_groups[0]["lr"], prog_bar=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-        images = batch["images"]
+        images = batch["images"] * 2.0 - 1.0
         noise = torch.randn_like(images)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = F.mse_loss(residual, noise)
+        loss = modified_mse_loss(residual, noise)
         self.log("test_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        images = batch["images"]
+        images = batch["images"] * 2.0 - 1.0
         noise = torch.randn_like(images)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_images = self.scheduler.add_noise(images, noise, steps)
         residual = self.model(noisy_images, steps).sample
-        loss = F.mse_loss(residual, noise)
+        loss = modified_mse_loss(residual, noise)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.NAdam(self.parameters(), lr=1e-4, decoupled_weight_decay=True)
+        # optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
         # gamma=0.93 will lose about one order of magnitude in 30 epochs
         # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.93)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer,
             T_0=10,
-            eta_min=1e-5,
+            eta_min=1e-6,
         )
         return [optimizer], [scheduler]
 
@@ -107,6 +109,8 @@ class DiffusionModel(L.LightningModule):
             for t in self.inference_scheduler.timesteps:
                 model_output = self.model(image, t).sample
                 image = self.inference_scheduler.step(model_output, t, image).prev_sample
+
+            image = (image + 1.0) / 2.0  # Rescale to [0, 1]
 
             pil_images = numpy_to_pil(image.cpu().permute(0, 2, 3, 1).detach().numpy())
 
@@ -137,9 +141,9 @@ class GuidanceModel(L.LightningModule):
             nn.Flatten(),
             nn.Linear(128 * 40 * 20, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 25),
+            nn.Linear(1024, 36),
             nn.Tanh(),
-            nn.Linear(25, 5),  # Output layer for 5 targets
+            nn.Linear(36, 6)
         )
         self.model = torch.compile(self.model, mode="max-autotune")
 
@@ -229,15 +233,19 @@ class IRIData(L.LightningDataModule):
         images = [ augment(image) for image in sample["image"]]
 
         dts = [ datetime.datetime.fromisoformat(dt) for dt in sample["datetime"] ]
-        toys = [ (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) /
-                 datetime.timedelta(days=365) for dt in dts ]
-        tods = [ (dt - dt.replace(hour=0, minute=0, second=0, microsecond=0)) /
-                 datetime.timedelta(hours=24) for dt in dts ]
-        sin_toy = torch.sin(torch.tensor(toys) * 2 * math.pi)
-        cos_toy = torch.cos(torch.tensor(toys) * 2 * math.pi)
-        sin_tod = torch.sin(torch.tensor(tods) * 2 * math.pi)
-        cos_tod = torch.cos(torch.tensor(tods) * 2 * math.pi)
-        targets = torch.stack([sin_toy, cos_toy, sin_tod, cos_tod, torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
+        toys = torch.tensor([ (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) /
+                 datetime.timedelta(days=365) for dt in dts ])
+        tods = torch.tensor([ (dt - dt.replace(hour=0, minute=0, second=0, microsecond=0)) /
+                 datetime.timedelta(hours=24) for dt in dts ])
+        sin_toy = torch.sin(toys * 2 * math.pi)
+        cos_toy = torch.cos(toys * 2 * math.pi)
+        sin_tod = torch.sin(tods * 2 * math.pi)
+        cos_tod = torch.cos(tods * 2 * math.pi)
+        years = torch.tensor([ dt.year for dt in dts ], dtype=torch.float32)
+        # -1 to 1 is 1950-2050, so the training data covers -0.84 to +0.50
+        secular = (years - 2000.0) / 50.
+
+        targets = torch.stack([secular, sin_toy, cos_toy, sin_tod, cos_tod, torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
         return {"images": images, "target": targets}
 
     def prepare_data(self):
@@ -245,6 +253,7 @@ class IRIData(L.LightningDataModule):
 
     def setup(self, stage=None):
         dataset = load_dataset("arodland/IRI-iono-maps", self.metric)["train"]
+        # dataset = dataset.filter(lambda sample: sample["datetime"].startswith("2022-") or sample["datetime"].startswith("2023-") or sample["datetime"].startswith("2024-"))
         self.train_dataset, test_dataset = dataset.train_test_split(test_size=0.2, seed=42).values()
         self.test_dataset, self.val_dataset = test_dataset.train_test_split(test_size=0.5, seed=42).values()
 
