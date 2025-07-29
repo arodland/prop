@@ -1,0 +1,190 @@
+import math
+import torch
+import torchvision as tv
+import diffusers
+import jsonargparse
+from pathlib import Path
+from models import DiffusionModel, GuidanceModel
+from tqdm import tqdm
+import torch.nn.functional as F
+import contextlib
+import urllib.request
+import json
+import datetime
+import h5py
+import hdf5plugin
+import io
+
+lats, lons = torch.meshgrid(
+    torch.arange(0, 184, dtype=torch.float32),
+    torch.arange(0, 368, dtype=torch.float32),
+    indexing="ij"
+)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+lats = lats.to(device)
+lons = lons.to(device)
+
+def get_h5():
+    with urllib.request.urlopen("https://prop.kc2g.com/api/assimilated.h5") as res:
+        content = res.read()
+        bio = io.BytesIO(content)
+        h5 = h5py.File(bio, 'r')
+        return h5
+
+def dilations(lat, lon, dilate_by):
+    """Dilates the mask by a specified number of pixels."""
+    dilated_masks = []
+
+    for i in range(dilate_by + 1):
+        distance = torch.sqrt((lats - lat) ** 2 + (lons - lon) ** 2)
+        mask = (i + 0.5 - distance).clip(0.0, 1.0)
+        dilated_masks.append(mask)
+    return dilated_masks
+
+metrics = {
+    "fof2": { "min": 1.5, "max": 15.0, "ch": 0 },
+    "mufd": { "min": 5.0, "max": 45.0, "ch": 1 },
+    "hmf2": { "min": 150.0, "max": 450.0, "ch": 2 },
+}
+
+def main(
+    diffuser_checkpoint: Path = Path("diffuser_checkpoint.ckpt"),
+    guidance_checkpoint: Path = Path("guidance_checkpoint.ckpt"),
+    num_timesteps: int = 20,
+    num_samples: int = 9,
+    seed: int = 0,
+    guidance_scale: float = 15.0,
+    fit_scale: float = 15.0,
+    max_dilate: int = 10,
+):
+    """Generates images from a trained diffusion model."""
+
+    torch.manual_seed(seed)
+    dm = DiffusionModel.load_from_checkpoint(diffuser_checkpoint).to(device="cuda")
+    gm = GuidanceModel.load_from_checkpoint(guidance_checkpoint).to(device="cuda")
+    dm.eval()
+    gm.eval()
+
+    scheduler = diffusers.schedulers.DDPMScheduler(rescale_betas_zero_snr=True)
+    scheduler.set_timesteps(num_timesteps, device=dm.device)
+
+    with urllib.request.urlopen("https://prop.kc2g.com/renders/current/mufd-normal-now_station.json") as response:
+        station_data = json.loads(response.read().decode())
+
+    with urllib.request.urlopen("https://prop.kc2g.com/api/latest_run.json") as response:
+        latest_run = json.loads(response.read().decode())
+
+    ts = latest_run["maps"][0]["ts"]
+    ssn = latest_run["essn"]
+
+    reference = torch.zeros((3, 184, 368), device=dm.device)
+
+    assim_h5 = get_h5()
+    for metric in metrics:
+        ch = metrics[metric]["ch"]
+        min_val = metrics[metric]["min"]
+        max_val = metrics[metric]["max"]
+        data = assim_h5[f"/maps/{metric}"][:]
+        data = torch.tensor(data, device=dm.device)
+        data = (data - min_val) / (max_val - min_val)
+        reference[ch, :181, :361] = data
+
+    tv.utils.save_image(reference.flip((1,)), "out/reference.png")
+
+    out_targets = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
+    contributorss = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
+    dilated_masks = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
+
+    for station in station_data:
+        lat = int(round(station["station.latitude"])) + 90
+        lon = int(round(station["station.longitude"])) + 180
+        if not (0 <= lat < 181 and 0 <= lon < 361):
+            continue
+
+        pos_masks = dilations(lat, lon, max_dilate)
+
+        for metric in metrics:
+            if station[metric] is None:
+                continue
+            ch = metrics[metric]["ch"]
+            min_val = metrics[metric]["min"]
+            max_val = metrics[metric]["max"]
+            normalized_value = (station[metric] - min_val) / (max_val - min_val)
+            for i, m in enumerate(pos_masks):
+                out_targets[i][ch, :, :] += m * normalized_value
+                dilated_masks[i][ch, :, :] += m
+
+    for i in range(max_dilate + 1):
+        out_targets[i] /= torch.clip(dilated_masks[i], 1e-6, None)
+        out_targets[i] = torch.clip(out_targets[i], 0.0, 1.0)
+        dilated_masks[i] = torch.clip(dilated_masks[i], 0.0, 1.0)
+        tv.utils.save_image(out_targets[i].flip((1,)), f"out/target_{i:02d}.png")
+        tv.utils.save_image(dilated_masks[i].flip((1,)), f"out/mask_dilated_{i:02d}.png")
+
+    out_targets = [ t.expand(num_samples, -1, -1, -1) for t in out_targets ]
+    dilated_masks = [m.expand(num_samples, -1, -1, -1) for m in dilated_masks]
+
+    dt = datetime.datetime.fromtimestamp(ts)
+    year = dt.year
+    toy = (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) / datetime.timedelta(days=365)
+    tod = (dt - dt.replace(hour=0, minute=0, second=0, microsecond=0)) / datetime.timedelta(hours=24)
+
+    guidance_target = torch.tensor([
+        (year - 2000. + toy) / 50.,
+        math.sin(toy * 2 * math.pi),
+        math.cos(toy * 2 * math.pi),
+        math.sin(tod * 2 * math.pi),
+        math.cos(tod * 2 * math.pi),
+        ssn / 100.0 - 1.0,
+    ])
+    guidance_target = guidance_target.to(dm.device).expand(num_samples, -1)
+
+    x = torch.randn((num_samples, 3, 184, 368), device=dm.device)
+    # x = x * (1 - mask) + ((out_target * 2.) - 1) * mask
+
+    for i, t in tqdm(enumerate(scheduler.timesteps)):
+        print("")
+        torch.compiler.cudagraph_mark_step_begin()
+        model_input = scheduler.scale_model_input(x, t)
+        with torch.no_grad():
+            noise_pred = dm.model(model_input, t).sample
+        x = x.detach().requires_grad_()
+        x0 = scheduler.step(noise_pred, t, x).pred_original_sample
+        x0_shifted = (x0 + 1.0) / 2.0
+
+        tv.utils.save_image(x0_shifted[0, :, :, :].flip((1,)), f"out/step_{i:03d}.png")
+
+        dilate_mask_by = int(round(((num_timesteps*0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
+        print(f"Dilate mask by {dilate_mask_by} pixels")
+        mask_dilated = dilated_masks[dilate_mask_by]
+        out_target = out_targets[dilate_mask_by]
+
+        guidance_out = gm.model(x0_shifted)
+        guidance_loss = F.mse_loss(guidance_out, guidance_target)
+        fit_loss = (x0_shifted - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
+        print("GL:", guidance_loss, "FL:", fit_loss, "SSN:", (guidance_out[:, 5] + 1.0) * 100 )
+        loss = guidance_loss * guidance_scale
+        if i < 0.95 * num_timesteps:
+            loss += fit_loss * fit_scale
+
+        grad = -torch.autograd.grad(loss, x)[0]
+
+        x = x.detach() + grad
+        x = scheduler.step(noise_pred, t, x).prev_sample
+
+    x = (x + 1.0) / 2.0
+
+    image_grid = tv.utils.make_grid(x, nrow=math.ceil(math.sqrt(num_samples)))
+
+    filename = "out/generated.png"
+    tv.utils.save_image(image_grid.flip((1,)), filename)
+    print(f"Generated images saved to {filename}")
+
+    ensemble = torch.quantile(x, 0.5, dim=0)
+    tv.utils.save_image(ensemble.flip((1,)), "out/ensemble.png")
+    stdev = torch.std(x, dim=0) / ensemble
+    stdev = (stdev - stdev.min()) / (stdev.max() - stdev.min())
+    tv.utils.save_image(stdev.flip((1,)), "out/stdev.png")
+
+if __name__ == "__main__":
+    jsonargparse.CLI(main)
