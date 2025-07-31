@@ -8,6 +8,7 @@ from models import DiffusionModel, GuidanceModel
 from tqdm import tqdm
 import torch.nn.functional as F
 import contextlib
+from util import scale_from_diffusion
 import urllib.request
 import json
 import datetime
@@ -77,7 +78,7 @@ def main(
     ts = latest_run["maps"][0]["ts"]
     ssn = latest_run["essn"]
 
-    reference = torch.zeros((3, 184, 368), device=dm.device)
+    reference = torch.zeros((3, 181, 361), device=dm.device)
 
     assim_h5 = get_h5()
     for metric in metrics:
@@ -87,12 +88,11 @@ def main(
         data = assim_h5[f"/maps/{metric}"][:]
         data = torch.tensor(data, device=dm.device)
         data = (data - min_val) / (max_val - min_val)
-        reference[ch, :181, :361] = data
+        reference[ch, ...] = data
 
     tv.utils.save_image(reference.flip((1,)), "out/reference.png")
 
     out_targets = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
-    contributorss = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
     dilated_masks = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
 
     for station in station_data:
@@ -139,7 +139,7 @@ def main(
     ])
     guidance_target = guidance_target.to(dm.device).expand(num_samples, -1)
 
-    x = torch.randn((num_samples, 3, 184, 368), device=dm.device)
+    x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
     # x = x * (1 - mask) + ((out_target * 2.) - 1) * mask
 
     for i, t in tqdm(enumerate(scheduler.timesteps)):
@@ -150,18 +150,19 @@ def main(
             noise_pred = dm.model(model_input, t).sample
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
-        x0_shifted = (x0 + 1.0) / 2.0
+        x0_decoded = scale_from_diffusion(dm.vae.decode(x0 * dm.vae.latent_magnitude).sample)
+        x0_decoded = x0_decoded[..., :184, :368]
 
-        tv.utils.save_image(x0_shifted[0, ...].flip((1,)), f"out/step_{i:03d}.png")
+        tv.utils.save_image(x0_decoded[0, ...].flip((1,)), f"out/step_{i:03d}.png")
 
         dilate_mask_by = int(round(((num_timesteps * 0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
         print(f"Dilate mask by {dilate_mask_by} pixels")
         mask_dilated = dilated_masks[dilate_mask_by]
         out_target = out_targets[dilate_mask_by]
 
-        guidance_out = gm.model(x0_shifted)
+        guidance_out = gm.model(x0_decoded)
         guidance_loss = F.mse_loss(guidance_out, guidance_target)
-        fit_loss = (x0_shifted - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
+        fit_loss = (x0_decoded - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
         print("GL:", guidance_loss, "FL:", fit_loss, "SSN:", (guidance_out[:, 5] + 1.0) * 100 )
         loss = guidance_loss * guidance_scale
         if i < 0.95 * num_timesteps:
@@ -172,17 +173,18 @@ def main(
         x = x.detach() + grad
         x = scheduler.step(noise_pred, t, x).prev_sample
 
-    x = (x + 1.0) / 2.0
+    outs = scale_from_diffusion(dm.vae.decode(x * dm.vae.latent_magnitude).sample)
+    outs = outs[..., :181, :361]
 
-    image_grid = tv.utils.make_grid(x, nrow=math.ceil(math.sqrt(num_samples)))
+    image_grid = tv.utils.make_grid(outs, nrow=math.ceil(math.sqrt(num_samples)))
 
     filename = "out/generated.png"
     tv.utils.save_image(image_grid.flip((1,)), filename)
     print(f"Generated images saved to {filename}")
 
-    ensemble = torch.quantile(x, 0.5, dim=0)
+    ensemble = torch.quantile(outs, 0.5, dim=0)
     tv.utils.save_image(ensemble.flip((1,)), "out/ensemble.png")
-    stdev = torch.std(x, dim=0) / ensemble
+    stdev = torch.std(outs, dim=0) / ensemble
     stdev = (stdev - stdev.min()) / (stdev.max() - stdev.min())
     tv.utils.save_image(stdev.flip((1,)), "out/stdev.png")
 

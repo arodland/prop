@@ -8,7 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
 from diffusers.utils import numpy_to_pil
+from util import scale_to_diffusion, scale_from_diffusion
 import datetime
+from util import summarize_tensor
 
 torch.set_float32_matmul_precision("high")
 torch._inductor.config.conv_1x1_as_mm = True
@@ -68,12 +70,12 @@ class DiffusionModel(L.LightningModule):
             images = batch["images"]
             # print("images:", summarize_tensor(images))
             # tv.utils.save_image(images[0], "out/in_images.png")
-            latents_raw = self.vae.encode(images * 2.0 - 1.0).latents
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             # print("latents_raw:", summarize_tensor(latents_raw))
             latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
             # tv.utils.save_image(latents[0] * 2.0 + 1.0, "out/in_latents.png")
             # print("latents:", summarize_tensor(latents))
-        decoded = (self.vae.decode(latents_raw).sample + 1.0) / 2.0  # Scale to [0, 1]
+        decoded = scale_from_diffusion(self.vae.decode(latents_raw).sample)  # Scale to [0, 1]
         # print("decoded:", summarize_tensor(decoded))
         # tv.utils.save_image(decoded[0], "out/in_decoded.png")
         noise = torch.randn_like(latents)
@@ -88,7 +90,7 @@ class DiffusionModel(L.LightningModule):
     def test_step(self, batch, batch_idx):
         with torch.no_grad():
             images = batch["images"]
-            latents_raw = self.vae.encode(images * 2.0 - 1.0).latents
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
@@ -101,7 +103,7 @@ class DiffusionModel(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         with torch.no_grad():
             images = batch["images"]
-            latents_raw = self.vae.encode(images * 2.0 - 1.0).latents
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
@@ -133,7 +135,7 @@ class DiffusionModel(L.LightningModule):
                 x = step.prev_sample
 
             latents = step.pred_original_sample[..., :23, :46]
-            pil_latents = numpy_to_pil(((latents[:, :3, ...] + 1.0) / 2.0).cpu().permute(0, 2, 3, 1).detach().numpy())
+            pil_latents = numpy_to_pil(scale_from_diffusion(latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
             latents = latents * self.vae.latent_magnitude
             tv.utils.save_image(
                 tv.utils.make_grid(
@@ -143,7 +145,7 @@ class DiffusionModel(L.LightningModule):
                 "out/latents.png",
             ),
             image = self.vae.decode(latents).sample
-            image = (image + 1.0) / 2.0  # Scale to [0, 1]
+            image = scale_from_diffusion(image)  # Scale to [0, 1]
             image = image.clip(0.0, 1.0)
 
             pil_images = numpy_to_pil(image.cpu().permute(0, 2, 3, 1).detach().numpy())
@@ -222,7 +224,7 @@ class VAEModel(L.LightningModule):
         self.vae = torch.compile(self.vae, mode="max-autotune")
 
     def training_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0  # Scale to [-1, 1]
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
         latents = self.vae.encode(images).latents
         decoded = self.vae.decode(latents).sample
 
@@ -233,7 +235,7 @@ class VAEModel(L.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0  # Scale to [-1, 1]
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
         latents = self.vae.encode(images).latents
         decoded = self.vae.decode(latents).sample
 
@@ -243,7 +245,7 @@ class VAEModel(L.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0  # Scale to [-1, 1]
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
         latents = self.vae.encode(images).latents
         decoded = self.vae.decode(latents).sample
 
@@ -253,7 +255,7 @@ class VAEModel(L.LightningModule):
         return loss
 
     def forward(self, images):
-        return self.vae.encode(images * 2.0 - 1.0).latents
+        return self.vae.encode(scale_to_diffusion(images)).latents
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)

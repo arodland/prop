@@ -8,6 +8,7 @@ from models import DiffusionModel, GuidanceModel
 from tqdm import tqdm
 import torch.nn.functional as F
 import contextlib
+from util import scale_from_diffusion
 
 def main(
     diffuser_checkpoint: Path = Path("diffuser_checkpoint.ckpt"),
@@ -42,7 +43,7 @@ def main(
     ])
     target = target.to(dm.device).unsqueeze(0).repeat(num_samples, 1)
 
-    x = torch.randn((num_samples, 3, 184, 368), device=dm.device)
+    x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
 
     for i, t in tqdm(enumerate(scheduler.timesteps)):
         print("")
@@ -53,9 +54,11 @@ def main(
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
 
-        # tv.utils.save_image((x0[0, :, :, :] + 1.0) / 2.0, f"out/step_{i:03d}.png")
+        x0_decoded = scale_from_diffusion(dm.vae.decode(x0 * dm.vae.latent_magnitude).sample)
 
-        guidance_out = gm.model((x0 + 1.0) / 2.0)
+        # tv.utils.save_image(scale_from_diffusion(x0[0, :, :, :]), f"out/step_{i:03d}.png")
+
+        guidance_out = gm.model(x0_decoded[..., :184, :368])
         print(guidance_out)
         guidance_loss = F.mse_loss(guidance_out, target)
         print(guidance_loss)
@@ -63,15 +66,15 @@ def main(
         x = x.detach() + guidance_grad * guidance_scale
         x = scheduler.step(noise_pred, t, x).prev_sample
 
-    x = (x + 1.0) / 2.0
+    outs = scale_from_diffusion(dm.vae.decode(x * dm.vae.latent_magnitude).sample)
 
-    image_grid = tv.utils.make_grid(x, nrow=math.ceil(math.sqrt(num_samples)))
+    image_grid = tv.utils.make_grid(outs, nrow=math.ceil(math.sqrt(num_samples)))
 
     filename = "out/generated.png"
     tv.utils.save_image(image_grid, filename)
     print(f"Generated images saved to {filename}")
 
-    ensemble = torch.quantile(x, 0.5, dim=0)
+    ensemble = torch.quantile(outs, 0.5, dim=0)
     tv.utils.save_image(ensemble, "out/ensemble.png")
 
 if __name__ == "__main__":
