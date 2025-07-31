@@ -72,7 +72,7 @@ class DiffusionModel(L.LightningModule):
             # tv.utils.save_image(images[0], "out/in_images.png")
             latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             # print("latents_raw:", summarize_tensor(latents_raw))
-            latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
             # tv.utils.save_image(latents[0] * 2.0 + 1.0, "out/in_latents.png")
             # print("latents:", summarize_tensor(latents))
         decoded = scale_from_diffusion(self.vae.decode(latents_raw).sample)  # Scale to [0, 1]
@@ -91,7 +91,7 @@ class DiffusionModel(L.LightningModule):
         with torch.no_grad():
             images = batch["images"]
             latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
-            latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
@@ -104,7 +104,7 @@ class DiffusionModel(L.LightningModule):
         with torch.no_grad():
             images = batch["images"]
             latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
-            latents = F.pad(latents_raw / self.vae.latent_magnitude, (0, 2, 0, 1))
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
@@ -136,7 +136,7 @@ class DiffusionModel(L.LightningModule):
 
             latents = step.pred_original_sample[..., :23, :46]
             pil_latents = numpy_to_pil(scale_from_diffusion(latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
-            latents = latents * self.vae.latent_magnitude
+            latents = self.scale_latents(latents)
             tv.utils.save_image(
                 tv.utils.make_grid(
                     torch.stack([tv.transforms.functional.to_tensor(pil_image) for pil_image in pil_latents]),
@@ -157,6 +157,14 @@ class DiffusionModel(L.LightningModule):
             filename = "out/checkpoint.png"
             tv.utils.save_image(image_grid, filename)
             print(f"Generated images saved to {filename}")
+
+    def scale_latents(self, latents):
+        """Scale latents by vae.latent_magnitude for decoding."""
+        return latents * self.vae.latent_magnitude
+
+    def unscale_latents(self, latents):
+        """Unscale latents by vae.latent_magnitude after encoding."""
+        return latents / self.vae.latent_magnitude
 
 def guidance_loss(prediction, target):
     return F.mse_loss(prediction, target)

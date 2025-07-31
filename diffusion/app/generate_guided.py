@@ -54,7 +54,7 @@ def main(
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
 
-        x0_decoded = scale_from_diffusion(dm.vae.decode(x0 * dm.vae.latent_magnitude).sample)
+        x0_decoded = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x0)).sample)
 
         # tv.utils.save_image(scale_from_diffusion(x0[0, :, :, :]), f"out/step_{i:03d}.png")
 
@@ -66,7 +66,7 @@ def main(
         x = x.detach() + guidance_grad * guidance_scale
         x = scheduler.step(noise_pred, t, x).prev_sample
 
-    outs = scale_from_diffusion(dm.vae.decode(x * dm.vae.latent_magnitude).sample)
+    outs = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x)).sample)
 
     image_grid = tv.utils.make_grid(outs, nrow=math.ceil(math.sqrt(num_samples)))
 

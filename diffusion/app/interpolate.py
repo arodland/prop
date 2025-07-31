@@ -150,7 +150,7 @@ def main(
             noise_pred = dm.model(model_input, t).sample
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
-        x0_decoded = scale_from_diffusion(dm.vae.decode(x0 * dm.vae.latent_magnitude).sample)
+        x0_decoded = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x0)).sample)
         x0_decoded = x0_decoded[..., :184, :368]
 
         tv.utils.save_image(x0_decoded[0, ...].flip((1,)), f"out/step_{i:03d}.png")
@@ -173,7 +173,7 @@ def main(
         x = x.detach() + grad
         x = scheduler.step(noise_pred, t, x).prev_sample
 
-    outs = scale_from_diffusion(dm.vae.decode(x * dm.vae.latent_magnitude).sample)
+    outs = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x)).sample)
     outs = outs[..., :181, :361]
 
     image_grid = tv.utils.make_grid(outs, nrow=math.ceil(math.sqrt(num_samples)))
