@@ -111,8 +111,8 @@ def main(
             max_val = metrics[metric]["max"]
             normalized_value = (station[metric] - min_val) / (max_val - min_val)
             for i, m in enumerate(pos_masks):
-                out_targets[i][ch, :, :] += m * normalized_value
-                dilated_masks[i][ch, :, :] += m
+                out_targets[i][ch, ...] += m * normalized_value
+                dilated_masks[i][ch, ...] += m
 
     for i in range(max_dilate + 1):
         out_targets[i] /= torch.clip(dilated_masks[i], 1e-6, None)
@@ -152,9 +152,9 @@ def main(
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
         x0_shifted = (x0 + 1.0) / 2.0
 
-        tv.utils.save_image(x0_shifted[0, :, :, :].flip((1,)), f"out/step_{i:03d}.png")
+        tv.utils.save_image(x0_shifted[0, ...].flip((1,)), f"out/step_{i:03d}.png")
 
-        dilate_mask_by = int(round(((num_timesteps*0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
+        dilate_mask_by = int(round(((num_timesteps * 0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
         print(f"Dilate mask by {dilate_mask_by} pixels")
         mask_dilated = dilated_masks[dilate_mask_by]
         out_target = out_targets[dilate_mask_by]
