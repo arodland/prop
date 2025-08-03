@@ -16,6 +16,24 @@ import h5py
 import hdf5plugin
 import io
 
+
+def lat_lon_distance(lat1, lon1, lat2, lon2):
+    # Convert to radians
+    lat1_rad = torch.deg2rad(torch.as_tensor(lat1) - 90.0)  # Adjust latitude to be from -90 to 90
+    lon1_rad = torch.deg2rad(torch.as_tensor(lon1) - 180.0)  # Adjust longitude to be from -180 to 180
+    lat2_rad = torch.deg2rad(torch.as_tensor(lat2) - 90.0)  # Adjust latitude to be from -90 to 90
+    lon2_rad = torch.deg2rad(torch.as_tensor(lon2) - 180.0)  # Adjust longitude to be from -180 to 180
+
+    # Spherical law of cosines
+    cos_angle = (torch.sin(lat1_rad) * torch.sin(lat2_rad) +
+                 torch.cos(lat1_rad) * torch.cos(lat2_rad) *
+                 torch.cos(lon2_rad - lon1_rad))
+
+    cos_angle = cos_angle.clamp(-1.0, 1.0)  # Ensure the value is within the valid range for acos
+
+    # Return angular distance in degrees
+    return torch.rad2deg(torch.acos(cos_angle))
+
 lats, lons = torch.meshgrid(
     torch.arange(0, 184, dtype=torch.float32),
     torch.arange(0, 368, dtype=torch.float32),
@@ -36,8 +54,9 @@ def dilations(lat, lon, dilate_by):
     """Dilates the mask by a specified number of pixels."""
     dilated_masks = []
 
+    distance = lat_lon_distance(lats, lons, lat, lon)
+
     for i in range(dilate_by + 1):
-        distance = torch.sqrt((lats - lat) ** 2 + (lons - lon) ** 2)
         mask = (i + 0.5 - distance).clip(0.0, 1.0)
         dilated_masks.append(mask)
     return dilated_masks
@@ -56,7 +75,7 @@ def main(
     seed: int = 0,
     guidance_scale: float = 15.0,
     fit_scale: float = 15.0,
-    max_dilate: int = 10,
+    max_dilate: int = 45,
 ):
     """Generates images from a trained diffusion model."""
 
@@ -94,10 +113,13 @@ def main(
 
     out_targets = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
     dilated_masks = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
+    unweighted_masks = [ torch.zeros((3, 184, 368), device=dm.device) for _ in range(max_dilate + 1) ]
 
     for station in station_data:
-        lat = int(round(station["station.latitude"])) + 90
-        lon = int(round(station["station.longitude"])) + 180
+        lat = station["station.latitude"] + 90
+        lon = station["station.longitude"] + 180
+        cs = float(station["cs"])
+
         if not (0 <= lat < 181 and 0 <= lon < 361):
             continue
 
@@ -111,12 +133,14 @@ def main(
             max_val = metrics[metric]["max"]
             normalized_value = (station[metric] - min_val) / (max_val - min_val)
             for i, m in enumerate(pos_masks):
-                out_targets[i][ch, ...] += m * normalized_value
-                dilated_masks[i][ch, ...] += m
+                out_targets[i][ch, ...] += m * cs * normalized_value
+                dilated_masks[i][ch, ...] += m * cs
+                unweighted_masks[i][ch, ...] += m
 
     for i in range(max_dilate + 1):
         out_targets[i] /= torch.clip(dilated_masks[i], 1e-6, None)
         out_targets[i] = torch.clip(out_targets[i], 0.0, 1.0)
+        dilated_masks[i] /= torch.clip(unweighted_masks[i], 1e-6, None)
         dilated_masks[i] = torch.clip(dilated_masks[i], 0.0, 1.0)
         tv.utils.save_image(out_targets[i].flip((1,)), f"out/target_{i:02d}.png")
         tv.utils.save_image(dilated_masks[i].flip((1,)), f"out/mask_dilated_{i:02d}.png")
@@ -151,20 +175,24 @@ def main(
         x = x.detach().requires_grad_()
         x0 = scheduler.step(noise_pred, t, x).pred_original_sample
         x0_decoded = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x0)).sample)
-        x0_decoded = x0_decoded[..., :184, :368]
 
+        # Cut down to 181x361 valid data, then re-pad to 184x368
+        x0_decoded = x0_decoded[..., :181, :361]
+        x0_decoded = F.pad(x0_decoded, (0, 7, 0, 3))
         tv.utils.save_image(x0_decoded[0, ...].flip((1,)), f"out/step_{i:03d}.png")
-
-        dilate_mask_by = int(round(((num_timesteps * 0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
-        print(f"Dilate mask by {dilate_mask_by} pixels")
-        mask_dilated = dilated_masks[dilate_mask_by]
-        out_target = out_targets[dilate_mask_by]
 
         guidance_out = gm.model(x0_decoded)
         guidance_loss = F.mse_loss(guidance_out, guidance_target)
-        fit_loss = (x0_decoded - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
-        print("GL:", guidance_loss, "FL:", fit_loss, "SSN:", (guidance_out[:, 5] + 1.0) * 100 )
         loss = guidance_loss * guidance_scale
+        print(f"GL: {guidance_loss.item():.3g}", end=" ")
+
+        dilate_mask_by = int(round(((num_timesteps * 0.95 - i) * max_dilate) / (num_timesteps * 0.95)))
+        dilate_mask_by = 0 if dilate_mask_by < 0 else dilate_mask_by
+        mask_dilated = dilated_masks[dilate_mask_by]
+        out_target = out_targets[dilate_mask_by]
+        fit_loss = (x0_decoded - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
+        print(f"FL({dilate_mask_by}): {fit_loss.item():.3g}", end=" ")
+
         if i < 0.95 * num_timesteps:
             loss += fit_loss * fit_scale
 
