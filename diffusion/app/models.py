@@ -8,7 +8,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
 from diffusers.utils import numpy_to_pil
+from util import scale_to_diffusion, scale_from_diffusion
 import datetime
+from util import summarize_tensor
 
 torch.set_float32_matmul_precision("high")
 torch._inductor.config.conv_1x1_as_mm = True
@@ -27,24 +29,28 @@ class DiffusionModel(L.LightningModule):
     def __init__(self):
         super().__init__()
         self.model = diffusers.models.UNet2DModel(
-            sample_size=(184, 368),
-            block_out_channels=(128, 128, 256, 256),
-            # dropout=0.1,
+            sample_size=(24, 48),
+            in_channels=4,
+            out_channels=4,
+            block_out_channels=(64, 128, 256, 512),
+            dropout=0.1,
             down_block_types=(
                 "DownBlock2D",       # a regular ResNet downsampling block
-                "DownBlock2D",
+                "AttnDownBlock2D",
                 "AttnDownBlock2D",   # a ResNet downsampling block with spatial self-attention
                 "AttnDownBlock2D",
             ),
             up_block_types=(
                 "AttnUpBlock2D",
                 "AttnUpBlock2D",     # a ResNet upsampling block with spatial self-attention
-                "UpBlock2D",
+                "AttnUpBlock2D",
                 "UpBlock2D",         # a regular ResNet upsampling block
             ),
         )
         self.model.to(memory_format=torch.channels_last)
         self.model = torch.compile(self.model, mode="max-autotune")
+
+        self.vae = diffusers.models.AutoencoderTiny.from_pretrained("./taesd-iono-finetuned")
 
         # self.scheduler = diffusers.schedulers.DDIMScheduler(
         #     # beta_schedule="squaredcos_cap_v2",
@@ -60,57 +66,87 @@ class DiffusionModel(L.LightningModule):
         )
 
     def training_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0
-        noise = torch.randn_like(images)
+        with torch.no_grad():
+            images = batch["images"]
+            # print("images:", summarize_tensor(images))
+            # tv.utils.save_image(images[0], "out/in_images.png")
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            # print("latents_raw:", summarize_tensor(latents_raw))
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+            # tv.utils.save_image(latents[0] * 2.0 + 1.0, "out/in_latents.png")
+            # print("latents:", summarize_tensor(latents))
+        decoded = scale_from_diffusion(self.vae.decode(latents_raw).sample)  # Scale to [0, 1]
+        # print("decoded:", summarize_tensor(decoded))
+        # tv.utils.save_image(decoded[0], "out/in_decoded.png")
+        noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
-        noisy_images = self.scheduler.add_noise(images, noise, steps)
-        residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps).sample
+        loss = F.mse_loss(residual, noise)
         self.log("train_loss", loss, prog_bar=True)
         self.log("lr", self.optimizers().param_groups[0]["lr"], prog_bar=True)
         return loss
 
     def test_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0
-        noise = torch.randn_like(images)
+        with torch.no_grad():
+            images = batch["images"]
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+        noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
-        noisy_images = self.scheduler.add_noise(images, noise, steps)
-        residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps).sample
+        loss = F.mse_loss(residual, noise)
         self.log("test_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        images = batch["images"] * 2.0 - 1.0
-        noise = torch.randn_like(images)
+        with torch.no_grad():
+            images = batch["images"]
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+        noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
-        noisy_images = self.scheduler.add_noise(images, noise, steps)
-        residual = self.model(noisy_images, steps).sample
-        loss = modified_mse_loss(residual, noise)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps).sample
+        loss = F.mse_loss(residual, noise)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.NAdam(self.parameters(), lr=1e-4, decoupled_weight_decay=True)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=5e-5)
         # optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
         # gamma=0.93 will lose about one order of magnitude in 30 epochs
         # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.93)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer,
-            T_0=10,
+            T_0=50,
             eta_min=1e-6,
         )
         return [optimizer], [scheduler]
 
     def on_save_checkpoint(self, checkpoint):
         with torch.no_grad():
-            image = torch.randn(9, 3, 184, 368, device=self.device)
+            x = torch.randn(9, 4, 24, 48, device=self.device)
             self.inference_scheduler.set_timesteps(20, device=self.device)
             for t in self.inference_scheduler.timesteps:
-                model_output = self.model(image, t).sample
-                image = self.inference_scheduler.step(model_output, t, image).prev_sample
+                model_output = self.model(x, t).sample
+                step = self.inference_scheduler.step(model_output, t, x)
+                x = step.prev_sample
 
-            image = (image + 1.0) / 2.0  # Rescale to [0, 1]
+            latents = step.pred_original_sample[..., :23, :46]
+            pil_latents = numpy_to_pil(scale_from_diffusion(latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
+            latents = self.scale_latents(latents)
+            tv.utils.save_image(
+                tv.utils.make_grid(
+                    torch.stack([tv.transforms.functional.to_tensor(pil_image) for pil_image in pil_latents]),
+                    nrow=3,
+                ),
+                "out/latents.png",
+            ),
+            image = self.vae.decode(latents).sample
+            image = scale_from_diffusion(image)  # Scale to [0, 1]
+            image = image.clip(0.0, 1.0)
 
             pil_images = numpy_to_pil(image.cpu().permute(0, 2, 3, 1).detach().numpy())
 
@@ -121,6 +157,14 @@ class DiffusionModel(L.LightningModule):
             filename = "out/checkpoint.png"
             tv.utils.save_image(image_grid, filename)
             print(f"Generated images saved to {filename}")
+
+    def scale_latents(self, latents):
+        """Scale latents by vae.latent_magnitude for decoding."""
+        return latents * self.vae.latent_magnitude
+
+    def unscale_latents(self, latents):
+        """Unscale latents by vae.latent_magnitude after encoding."""
+        return latents / self.vae.latent_magnitude
 
 def guidance_loss(prediction, target):
     return F.mse_loss(prediction, target)
@@ -181,6 +225,58 @@ class GuidanceModel(L.LightningModule):
         )
         return [optimizer], [scheduler]
 
+class VAEModel(L.LightningModule):
+    def __init__(self):
+        super().__init__()
+        self.vae = diffusers.models.AutoencoderTiny.from_pretrained("./taesd-iono-50k")
+        self.vae = torch.compile(self.vae, mode="max-autotune")
+
+    def training_step(self, batch, batch_idx):
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
+        latents = self.vae.encode(images).latents
+        decoded = self.vae.decode(latents).sample
+
+        img_loss = F.mse_loss(decoded, images)
+        loss = img_loss
+        self.log("train_loss", loss, prog_bar=True)
+        self.log("lr", self.optimizers().param_groups[0]["lr"], prog_bar=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
+        latents = self.vae.encode(images).latents
+        decoded = self.vae.decode(latents).sample
+
+        img_loss = F.mse_loss(decoded, images)
+        loss = img_loss
+        self.log("test_loss", loss, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        images = scale_to_diffusion(batch["images"])  # Scale to [-1, 1]
+        latents = self.vae.encode(images).latents
+        decoded = self.vae.decode(latents).sample
+
+        img_loss = F.mse_loss(decoded, images)
+        loss = img_loss
+        self.log("val_loss", loss, prog_bar=True)
+        return loss
+
+    def forward(self, images):
+        return self.vae.encode(scale_to_diffusion(images)).latents
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=10,
+            eta_min=1e-6,
+        )
+        return [optimizer], [scheduler]
+
+    def on_save_checkpoint(self, checkpoint):
+        self.vae.save_pretrained("checkpoints/vae_model")
+
 # class GuidedModel(L.LightningModule):
 #     def __init__(self, diffusion_model, guidance_model):
 #         super().__init__()
@@ -234,9 +330,9 @@ class IRIData(L.LightningDataModule):
 
         dts = [ datetime.datetime.fromisoformat(dt) for dt in sample["datetime"] ]
         toys = torch.tensor([ (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) /
-                 datetime.timedelta(days=365) for dt in dts ])
+                              datetime.timedelta(days=365) for dt in dts ])
         tods = torch.tensor([ (dt - dt.replace(hour=0, minute=0, second=0, microsecond=0)) /
-                 datetime.timedelta(hours=24) for dt in dts ])
+                              datetime.timedelta(hours=24) for dt in dts ])
         sin_toy = torch.sin(toys * 2 * math.pi)
         cos_toy = torch.cos(toys * 2 * math.pi)
         sin_tod = torch.sin(tods * 2 * math.pi)
@@ -245,7 +341,8 @@ class IRIData(L.LightningDataModule):
         # -1 to 1 is 1950-2050, so the training data covers -0.84 to +0.50
         secular = (years - 2000.0) / 50.
 
-        targets = torch.stack([secular, sin_toy, cos_toy, sin_tod, cos_tod, torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
+        targets = torch.stack([secular, sin_toy, cos_toy, sin_tod, cos_tod,
+                               torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
         return {"images": images, "target": targets}
 
     def prepare_data(self):
