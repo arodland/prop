@@ -75,6 +75,7 @@ def main(
     seed: int = 0,
     guidance_scale: float = 15.0,
     fit_scale: float = 15.0,
+    geometry_scale: float = 1.0,
     max_dilate: int = 45,
 ):
     """Generates images from a trained diffusion model."""
@@ -196,6 +197,18 @@ def main(
         if i < 0.95 * num_timesteps:
             loss += fit_loss * fit_scale
 
+        wrap_loss_lat = F.mse_loss(
+            x0_decoded[..., 0],
+            x0_decoded[..., 360],
+        )
+        wrap_loss_lon = torch.var(x0_decoded[..., 0, :]) + torch.var(x0_decoded[..., 180, :])
+        print(f"WLat: {wrap_loss_lat.item():.3g}", end=" ")
+        print(f"WLon: {wrap_loss_lon.item():.3g}", end=" ")
+        loss += geometry_scale * (wrap_loss_lat + wrap_loss_lon)
+
+        ssns = ((guidance_out[:, 5] + 1.0) * 100).tolist()
+        ssns = [f"{ssn:.2f}" for ssn in ssns]
+        print("SSN:", ", ".join(ssns))
         grad = -torch.autograd.grad(loss, x)[0]
 
         x = x.detach() + grad
