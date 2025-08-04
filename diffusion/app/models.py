@@ -166,6 +166,165 @@ class DiffusionModel(L.LightningModule):
         """Unscale latents by vae.latent_magnitude after encoding."""
         return latents / self.vae.latent_magnitude
 
+class ConditionedDiffusionModel(L.LightningModule):
+    def __init__(self):
+        super().__init__()
+        self.param_encoder = nn.Sequential(
+            nn.Linear(6, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.ReLU(),
+        )
+
+        self.model = diffusers.models.UNet2DModel(
+            sample_size=(24, 48),
+            in_channels=4,
+            out_channels=4,
+            block_out_channels=(64, 128, 256, 512),
+            dropout=0.1,
+            down_block_types=(
+                "DownBlock2D",       # a regular ResNet downsampling block
+                "AttnDownBlock2D",
+                "AttnDownBlock2D",   # a ResNet downsampling block with spatial self-attention
+                "AttnDownBlock2D",
+            ),
+            up_block_types=(
+                "AttnUpBlock2D",
+                "AttnUpBlock2D",     # a ResNet upsampling block with spatial self-attention
+                "AttnUpBlock2D",
+                "UpBlock2D",         # a regular ResNet upsampling block
+            ),
+            class_embed_type="identity",
+        )
+        self.model.to(memory_format=torch.channels_last)
+        self.model = torch.compile(self.model, mode="max-autotune")
+
+        self.vae = diffusers.models.AutoencoderTiny.from_pretrained("./taesd-iono-finetuned")
+
+        # self.scheduler = diffusers.schedulers.DDIMScheduler(
+        #     # beta_schedule="squaredcos_cap_v2",
+        #     rescale_betas_zero_snr=True,
+        # )
+        self.scheduler = diffusers.schedulers.DDPMScheduler(
+            thresholding=False,
+            rescale_betas_zero_snr=False,
+        )
+        self.inference_scheduler = diffusers.schedulers.DDPMScheduler(
+            thresholding=False,
+            rescale_betas_zero_snr=False,
+        )
+
+    def training_step(self, batch, batch_idx):
+        with torch.no_grad():
+            images = batch["images"]
+            # print("images:", summarize_tensor(images))
+            # tv.utils.save_image(images[0], "out/in_images.png")
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            # print("latents_raw:", summarize_tensor(latents_raw))
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+            # tv.utils.save_image(latents[0] * 2.0 + 1.0, "out/in_latents.png")
+            # print("latents:", summarize_tensor(latents))
+        encoded_targets = self.param_encoder(batch["target"])
+
+        # Dropout targets 10% of the time to allow CFG.
+        use_targets = torch.rand(encoded_targets.size(0), device=encoded_targets.device) < 0.9
+        encoded_targets = encoded_targets * use_targets.unsqueeze(1).float()
+
+        noise = torch.randn_like(latents)
+        steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = F.mse_loss(residual, noise)
+        self.log("train_loss", loss, prog_bar=True)
+        self.log("lr", self.optimizers().param_groups[0]["lr"], prog_bar=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        with torch.no_grad():
+            images = batch["images"]
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+        encoded_targets = self.param_encoder(batch["target"])
+        noise = torch.randn_like(latents)
+        steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = F.mse_loss(residual, noise)
+        self.log("test_loss", loss, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        with torch.no_grad():
+            images = batch["images"]
+            latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
+            latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
+        encoded_targets = self.param_encoder(batch["target"])
+        noise = torch.randn_like(latents)
+        steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
+        noisy_latents = self.scheduler.add_noise(latents, noise, steps)
+        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = F.mse_loss(residual, noise)
+        self.log("val_loss", loss, prog_bar=True)
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(), lr=5e-5)
+        # optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
+        # gamma=0.93 will lose about one order of magnitude in 30 epochs
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.93)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer,
+            T_0=25,
+            eta_min=1e-6,
+        )
+        return [optimizer], [scheduler]
+
+    def on_save_checkpoint(self, checkpoint):
+        with torch.no_grad():
+            x = torch.randn(9, 4, 24, 48, device=self.device)
+            encoded_targets = torch.zeros(9, 256, device=self.device)
+
+            self.inference_scheduler.set_timesteps(20, device=self.device)
+            for t in self.inference_scheduler.timesteps:
+                model_output = self.model(x, t, class_labels=encoded_targets).sample
+                step = self.inference_scheduler.step(model_output, t, x)
+                x = step.prev_sample
+
+            latents = step.pred_original_sample[..., :23, :46]
+            pil_latents = numpy_to_pil(scale_from_diffusion(
+                latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
+            latents = self.scale_latents(latents)
+            tv.utils.save_image(
+                tv.utils.make_grid(
+                    torch.stack([tv.transforms.functional.to_tensor(pil_image) for pil_image in pil_latents]),
+                    nrow=3,
+                ),
+                "out/latents.png",
+            ),
+            image = self.vae.decode(latents).sample
+            image = scale_from_diffusion(image)  # Scale to [0, 1]
+            image = image.clip(0.0, 1.0)
+
+            pil_images = numpy_to_pil(image.cpu().permute(0, 2, 3, 1).detach().numpy())
+
+            images = torch.stack([tv.transforms.functional.to_tensor(pil_image.crop((0, 0, 361, 181)))
+                                  for pil_image in pil_images])
+            image_grid = tv.utils.make_grid(images, nrow=3)
+
+            filename = "out/checkpoint.png"
+            tv.utils.save_image(image_grid, filename)
+            print(f"Generated images saved to {filename}")
+
+    def scale_latents(self, latents):
+        """Scale latents by vae.latent_magnitude for decoding."""
+        return latents * self.vae.latent_magnitude
+
+    def unscale_latents(self, latents):
+        """Unscale latents by vae.latent_magnitude after encoding."""
+        return latents / self.vae.latent_magnitude
+
 def guidance_loss(prediction, target):
     return F.mse_loss(prediction, target)
     # weight = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0], device=prediction.device)
