@@ -120,7 +120,7 @@ class DiffusionModel(L.LightningModule):
         # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.93)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
             optimizer,
-            T_0=50,
+            T_0=25,
             eta_min=1e-6,
         )
         return [optimizer], [scheduler]
@@ -135,7 +135,8 @@ class DiffusionModel(L.LightningModule):
                 x = step.prev_sample
 
             latents = step.pred_original_sample[..., :23, :46]
-            pil_latents = numpy_to_pil(scale_from_diffusion(latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
+            pil_latents = numpy_to_pil(scale_from_diffusion(
+                latents[:, :3, ...]).cpu().permute(0, 2, 3, 1).detach().numpy())
             latents = self.scale_latents(latents)
             tv.utils.save_image(
                 tv.utils.make_grid(
