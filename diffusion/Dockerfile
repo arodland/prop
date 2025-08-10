@@ -27,4 +27,4 @@ COPY app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 WORKDIR /app
-CMD uwsgi --http :${PRED4D_PORT} --master --lazy --single-interpreter --http-timeout 300 --wsgi server:app --processes 2 --enable-metrics --carbon-use-metrics --carbon-name-resolve --carbon ${STATSD_HOST}:2003 --carbon-id prop-pred4d --die-on-term
+CMD uwsgi --http :${DIFFUSION_PORT} --master --lazy --single-interpreter --http-timeout 600 --wsgi server:app --processes 4 --enable-metrics --carbon-use-metrics --carbon-name-resolve --carbon ${STATSD_HOST}:2003 --carbon-id prop-pred4d --die-on-term
