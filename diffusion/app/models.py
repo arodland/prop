@@ -457,6 +457,14 @@ class VAEModel(L.LightningModule):
 #
 
 class IRIData(L.LightningDataModule):
+    def pad_map(self, image):
+        """Pad the image to 368x184 by wrapping around the columns and repeating the last row."""
+        padded_image = image[..., :360].clone()  # Copy the first 360 columns
+        # Pad the last 3 rows by repeating the last row
+        padded_image = F.pad(padded_image, (0, 0, 0, 3), mode='replicate')
+        padded_image = torch.cat((padded_image, padded_image[..., :8]), dim=-1)  # Wrap around the first 8 columns
+        return padded_image
+
     def __init__(self, metric="combined", train_batch=8, test_batch=8, val_batch=8, add_noise=0.0):
         super().__init__()
         self.metric = metric
@@ -467,7 +475,7 @@ class IRIData(L.LightningDataModule):
             transforms.ToImage(),
             transforms.RGB(),
             transforms.ToDtype(torch.float32, scale=True),
-            transforms.Pad(padding=(0, 0, 7, 3), fill=0, padding_mode='constant'), # from 361x181 to 368x184
+            self.pad_map,
         ])
         if add_noise > 0.0:
             self.augment_train = transforms.Compose([
@@ -481,7 +489,7 @@ class IRIData(L.LightningDataModule):
                     transforms.GaussianNoise(sigma=0.75 * add_noise),
                     transforms.GaussianNoise(sigma=add_noise),
                 ]),
-                transforms.Pad(padding=(0, 0, 7, 3), fill=0, padding_mode='constant'), # from 361x181 to 368x184
+                self.pad_map,
             ])
         else:
             # Don't waste CPU adding a gaussian blur of 0.
