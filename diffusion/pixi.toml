@@ -1,0 +1,36 @@
+[project]
+name = "pred4d"
+channels = ["conda-forge", "pytorch", "nvidia"]
+platforms = ["linux-64"]
+
+[tasks]
+
+[system-requirements]
+cuda = "12"
+
+[dependencies]
+python = "3.11.*"
+pip = "*"
+psycopg = "3.1.19"
+flask = "2.2.5"
+pyyaml = "*"
+pybind11 = "*"
+cuda-nvcc = "*"
+pandas = "*"
+scikit-optimize = "*"
+scikit-learn = "*"
+uwsgi = "*"
+matplotlib = "*"
+h5py = "*"
+hdf5plugin = "*"
+numpy = "*"
+pytorch = { version = "2.*", channel="pytorch" }
+pytorch-cuda = { version = "12.4.*", channel="pytorch" }
+torchvision = { version = "*", channel="pytorch" }
+lightning = "2.*"
+tensorboard = "*"
+datasets = ">=2.15.0"
+"huggingface_hub" = "*"
+diffusers = "*"
+jsonargparse = "*"
+accelerate = "*"

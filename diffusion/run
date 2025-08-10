@@ -1,0 +1,10 @@
+#!/bin/bash
+exec podman -r run --rm -it --user 1000 --device=nvidia.com/gpu=all \
+    --mount type=bind,src="$PWD"/logs,dst=/app/lightning_logs \
+    --mount type=bind,src="$PWD"/checkpoints,dst=/app/checkpoints \
+    --mount type=bind,src="$PWD"/out,dst=/app/out \
+    --mount type=bind,src="$PWD"/tc_cache,dst=/tc_cache \
+    --shm-size=0 \
+    --net=host \
+    -e TORCHINDUCTOR_CACHE_DIR=/tc_cache \
+    prop-diffusion "$@"
