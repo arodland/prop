@@ -167,8 +167,10 @@ class DiffusionModel(L.LightningModule):
         return latents / self.vae.latent_magnitude
 
 class ConditionedDiffusionModel(L.LightningModule):
-    def __init__(self):
+    def __init__(self,
+                 pred_type='epsilon'):
         super().__init__()
+        self.save_hyperparameters()
         self.param_encoder = nn.Sequential(
             nn.Linear(6, 64),
             nn.ReLU(),
@@ -210,10 +212,12 @@ class ConditionedDiffusionModel(L.LightningModule):
         self.scheduler = diffusers.schedulers.DDPMScheduler(
             thresholding=False,
             rescale_betas_zero_snr=False,
+            prediction_type=self.hparams.pred_type,
         )
         self.inference_scheduler = diffusers.schedulers.DDPMScheduler(
             thresholding=False,
             rescale_betas_zero_snr=False,
+            prediction_type=self.hparams.pred_type,
         )
 
     def training_step(self, batch, batch_idx):
