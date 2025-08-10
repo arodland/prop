@@ -12,7 +12,7 @@ if __name__ == "__main__":
         # Don't load VAE from checkpoint
         model.vae = diffusers.models.AutoencoderTiny.from_pretrained("./taesd-iono-finetuned")
     else:
-        model = ConditionedDiffusionModel()
+        model = ConditionedDiffusionModel(pred_type='epsilon')
 
     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints", filename='cdiffusion-' +
                                           '{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
