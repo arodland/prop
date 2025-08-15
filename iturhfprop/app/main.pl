@@ -6,6 +6,8 @@ use Mojo::UserAgent;
 use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
 use FU::Validate;
+use PDL;
+use PDL::IO::HDF5;
 use FindBin;
 
 require "$FindBin::Bin/data.pl";
@@ -44,6 +46,15 @@ sub smeter {
     my $slice = int($relative / 6);
     $slice = 0 if $slice < 0;
     $slice = 9 if $slice > 9;
+    return $slice;
+}
+
+sub sm2 {
+    my ($pr) = @_;
+    my $relative = $pr + 157;
+    my $slice = $relative / 6;
+    $slice = 0 if $slice < 0;
+    $slice = 16 if $slice > 16;
     return $slice;
 }
 
@@ -170,6 +181,79 @@ async sub one_run_p2p($c, %params) {
     };
 
     return \@table;
+}
+
+async sub one_run_area($c, %params) {
+    my ($txlat, $txlon) = parse_locator($params{txloc});
+
+    my $NSLICES = 3;
+    my $LAT_STEP = 180 / $NSLICES;
+
+    my @outputs;
+
+    for my $i (0 .. $NSLICES-1) {
+        my $min_lat = $i * $LAT_STEP - 90;
+        my $max_lat = $min_lat + $LAT_STEP - (($i < $NSLICES - 1) ? 1 : 0);
+
+        say "min: $min_lat max: $max_lat";
+
+        push @outputs, run_iturhfprop(
+            $c, $params{iono_bin},
+            $c->app->home->child('templates', 'worldmap.ep'), {
+                year => (gmtime)[5]+1900,
+                month => (gmtime)[4]+1,
+                hour => $params{run_info}{hour},
+                ssn => $params{run_info}{essn},
+                ($params{txant} eq 'ISOTROPIC'
+                    ? (txant => 'ISOTROPIC', txgos => $params{txgos})
+                    : (txant => "/opt/antennas/$params{txant}.mbp", txgos => 0)
+                ),
+                ($params{rxant} eq 'ISOTROPIC'
+                    ? (rxant => 'ISOTROPIC', rxgos => $params{rxgos})
+                    : (rxant => "/opt/antennas/$params{rxant}.mbp", rxgos => 0)
+                ),
+                txpow => 10 * log($params{txpow} / 1000) / log(10),
+                txlat => $txlat,
+                txlon => $txlon,
+                min_lat => $min_lat,
+                max_lat => $max_lat,
+                rxnoise => $params{rxnoise},
+                snrr => $params{snrr},
+                bw => $params{bw},
+                freq => $params{freq},
+                degree_step => $params{res},
+                reports => "RPT_RXLOCATION | RPT_OPMUF | RPT_BCR | RPT_PR | RPT_SNR",
+            }
+        );
+    }
+
+    my %table;
+    my $prev_lat = -999;
+
+    for my $output (@outputs) {
+        my $output_file = await $output;
+        my $fh = $output_file->open('<') or die $!;
+        my $seen_header;
+        for my $line (<$fh>) {
+            chomp $line;
+            last if $line =~ /\*End Calculated Parameters/;
+            $seen_header = 1, next if $line =~ /\* Calculated Parameters/;
+            next unless $line =~ /\S/;
+            next unless $seen_header;
+            my @fields = map 0+$_, split /\s*,\s*/, $line;
+            my (undef, undef, undef, $lat, $lon, $opmuf, $pr, $snr, $bcr) = @fields;
+            if ($lat != $prev_lat) {
+                push $table{$_}->@*, [] for qw(opmuf pr snr bcr);
+            }
+            $prev_lat = $lat;
+
+            push $table{opmuf}[-1]->@*, $opmuf;
+            push $table{pr}[-1]->@*, sm2($pr);
+            push $table{snr}[-1]->@*, $snr;
+            push $table{bcr}[-1]->@*, $bcr;
+        }
+    }
+    return \%table;
 }
 
 get '/radcom' => sub ($c) {
@@ -320,6 +404,76 @@ get '/planner.json' => async sub ($c) {
             table => $table,
             bands => \@::BANDS,
     });
+};
+
+my $validation_schema_area = {
+    type => 'hash',
+    unknown => 'remove',
+    keys => {
+        txloc => { regex => $locator_pattern },
+        txgos => { num => 1, default => 0 },
+        rxgos => { num => 1, default => 0 },
+        txant => { regex => $antenna_pattern },
+        rxant => { regex => $antenna_pattern },
+        txpow => { num => 1, min => 0.01 },
+        rxnoise => { enum => [ qw(CITY RESIDENTIAL RURAL QUIETRURAL QUIET NOISY) ], default => 'RURAL' },
+        snrr => { num => 1, default => 6 },
+        bw => { num => 1, default => 3000 },
+        freq => { num => 1, default => 14.2 },
+        res => { num => 1, min => 1, max => 5, default => 3 },
+    },
+};
+my $validator_area = FU::Validate->compile($validation_schema_area);
+
+get '/areamap.h5' => async sub($c) {
+    my $tx = $c->render_later->tx;
+
+    my $ua = Mojo::UserAgent->new;
+    my $hl = Ham::Locator->new;
+
+    my $run_info;
+    if (defined($c->param('run_id')) && defined($c->param('ts'))) {
+        $run_info = await $ua->get_p(Mojo::URL->new('run_info.json')->to_abs($API_URL)->query({run_id => $c->param('run_id')}))
+            ->then(sub { $_[0]->result->json });
+        $run_info->{ts} = $c->param('ts');
+    } else {
+        my $url = Mojo::URL->new('latest_hourly.json')->to_abs($API_URL);
+        if (defined($c->param('experiment'))) {
+            $url->query({ experiment => $c->param('experiment') });
+        }
+        $run_info = await $ua->get_p($url)
+            ->then(sub { $_[0]->result->json });
+        $run_info->{ts} = $run_info->{maps}[0]{ts};
+    }
+    $run_info->{hour} = (gmtime($run_info->{ts}))[2];
+
+    my $iono_bin = await get_iono_bin($c, $run_info->{run_id});
+
+    my $params = $validator_area->validate($c->req->params->to_hash);
+
+    my $x = await one_run_area(
+        $c,
+        %$params,
+        iono_bin => $iono_bin,
+        run_info => $run_info,
+    );
+
+    $iono_bin->remove;
+
+    my $h5tmp = Mojo::File::tempfile();
+    {
+        my $h5 = PDL::IO::HDF5->new('>'.$h5tmp);
+        my $group = $h5->group("/maps");
+        for my $k (keys %$x) {
+            $h5->group('/maps')->dataset($k)->set(pdl($x->{$k}), unlimited => 1);
+        }
+        $h5->dataset('ts')->set(pdl($run_info->{ts}));
+        $h5->group('/essn')->dataset('ssn')->set(pdl($run_info->{essn}));
+        $h5->group('/essn')->dataset('sfi')->set(pdl($run_info->{esfi}));
+    }
+
+    $c->res->headers->content_type('application/x-hdf5');
+    $c->render(data => $h5tmp->slurp);
 };
 
 if (defined $ENV{PATH_PREFIX}) {
