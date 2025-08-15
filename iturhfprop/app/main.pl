@@ -265,7 +265,11 @@ get '/planner_table' => async sub($c) {
         $run_info = await $ua->get_p(Mojo::URL->new('run_info.json')->to_abs($API_URL)->query({run_id => $c->param('run_id')}))
             ->then(sub { $_[0]->result->json });
     } else {
-        $run_info = await $ua->get_p(Mojo::URL->new('latest_hourly.json')->to_abs($API_URL))
+        my $url = Mojo::URL->new('latest_hourly.json')->to_abs($API_URL);
+        if (defined($c->param('experiment'))) {
+            $url->query({ experiment => $c->param('experiment') });
+        }
+        $run_info = await $ua->get_p($url)
             ->then(sub { $_[0]->result->json });
     }
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
