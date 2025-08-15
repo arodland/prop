@@ -1,0 +1,31 @@
+PathName "KC2G Online HF Circuit Prediction: Area Map"
+Path.L_tx.lat <%= $txlat %>
+Path.L_tx.lng <%= $txlon %>
+TXAntFilePath <%== $txant %>
+TXGOS <%= $txgos %>
+RXAntFilePath <%== $rxant %>
+RXGOS <%= $rxgos %>
+Path.year <%= $year %>
+Path.month  <%= $month %>
+Path.hour <%= $hour %>
+Path.SSN <%= $ssn %>
+Path.frequency <%= $freq %>
+Path.txpower <%= int($txpow) %>
+Path.BW <%= $bw %>
+Path.SNRr <%= $snrr %>
+Path.SNRXXp 90
+Path.ManMadeNoise <%== $rxnoise %>
+Path.Modulation "ANALOG"
+Path.SorL "SHORTPATH"
+RptFileFormat <%== $reports %>
+LL.lat <%= $min_lat %>
+LL.lng -180.0
+LR.lat <%= $min_lat %>
+LR.lng 180.0
+UL.lat <%= $max_lat %>
+UL.lng -180.0
+UR.lat <%= $max_lat %>
+UR.lng 180.0
+latinc <%= $degree_step %>
+lnginc <%= $degree_step %>
+DataFilePath <%== $data_dir %>

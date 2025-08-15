@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>24-hour prediction</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+%= asset_tag '/planner.css'
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script>
+const modes = <%== Mojo::JSON::to_json($modes) %>;
+const antenna_types = <%== Mojo::JSON::to_json($antenna_types) %>;
+const ant_meta = <%== Mojo::JSON::to_json($antenna_meta) %>;
+const antenna_heights = <%== Mojo::JSON::to_json($antenna_heights) %>;
+const bands = <%== Mojo::JSON::to_json($bands) %>;
+</script>
+</head>
+<body>
+%= include 'header'
+<div class="container">
+<h2>HF Propagation Planner</h2>
+<div class="row mb-3"><div class="col"><div class="card">
+    <div class="card-header"><h4><a data-bs-toggle="collapse" href="#helptext" class="stretched-link text-reset text-decoration-none">Help</a></h4></div>
+    <div class="collapse" id="helptext">
+        <div class="card-body">
+            <p>Words words lots of words</p>
+        </div>
+    </div>
+</div></div></div>
+
+<div x-data="{ 
+    results: null,
+}">
+<form method="post" x-data="{
+    txloc: $persist(''),
+    txant: 'ISOTROPIC',
+    txant_type: $persist('ISOTROPIC'),
+    txgos: $persist(2.16),
+    txant_height: $persist('35ft'),
+    rxant: 'ISOTROPIC',
+    rxant_type: $persist('ISOTROPIC'),
+    rxgos: $persist(2.16),
+    rxant_height: $persist('35ft'),
+    txpow: $persist(100),
+    rxnoise: $persist('RURAL'),
+    traffic: $persist(3),
+    freq: $persist(14.2),
+    bw: 3000,
+    snrr: 6,
+    metric: $persist('itu_opmuf'),
+    async loadResults() {
+        let latest_run = await fetch('/api/latest_run.json').then(res => res.json());
+        let params = new URLSearchParams({
+            freq: this.freq,
+            txpow: this.txpow, grid: this.txloc, txant: this.txant, txgos: this.txgos,
+            rxnoise: this.rxnoise, rxant: this.rxant, rxgos: this.rxgos,
+            metric: this.metric, bw: this.bw, snrr: this.snrr,
+            run_id: latest_run.run_id,
+            ts: latest_run.maps[0].ts,
+        });
+        fetch(`/api/moflof.svg?${params}`).then((res) => {
+            this.results = res.text();
+        });
+    }
+    }"
+    x-effect="if (traffic != -1) {
+        bw = modes[traffic].bw;
+        snrr = modes[traffic].snr;
+    }
+    txant = txant_type;
+    if (ant_meta[txant_type]?.height) { txant += '@' + txant_height }
+    rxant = rxant_type;
+    if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
+    "
+    @submit.prevent="await loadResults()"
+    >
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">Global</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="txpow">Power (W)</label>
+                    <div class="col-md-4">
+                        <input type="text" inputmode="numeric" class="form-control"  name="txpow" id="txpow" value="100" x-model.lazy.number="txpow">
+                    </div>
+
+                    <label class="col-md-2 col-form-label text-md-end" for="traffic">Traffic</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="traffic" name="traffic" x-model.number="traffic">
+                            <option value="-1">User Defined</option>
+                            <template x-for="(mode, modeidx) in modes">
+                                <option :value="modeidx" x-text="`${mode.name} (BW=${mode.bw}Hz / SNR=${mode.snr}dB)`" :selected="modeidx == traffic && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="rxnoise">Man Made Noise</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
+                            <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
+                            <option value="CITY">City (-140 dBW/Hz @ 3 MHz)</option>
+                            <option value="RESIDENTIAL">Residential (-145 dBW/Hz @ 3 MHz)</option>
+                            <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
+                            <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
+                            <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
+                        </select>
+                    </div>
+                    <template x-if="traffic == -1" x-collapse>
+                        <label class="col-md-2 col-form-label text-md-end" for="bw">Bandwidth (Hz)</label>
+                    </template>
+                    <template x-if="traffic == -1" x-collapse>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" inputmode="numeric" name="bw" id="bw" x-model="bw">
+                        </div>
+                    </template>
+                </div>
+                <template x-if="traffic == -1" x-collapse>
+                    <div class="row mb-3">
+                        <label class="col-md-2 offset-md-6 text-md-end" for="snrr">SNR (dB)</label>
+                        <div class="col-md-4">
+                            <input type="text" class="form-control" inputmode="numeric" name="snrr" id="snrr" x-model="snrr">
+                        </div>
+                    </div>
+                </template>
+                <div class="row mb-3">
+                    <label class="col-md-2 col-form-label text-md-end" for="metric">Plot</label>
+                    <div class="col-md-4">
+                        <select class="form-select" id="metric" x-model="metric">
+                            <option value="itu_opmuf">OPMUF</option>
+                            <option value="itu_bcr">BCR</option>
+                            <option value="itu_pr">PR (Signal strength)</option>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="metric == 'itu_bcr' || metric == 'itu_pr'">
+                    <div class="row mb-3">
+                        <label class="col-md-2 col-form-label text-md-end" for="band">Band</label>
+                        <div class="col-md-4">
+                            <select class="form-select" id="freq" name="freq" x-model="freq">
+                                <template x-for="band in bands">
+                                    <option :value="band[1]" x-text="band[0]" :selected="band[1] == freq && 'selected'">
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">TX Site</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="txloc">Locator</label>
+                    <div class="col-md-8">
+                        <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator" autofocus>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="txant_type">Antenna</label>
+                    <div class="col-md-8">
+                        <select class="form-select" id="txant_type" name="txant_type" x-model="txant_type">
+                            <template x-for="ant in antenna_types">
+                                <option :value="ant.key" x-text="ant.name" :selected="ant.key == txant_type && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="ant_meta[txant_type]?.height">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="txant_height">Height</label>
+                        <div class="col-md-8">
+                            <select class="form-select" id="txant_height" name="txant_height" x-model="txant_height">
+                                <template x-for="height in antenna_heights">
+                                    <option :value="height.key" x-text="height.name" :selected="height.key == txant_height && 'selected'">
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="ant_meta[txant_type]?.gos">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="txgos">Gain (dBi)</label>
+                        <div class="col-md-8">
+                            <input class="form-control" type="text" inputmode="numeric" name="gos" id="txgos" x-model.lazy.number="txgos">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-form">
+            <div class="card-header"><h4 class="card-title">RX Sites</h4></div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <label class="col-md-4 col-form-label text-md-end" for="rxant_type">Antenna</label>
+                    <div class="col-md-8">
+                        <select class="form-select" id="rxant_type" name="rxant_type" x-model="rxant_type">
+                            <template x-for="ant in antenna_types">
+                                <option :value="ant.key" x-text="ant.name" :selected="ant.key == rxant_type && 'selected'">
+                            </template>
+                        </select>
+                    </div>
+                </div>
+                <template x-if="ant_meta[rxant_type]?.height">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="rxant_height">Height</label>
+                        <div class="col-md-8">
+                            <select class="form-select" id="rxant_height" name="rxant_height" x-model="rxant_height">
+                                <template x-for="height in antenna_heights">
+                                    <option :value="height.key" x-text="height.name" :selected="height.key == rxant_height && 'selected'">
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </template>
+                <template x-if="ant_meta[rxant_type]?.gos">
+                    <div class="row mb-3">
+                        <label class="col-md-4 col-form-label text-md-end" for="rxgos">Gain (dBi)</label>
+                        <div class="col-md-8">
+                            <input class="form-control" type="text" inputmode="numeric" name="gos" id="rxgos" x-model.lazy.number="rxgos">
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-4">
+    <button class="btn btn-primary" type="submit">Run Prediction</button>
+</div>
+</form>
+<template x-if="results">
+    <div class="big" x-html="results"></div>
+</template>
+</div>
+</div>
+%= include 'footer'
+</body>
+</html>
