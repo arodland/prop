@@ -199,6 +199,7 @@ function getGridSquare() {
                 traffic: $persist(3),
                 bw: 3000,
                 snrr: 6,
+                stations: $persist([]),
                 populateResults: populateResults,
             }"
             x-effect="
@@ -206,10 +207,26 @@ function getGridSquare() {
                     bw = modes[traffic].bw;
                     snrr = modes[traffic].snr;
                 }
-                txant = txant_type;
-                if (ant_meta[txant_type]?.height) { txant += '@' + txant_height }
-                rxant = rxant_type;
-                if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
+                
+                // Handle TX antenna selection
+                if (txant_type.startsWith('station:')) {
+                    const stationName = txant_type.replace('station:', '');
+                    const station = stations.find(s => s.name === stationName);
+                    txant = station ? JSON.stringify(station) : txant_type;
+                } else {
+                    txant = txant_type;
+                    if (ant_meta[txant_type]?.height) { txant += '@' + txant_height }
+                }
+                
+                // Handle RX antenna selection
+                if (rxant_type.startsWith('station:')) {
+                    const stationName = rxant_type.replace('station:', '');
+                    const station = stations.find(s => s.name === stationName);
+                    rxant = station ? JSON.stringify(station) : rxant_type;
+                } else {
+                    rxant = rxant_type;
+                    if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
+                }
             "
             @submit.prevent="await populateResults()"
         >
@@ -310,7 +327,6 @@ function getGridSquare() {
                     <div class="collapse" id="station-definition">
                         <div class="card-body"
                             x-data="{
-                                stations: $persist([]),
                                 currentStation: $persist(''),
                                 editingStation: null,
                                 newStationName: '',
@@ -324,7 +340,7 @@ function getGridSquare() {
                                         name: this.newStationName.trim(),
                                         antennas: {}
                                     };
-                                    this.stations.push(station);
+                                    this.$parent.stations.push(station);
                                     this.currentStation = station.name;
                                     this.newStationName = '';
                                     this.editingStation = station.name;
@@ -336,7 +352,7 @@ function getGridSquare() {
                                     if (!station) return;
                                     
                                     // Check if new name already exists
-                                    if (this.stations.some(s => s.name === newName.trim() && s.name !== oldName)) {
+                                    if (this.$parent.stations.some(s => s.name === newName.trim() && s.name !== oldName)) {
                                         alert('A station with this name already exists');
                                         return;
                                     }
@@ -353,7 +369,7 @@ function getGridSquare() {
                                 },
 
                                 deleteStation(stationName) {
-                                    this.stations = this.stations.filter(s => s.name !== stationName);
+                                    this.$parent.stations = this.$parent.stations.filter(s => s.name !== stationName);
                                     if (this.currentStation === stationName) {
                                         this.currentStation = '';
                                     }
@@ -363,7 +379,7 @@ function getGridSquare() {
                                 },
 
                                 getStation(name) {
-                                    return this.stations.find(s => s.name === name);
+                                    return this.$parent.stations.find(s => s.name === name);
                                 },
 
                                 updateAntenna(stationName, band, field, value) {
@@ -397,7 +413,7 @@ function getGridSquare() {
                                     <template x-if="renamingStation !== currentStation">
                                         <select class="form-select" x-model="currentStation" @change="loadStation(currentStation)">
                                             <option value="">Select a station...</option>
-                                            <template x-for="station in stations">
+                                            <template x-for="station in $parent.stations">
                                                 <option :value="station.name" x-text="station.name"></option>
                                             </template>
                                         </select>
@@ -557,10 +573,17 @@ function getGridSquare() {
                                         <template x-for="ant in antenna_types">
                                             <option :value="ant.key" x-text="ant.name" :selected="ant.key == txant_type && 'selected'">
                                         </template>
+                                        <template x-if="stations && stations.length > 0">
+                                            <optgroup label="Defined Stations">
+                                                <template x-for="station in stations">
+                                                    <option :value="'station:' + station.name" x-text="'📡 ' + station.name" :selected="'station:' + station.name == txant_type && 'selected'">
+                                                </template>
+                                            </optgroup>
+                                        </template>
                                     </select>
                                 </div>
                             </div>
-                            <template x-if="ant_meta[txant_type]?.height">
+                            <template x-if="ant_meta[txant_type]?.height && !txant_type.startsWith('station:')">
                                 <div class="row mb-3">
                                     <label class="col-md-4 col-form-label text-md-end" for="txant_height">Height</label>
                                     <div class="col-md-8">
@@ -572,7 +595,7 @@ function getGridSquare() {
                                     </div>
                                 </div>
                             </template>
-                            <template x-if="ant_meta[txant_type]?.gos">
+                            <template x-if="ant_meta[txant_type]?.gos && !txant_type.startsWith('station:')">
                                 <div class="row mb-3">
                                     <label class="col-md-4 col-form-label text-md-end" for="txgos">Gain (dBi)</label>
                                     <div class="col-md-8">
@@ -609,10 +632,17 @@ function getGridSquare() {
                                         <template x-for="ant in antenna_types">
                                             <option :value="ant.key" x-text="ant.name" :selected="ant.key == rxant_type && 'selected'">
                                         </template>
+                                        <template x-if="stations && stations.length > 0">
+                                            <optgroup label="Defined Stations">
+                                                <template x-for="station in stations">
+                                                    <option :value="'station:' + station.name" x-text="'📡 ' + station.name" :selected="'station:' + station.name == rxant_type && 'selected'">
+                                                </template>
+                                            </optgroup>
+                                        </template>
                                     </select>
                                 </div>
                             </div>
-                            <template x-if="ant_meta[rxant_type]?.height">
+                            <template x-if="ant_meta[rxant_type]?.height && !rxant_type.startsWith('station:')">
                                 <div class="row mb-3">
                                     <label class="col-md-4 col-form-label text-md-end" for="rxant_height">Height</label>
                                     <div class="col-md-8">
@@ -624,7 +654,7 @@ function getGridSquare() {
                                     </div>
                                 </div>
                             </template>
-                            <template x-if="ant_meta[rxant_type]?.gos">
+                            <template x-if="ant_meta[rxant_type]?.gos && !rxant_type.startsWith('station:')">
                                 <div class="row mb-3">
                                     <label class="col-md-4 col-form-label text-md-end" for="rxgos">Gain (dBi)</label>
                                     <div class="col-md-8">

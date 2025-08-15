@@ -316,7 +316,7 @@ my $locator_pattern = qr/^
     |-?\d+(?:\.\d+)\s*,\s*-?\d+(?:\.\d+))
 $/xi;
 
-my $antenna_pattern = qr/^[a-z0-9_\@.-]+$/i;
+my $antenna_pattern = qr/^(?:[a-z0-9_\@.-]+|\{.*\})$/i;
 
 my $validation_schema_p2p = {
     type => 'hash',
