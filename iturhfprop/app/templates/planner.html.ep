@@ -413,11 +413,11 @@ function getGridSquare() {
         </template>
 
         <div class="row d-block d-md-none" id="bcr-table-normal">
-            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR1: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>
+            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>
         </div>
 
         <div class="row d-none d-md-block" id="bcr-table-md">
-            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR2: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
+            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
         </div>
 
         <div class="row row-cols-1 row-cols-lg-2 gx-2 gx-lg-3 gx-xl-4 gx-xxl-5 d-flex" id="results-row">
