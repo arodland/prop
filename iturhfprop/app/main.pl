@@ -1,10 +1,14 @@
 #!/usr/bin/perl
+use v5.40;
 use Mojolicious::Lite -signatures, -async_await;
 use Mojo::File;
 use Mojo::UserAgent;
 use Mojo::IOLoop::ReadWriteFork;
 use Ham::Locator;
 use FU::Validate;
+use FindBin;
+
+require "$FindBin::Bin/data.pl";
 
 plugin 'AccessLog';
 app->helper(cache => sub { state $cache = Mojo::Cache->new });
@@ -15,49 +19,6 @@ if (defined $ENV{KC2G_API}) {
 } else {
     $API_URL = Mojo::URL->new("http://localhost/")->port($ENV{API_PORT});
 }
-
-my @TARGETS = (
-    [ '5W Western Samoa', '-13.76, -172.11' ],
-    [ 'KH6 Honolulu', '21.31, -157.86' ],
-    [ 'KL Anchorage', '61.22, -149.9' ],
-    [ 'W San Francisco', '37.77, -122.42' ],
-    [ 'VE Vancouver', '49.28, -121.12' ],
-    [ 'W New Orleans', '29.95, -90.07' ],
-    [ 'W Washington DC', '38.90, -77.04' ],
-    [ 'OA Lima', '-12.05, -77.04' ],
-    [ 'LU Buenos Aires', '-34.63, -58.38' ],
-    [ 'VE Quebec', '46.82, -71.21' ],
-    [ 'PY Rio de Janeiro', '-22.91, -43.17' ],
-    [ 'EA8 Canary Isles', '28.29, -16.63' ],
-    [ 'F Paris', '48.86, 2.35' ],
-    [ 'LA Trondheim', '63.34, 10.40' ],
-    [ 'I Rome', '41.90, 12.50' ],
-    [ 'ZS Johannesburg', '-26.20, 28.05' ],
-    [ '4X Tel Aviv', '32.08, 34.78' ],
-    [ '5Z Nairobi', '-1.29, 36.82' ],
-    [ 'UA Moscow', '55.76, 37.62' ],
-    [ '3B8 Mauritius', '-20.35, 57.55' ],
-    [ 'VU Hyderabad', '17.39, 78.49' ],
-    [ '9V Singapore', '1.352, 103.82' ],
-    [ 'VK Perth', '-31.95, 115.86' ],
-    [ 'UA Yakutsk, Siberia', '62.04, 129.74' ],
-    [ 'JA Tokyo', '35.68, 139.65' ],
-    [ 'VK Sydney', '-33.86, 151.21' ],
-    [ 'ZL Wellington', '-41.29, 174.78' ],
-);
-
-my @BANDS = (
-    ['10m', 28.850, 'contest'],
-    ['12m', 24.940, 'non-contest'],
-    ['15m', 21.225, 'contest'],
-    ['17m', 18.118, 'non-contest'],
-    ['20m', 14.175, 'contest'],
-    ['30m', 10.120, 'non-contest'],
-    ['40m', 7.150, 'contest'],
-    ['60m', 5.330, 'non-contest'],
-    ['80m', 3.650, 'contest'],
-    ['160m', 1.900, 'contest'],
-);
 
 sub color {
     my ($bcr) = @_;
@@ -172,7 +133,7 @@ async sub one_run_p2p($c, %params) {
             rxnoise => $params{rxnoise},
             snrr => $params{snrr},
             bw => $params{bw},
-            freqs => [ map $_->[1], @BANDS ],
+            freqs => [ map $_->[1], @::BANDS ],
         });
 
     my $fh = $output_file->open('<');
@@ -222,11 +183,35 @@ get '/radcom_beta' => sub ($c) {
 };
 
 get '/planner' => sub ($c) {
-    $c->stash(targets => \@TARGETS);
+    $c->stash(
+        targets => \@::TARGETS,
+        bands => \@::BANDS,
+        modes => \@::MODES,
+        antenna_types => \@::ANTENNA_TYPES,
+        antenna_meta => \%::ANTENNA_META,
+        antenna_heights => \@::ANTENNA_HEIGHTS,
+    );
 };
 
 get '/planner_beta' => sub ($c) {
-    $c->stash(targets => \@TARGETS);
+    $c->stash(
+        targets => \@::TARGETS,
+        bands => \@::BANDS,
+        modes => \@::MODES,
+        antenna_types => \@::ANTENNA_TYPES,
+        antenna_meta => \%::ANTENNA_META,
+        antenna_heights => \@::ANTENNA_HEIGHTS,
+    );
+};
+
+get '/area' => sub ($c) {
+    $c->stash(
+        bands => \@::BANDS,
+        modes => \@::MODES,
+        antenna_types => \@::ANTENNA_TYPES,
+        antenna_meta => \%::ANTENNA_META,
+        antenna_heights => \@::ANTENNA_HEIGHTS,
+    );
 };
 
 async sub get_iono_bin($c, $run_id) {
@@ -267,7 +252,6 @@ my $validation_schema_p2p = {
         tz_offset => { int => 1, min => -24, max => 24, default => 0 },
     },
 };
-
 my $validator_p2p = FU::Validate->compile($validation_schema_p2p);
 
 get '/planner_table' => async sub($c) {
@@ -299,7 +283,7 @@ get '/planner_table' => async sub($c) {
     );
 
     $c->stash(table => $table);
-    $c->stash(bands => \@BANDS);
+    $c->stash(bands => \@::BANDS);
     $c->stash(run_info => $run_info);
     $c->stash(start_hour => $params->{start_hour});
     $c->stash(tz_offset => $params->{tz_offset});
@@ -328,7 +312,7 @@ get '/planner.json' => async sub ($c) {
 
     $c->render(json => {
             table => $table,
-            bands => \@BANDS,
+            bands => \@::BANDS,
     });
 };
 

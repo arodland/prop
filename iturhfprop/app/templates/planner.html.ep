@@ -12,75 +12,13 @@
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script>
-const modes = [
-    { name: "WSPR", bw: 2500, snr: -29 },
-    { name: "FT8", bw: 50, snr: -3 },
-    { name: "CW", bw: 500, snr: 0 },
-    { name: "SSB (Usable)", bw: 3000, snr: 6 },
-    { name: "SSB (Marginal)", bw: 3000, snr: 15 },
-    { name: "SSB (Commercial)", bw: 3000, snr: 33 },
-    { name: "AM (Fair)", bw: 5000, snr: 36 },
-    { name: "AM (Good)", bw: 5000, snr: 48 },
-    // { name: "SWBC (Fair)", bw: 5000, snr: 36 },
-    // { name: "SWBC (Good)", bw: 5000, snr: 48 },
-    // { name: "Voice(1)/600bps Data", bw: 3000, snr: 15 },
-    // { name: "Voice(3)/1200bps Data", bw: 3000, snr: 17 },
-    // { name: "Voice(5)/2400bps Data", bw: 3000, snr: 19 },
-    // { name: "4800bps MIL-110b Data", bw: 3000, snr: 22 },
-    // { name: "9600bps MIL-110b Data", bw: 3000, snr: 33 }
-];
-const antenna_types = [
-    { key: 'ISOTROPIC', name: 'Isotropic' },
-    { key: 'dipole', name: 'Dipole' },
-    { key: '135doublet', name: "135' Doublet" },
-    { key: 'vert-quarter', name: 'Vertical (1/4 WL)' },
-    { key: 'vert-fiveeight', name: 'Vertical (5/8 WL)' },
-    { key: 'vert-43foot', name: "Vertical (43')" },
-    { key: 'yagi-2el', name: 'Yagi (2el)' },
-    { key: 'yagi-3el', name: 'Yagi (3el)' },
-    { key: 'yagi-4el', name: 'Yagi (4el)' },
-    { key: 'yagi-5el', name: 'Yagi (5el)' },
-    { key: 'yagi-7el', name: 'Yagi (7el)' },
-    { key: 'yagi-9el', name: 'Yagi (9el)' },
-    { key: 'yagi-11el', name: 'Yagi (11el)' },
-];
-
-const ant_meta = {
-    'ISOTROPIC': { gos: true },
-    'dipole': { height: true },
-    '135doublet': { height: true },
-    'yagi-2el': { height: true },
-    'yagi-3el': { height: true },
-    'yagi-4el': { height: true },
-    'yagi-5el': { height: true },
-    'yagi-7el': { height: true },
-    'yagi-9el': { height: true },
-    'yagi-11el': { height: true },
-};
-
-const antenna_heights = [
-    { key: '0.125wl', name: '1/8 wavelength' },
-    { key: '0.25wl', name: '1/4 wavelength' },
-    { key: '0.375wl', name: '3/8 wavelength' },
-    { key: '0.5wl', name: '1/2 wavelength' },
-    { key: '0.75wl', name: '3/4 wavelength' },
-    { key: '1wl', name: '1 wavelength' },
-    { key: '1.5wl', name: '1½ wavelength' },
-    { key: '2wl', name: '2 wavelengths' },
-    { key: '2.5wl', name: '2½ wavelengths '},
-    { key: '10ft', name: '10 feet (3m)' },
-    { key: '20ft', name: '20 feet (6m)' },
-    { key: '35ft', name: '35 feet (10m)' },
-    { key: '50ft', name: '50 feet (15m)' },
-    { key: '75ft', name: '75 feet (23m)' },
-    { key: '100ft', name: '100 feet (30m)' },
-    { key: '125ft', name: '125 feet (38m)' },
-    { key: '150ft', name: '150 feet (46m)' },
-    { key: '200ft', name: '200 feet (61m)' },
-];
+const modes = <%== Mojo::JSON::to_json($modes) %>;
+const antenna_types = <%== Mojo::JSON::to_json($antenna_types) %>;
+const ant_meta = <%== Mojo::JSON::to_json($antenna_meta) %>;
+const antenna_heights = <%== Mojo::JSON::to_json($antenna_heights) %>;
 
 document.addEventListener('alpine:init', () => {
-    Alpine.store('targets', <%== Mojo::JSON::encode_json($targets) %>);
+    Alpine.store('targets', <%== Mojo::JSON::to_json($targets) %>);
 });
 
 function elementInViewport(el) {
