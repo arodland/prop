@@ -271,7 +271,6 @@ get '/planner_table' => async sub($c) {
     $run_info->{hour} = (gmtime($run_info->{maps}[0]{ts}))[2];
 
     my $iono_bin = await get_iono_bin($c, $run_info->{run_id});
-    $c->stash(iono_bin => $iono_bin);
 
     my $params = $validator_p2p->validate($c->req->params->to_hash);
 
@@ -281,6 +280,7 @@ get '/planner_table' => async sub($c) {
         iono_bin => $iono_bin,
         run_info => $run_info,
     );
+    $iono_bin->remove;
 
     $c->stash(table => $table);
     $c->stash(bands => \@::BANDS);
@@ -309,6 +309,8 @@ get '/planner.json' => async sub ($c) {
         iono_bin => $iono_bin,
         run_info => $run_info,
     );
+
+    $iono_bin->remove;
 
     $c->render(json => {
             table => $table,
