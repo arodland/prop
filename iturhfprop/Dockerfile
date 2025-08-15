@@ -1,4 +1,4 @@
-FROM perl:5.40.2 AS perl-base
+FROM perl:5.42.0 AS perl-base
 RUN apt-get update && apt-get install -y build-essential libhdf5-dev
 
 FROM perl-base AS perl-cpm
@@ -10,14 +10,19 @@ COPY ITU-R-HF /src
 
 WORKDIR /src/P372/Linux
 RUN make OPTIMIZE='-O3 -flto -march=native'
+# RUN make OPTIMIZE='-O1 -g'
 
 WORKDIR /src/P533/Linux
 RUN make OPTIMIZE='-O3 -flto -march=native'
+# RUN make OPTIMIZE='-O1 -g'
 
 WORKDIR /src/ITURHFProp/Linux
 RUN make OPTIMIZE='-O3 -flto -march=native'
+# RUN make OPTIMIZE='-O1 -g'
 
 FROM perl-cpm AS perl-deps
+RUN MAKEFLAGS=-j24 cpm install -g PDL
+RUN cpm install -g MAUKE/EV-4.34_002.tar.gz # Stable EV is broken on perl 5.42
 COPY cpanfile .
 RUN cpm install -g
 
@@ -37,6 +42,7 @@ COPY ./app /app
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--verbose", "--"]
 ENV MOJO_REVERSE_PROXY=1
-CMD perl -I/app/lib /app/main.pl prefork -m production -w 2 -s 16 -l "http://*:$ITURHFPROP_PORT"
 ENV PATH_PREFIX=/hfprop/
+CMD perl -I/app/lib /app/main.pl prefork -m production -w 2 -s 16 -l "http://*:$ITURHFPROP_PORT"
+# CMD perl -I/app/lib /app/main.pl prefork -w 2 -s 16 -l "http://*:$ITURHFPROP_PORT"
 # CMD perl -I/app/lib /app/main.pl daemon -l "http://*:$ITURHFPROP_PORT"

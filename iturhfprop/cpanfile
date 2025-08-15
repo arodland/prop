@@ -6,3 +6,6 @@ requires 'Net::DNS::Native';
 requires 'Future::AsyncAwait';
 requires 'FU::Validate';
 requires 'Mojolicious::Plugin::AccessLog';
+requires 'FindBin';
+requires 'PDL';
+requires 'PDL::IO::HDF5' => '0.762';
