@@ -265,3 +265,35 @@ nav span.heading {
     padding-right: 0;
   }
 }
+
+/* Station Definition Widget Styles */
+#station-definition .table th {
+    font-size: 0.875rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#station-definition .table td {
+    vertical-align: middle;
+    padding: 0.375rem;
+}
+
+#station-definition .form-select-sm,
+#station-definition .form-control-sm {
+    font-size: 0.8rem;
+}
+
+#station-definition .table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#station-definition .d-flex.gap-1 > * {
+    flex: 1;
+}
+
+#station-definition .d-flex.gap-1 > input[type="number"] {
+    max-width: 80px;
+    flex: 0 0 auto;
+}

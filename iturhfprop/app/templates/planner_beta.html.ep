@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>24-hour prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-SgOJa3DmI69IUzQ2PVdRZhwQ+dy64/BUtbMJw1MZ8t5HZApcHrRKUc4W0kG879m7" crossorigin="anonymous">
+    <%= asset_tag '/planner.css' %>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.5/dist/js/bootstrap.bundle.min.js" integrity="sha384-k6d4wzSIapyDyv1kpU366/PK5hCdSbCRGRCMv+eplOQJWyd1fbcAu9OCUj5zNLiq" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/intersect@3.x.x/dist/cdn.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script>
+const modes = <%== Mojo::JSON::to_json($modes) %>;
+const antenna_types = <%== Mojo::JSON::to_json($antenna_types) %>;
+const ant_meta = <%== Mojo::JSON::to_json($antenna_meta) %>;
+const antenna_heights = <%== Mojo::JSON::to_json($antenna_heights) %>;
+
+document.addEventListener('alpine:init', () => {
+    Alpine.store('targets', <%== Mojo::JSON::to_json($targets) %>);
+});
+
+function elementInViewport(el) {
+    var rect = el.getBoundingClientRect();
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    var w = window.innerWidth || document.documentElement.clientWidth
+    return (
+        (
+            ( rect.top >= 0 && rect.top <= h ) ||
+            ( rect.bottom >= 0 && rect.bottom <= h ) ||
+            ( rect.top < 0 && rect.bottom > h )
+        ) && (
+            ( rect.left >= 0 && rect.left <= w ) ||
+            ( rect.right >= 0 && rect.right <= w ) ||
+            ( rect.left < 0 && rect.right > w)
+        )
+    );
+}
+
+async function populateResults() {
+    tgts = [...Alpine.store('targets')];
+    if (this.custom_rx_enable) {
+        tgts.unshift([ 'Custom', this.custom_rx_loc ]);
+    }
+
+    let results_by_name = {};
+    for (const result of this.results) {
+        results_by_name[result.name] = result;
+    }
+
+    this.global_error = null;
+
+    let latest_run_id = await fetch('https://prop.kc2g.com/api/latest_hourly.json')
+        .then(res => res.json())
+        .then(d => d.run_id)
+        .catch(err => {
+            this.global_error = "Error fetching latest run, GIRO may be down. Please try again later.";
+            console.error(err);
+        });
+
+    this.results.length = 0;
+
+    if (!latest_run_id) {
+        return;
+    }
+
+    for (const [i, target] of tgts.entries()) {
+        if (results_by_name[target[0]]) {
+            this.results[i] = results_by_name[target[0]];
+        } else {
+            this.results[i] = {
+                name: target[0],
+            };
+        }
+        this.results[i].needs_load = true;
+        this.results[i].loading = false;
+        this.results[i].params = new URLSearchParams({
+            txpow: this.txpow, txloc: this.txloc, txant: this.txant, txgos: this.txgos,
+            rxnoise: this.rxnoise, rxant: this.rxant, rxgos: this.rxgos,
+            bw: this.bw, snrr: this.snrr,
+            rxloc: target[1],
+            tz_offset: this.tz_offset, start_hour: this.start_hour,
+            run_id: latest_run_id,
+        });
+    }
+}
+
+async function loadResult(result) {
+    if (result.loading || !result.needs_load) {
+        return;
+    }
+    result.needs_load = false;
+    result.loading = true;
+    fetch(`planner_table?${result.params}`).then((res) => {
+        result.content = res.text();
+        result.loading = false;
+    }, (err) => {
+        result.content = "Error"
+        result.loading = false;
+    });
+}
+
+function getGridSquare() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject('Geolocation is not supported by this browser.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition((position) => {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+
+            // Field calculation (A-R)
+            const lon_field = String.fromCharCode(65 + Math.floor((lon + 180) / 20));
+            const lat_field = String.fromCharCode(65 + Math.floor((lat + 90) / 10));
+
+            // Square calculation (0-9)
+            const lon_square = Math.floor(((lon + 180) % 20) / 2).toString();
+            const lat_square = Math.floor(((lat + 90) % 10) / 1).toString();
+
+            // Subsquare calculation (a-x)
+            const lon_subsquare = String.fromCharCode(97 + Math.floor(((lon + 180) % 2) * 12));
+            const lat_subsquare = String.fromCharCode(97 + Math.floor(((lat + 90) % 1) * 24));
+
+            // Combine all parts to form the 6-character grid square
+            const grid_square = lon_field + lat_field + lon_square + lat_square + lon_subsquare + lat_subsquare;
+
+            resolve(grid_square);
+        }, (error) => {
+            reject(error.message);
+        });
+    });
+}
+
+    </script>
+</head>
+
+<body>
+
+%= include 'header'
+
+<div class="container-xxl">
+    <h2>HF Propagation Planner</h2>
+
+    <div class="card mb-4">
+        <div class="card-header"><h4 class="position-relative"><a data-bs-toggle="collapse" href="#helptext" class="stretched-link text-reset text-decoration-none">Help</a></h4></div>
+        <div class="collapse" id="helptext">
+            <div class="card-body">
+                <p>This is an HF propagation planning tool, similar to the
+                <a href="https://soundbytes.asia/proppy/radcom">Radcom Predictions]</a> found on Proppy (which are in
+                turn based on the charts found in the back of RSGB's RadCom magazine). While other tools, like VOACAP
+                and Proppy, are based on sunspot-number curves and tables of "monthly average" ionospheric conditions,
+                this planner uses a 24-hour prediction based on the prop.kc2g.com realtime model. In other words,
+                they're the Farmer's Almanac, and we're the weather forecast.</p>
+                <p>Enter your location and click the button, and you will see charts presented for a variety of
+                locations around the globe. Each chart has a column for each hour of the day, and a row for each amateur
+                band. The cell at that row and column indicates the predicted probability of communication being
+                possible on the selected mode (BCR, indicated by color from blue to red), and the predicted signal
+                strength, in S-units. The number will be bold if it exceeds the predicted manmade noise strength (in the
+                25th column).</p>
+                <p>By default the times shown are in UTC, with midnight UTC on the left. You can also choose to have the
+                headings in local time for your time zone, and to have the table start at midnight local time, or at the
+                current hour.</p>
+                <p>You can adjust the antennas on each side of the path. You can choose an antenna type, and for horizontal
+                antennas you can also choose a height above ground. A height in feet or meters will be the same height above
+                ground for all bands, whereas a height in wavelengths represents a different antenna for each band. If you
+                select the "Isotropic" antenna you can input a gain value, which will be used for <i>every</i> direction and
+                elevation. An isotropic antenna with positive gain is completely impossible, but it comes in handy for
+                simulating an antenna that you can't find on the list.</p>
+                <p>With the "Custom Site" option you can add one more RX site which will show up at the start of the
+                list.</p>
+                <p>As with all forecasts these aren't 100% reliable, and you shouldn't be surprised if you can't make a
+                contact that it says you should, or if the band is open when it says it isn't. But I hope that you will find
+                this a useful tool both for casual use and for planning contest weekends.</p>
+            </div>
+        </div> <!-- helptext -->
+    </div> <!-- help card -->
+
+    <div x-data="{ results: [], global_error: null }">
+        <form
+            method="post"
+            x-data="{
+                txloc: $persist(''),
+                txant: 'ISOTROPIC',
+                txant_type: $persist('ISOTROPIC'),
+                txgos: $persist(2.16),
+                txant_height: $persist('35ft'),
+                rxant: 'ISOTROPIC',
+                rxant_type: $persist('ISOTROPIC'),
+                rxgos: $persist(2.16),
+                rxant_height: $persist('35ft'),
+                txpow: $persist(100),
+                rxnoise: $persist('RURAL'),
+                custom_rx_enable: false,
+                custom_rx_loc: '',
+                tz_offset: $persist(0),
+                start_hour: $persist('ZERO'),
+                traffic: $persist(3),
+                bw: 3000,
+                snrr: 6,
+                populateResults: populateResults,
+            }"
+            x-effect="
+                if (traffic != -1) {
+                    bw = modes[traffic].bw;
+                    snrr = modes[traffic].snr;
+                }
+                txant = txant_type;
+                if (ant_meta[txant_type]?.height) { txant += '@' + txant_height }
+                rxant = rxant_type;
+                if (ant_meta[rxant_type]?.height) { rxant += '@' + rxant_height }
+            "
+            @submit.prevent="await populateResults()"
+        >
+
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="card card-form mb-3">
+                    <div class="card-header"><h4 class="card-title">Global</h4></div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="txpow">Power (W)</label>
+                            <div class="col-md-8">
+                                <input type="text" inputmode="numeric" class="form-control"  name="txpow" id="txpow" value="100" x-model.lazy.number="txpow">
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="rxnoise">Man Made Noise</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="rxnoise" name="rxnoise" x-model="rxnoise">
+                                    <option value="NOISY">Noisy (-137 dBW/Hz @ 3 MHz)</option>
+                                    <option value="CITY">City (-140 dBW/Hz @ 3 MHz)</option>
+                                    <option value="RESIDENTIAL">Residential (-145 dBW/Hz @ 3 MHz)</option>
+                                    <option value="RURAL">Rural (-150 dBW/Hz @ 3 MHz)</option>
+                                    <option value="QUIET">Quiet (-153 dBW/Hz @ 3 MHz)</option>
+                                    <option value="QUIETRURAL">Quiet Rural (-164 dBW/Hz @ 3 MHz)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="tz_offset">Timezone Offset</label>
+                            <div class="col-md-4">
+                                <input type="number" class="form-control" min="-12" max="14" name="tz_offset" id="tz_offset" x-model="tz_offset">
+                            </div>
+                            <div class="col-md-4 col-sm-4">
+                                <button class="btn btn-primary" @click.prevent="tz_offset = Math.floor((new Date()).getTimezoneOffset() / -60)">Get from Browser</button>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="start_hour">Starting Hour</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="start_hour" name="start_hour" x-model="start_hour">
+                                    <option value="ZERO">00Z</option>
+                                    <option value="ZERO_LOCAL">00 Local</option>
+                                    <option value="CURRENT">Current</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div> <!-- global card -->
+            </div>
+            <div class="col-md-6">
+                <div class="card card-form mb-3">
+                    <div class="card-header"><h4 class="card-title">Traffic</div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <label class="col-md-4 col-form-label text-md-end" for="traffic">Mode</label>
+                            <div class="col-md-8">
+                                <select class="form-select" id="traffic" name="traffic" x-model.number="traffic">
+                                    <option value="-1">User Defined</option>
+                                    <template x-for="(mode, modeidx) in modes">
+                                        <option :value="modeidx" x-text="`${mode.name} (BW=${mode.bw}Hz / SNR=${mode.snr}dB)`" :selected="modeidx == traffic && 'selected'">
+                                    </template>
+                                </select>
+                            </div>
+                        </div>
+                        <template x-if="traffic == -1" x-collapse>
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-form-label text-md-end" for="bw">Bandwidth (Hz)</label>
+                                <div class="col-md-8">
+                                    <input type="text" class="form-control" inputmode="numeric" name="bw" id="bw" x-model="bw">
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="traffic == -1" x-collapse>
+                            <div class="row mb-3">
+                                <label class="col-md-4 text-md-end" for="snrr">SNR (dB)</label>
+                                <div class="col-md-8">
+                                    <input type="text" class="form-control" inputmode="numeric" name="snrr" id="snrr" x-model="snrr">
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div> <!-- traffic card -->
+            </div>
+        </div> <!-- global / traffic row -->
+
+        <!-- Station Definition Widget -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card card-form">
+                    <div class="card-header">
+                        <h4 class="card-title position-relative">
+                            <a data-bs-toggle="collapse" href="#station-definition" class="stretched-link text-reset text-decoration-none">
+                                Station Definition
+                            </a>
+                        </h4>
+                    </div>
+                    <div class="collapse" id="station-definition">
+                        <div class="card-body"
+                            x-data="{
+                                stations: $persist([]),
+                                currentStation: $persist(''),
+                                editingStation: null,
+                                newStationName: '',
+                                renamingStation: null,
+                                renameInput: '',
+                                bands: ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m'],
+
+                                createStation() {
+                                    if (!this.newStationName.trim()) return;
+                                    const station = {
+                                        name: this.newStationName.trim(),
+                                        antennas: {}
+                                    };
+                                    this.stations.push(station);
+                                    this.currentStation = station.name;
+                                    this.newStationName = '';
+                                    this.editingStation = station.name;
+                                },
+
+                                renameStation(oldName, newName) {
+                                    if (!newName.trim()) return;
+                                    const station = this.getStation(oldName);
+                                    if (!station) return;
+                                    
+                                    // Check if new name already exists
+                                    if (this.stations.some(s => s.name === newName.trim() && s.name !== oldName)) {
+                                        alert('A station with this name already exists');
+                                        return;
+                                    }
+                                    
+                                    station.name = newName.trim();
+                                    if (this.currentStation === oldName) {
+                                        this.currentStation = newName.trim();
+                                    }
+                                    if (this.editingStation === oldName) {
+                                        this.editingStation = newName.trim();
+                                    }
+                                    this.renamingStation = null;
+                                    this.renameInput = '';
+                                },
+
+                                deleteStation(stationName) {
+                                    this.stations = this.stations.filter(s => s.name !== stationName);
+                                    if (this.currentStation === stationName) {
+                                        this.currentStation = '';
+                                    }
+                                    if (this.editingStation === stationName) {
+                                        this.editingStation = null;
+                                    }
+                                },
+
+                                getStation(name) {
+                                    return this.stations.find(s => s.name === name);
+                                },
+
+                                updateAntenna(stationName, band, field, value) {
+                                    const station = this.getStation(stationName);
+                                    if (!station) return;
+                                    if (!station.antennas[band]) {
+                                        station.antennas[band] = {};
+                                    }
+                                    if (field === 'type' && !value) {
+                                        delete station.antennas[band];
+                                    } else {
+                                        station.antennas[band][field] = value;
+                                    }
+                                },
+
+                                loadStation(stationName) {
+                                    const station = this.getStation(stationName);
+                                    if (!station) return;
+
+                                    // Apply station settings to current form
+                                    // This is a simplified approach - in practice you might want to 
+                                    // apply different antennas per band
+                                    this.currentStation = stationName;
+                                }
+                            }"
+                        >
+                            <!-- Station Selection -->
+                            <div class="row mb-3">
+                                <label class="col-md-2 col-form-label text-md-end">Current Station</label>
+                                <div class="col-md-6">
+                                    <template x-if="renamingStation !== currentStation">
+                                        <select class="form-select" x-model="currentStation" @change="loadStation(currentStation)">
+                                            <option value="">Select a station...</option>
+                                            <template x-for="station in stations">
+                                                <option :value="station.name" x-text="station.name"></option>
+                                            </template>
+                                        </select>
+                                    </template>
+                                    <template x-if="renamingStation === currentStation">
+                                        <input type="text" class="form-control" 
+                                               x-model="renameInput"
+                                               @keyup.enter="renameStation(renamingStation, renameInput)"
+                                               @keyup.escape="renamingStation = null; renameInput = ''"
+                                               x-init="$el.focus(); $el.select()">
+                                    </template>
+                                </div>
+                                <div class="col-md-4">
+                                    <template x-if="currentStation && renamingStation !== currentStation">
+                                        <div>
+                                            <button class="btn btn-outline-primary me-2" 
+                                                    @click="editingStation = currentStation">
+                                                Edit
+                                            </button>
+                                            <button class="btn btn-outline-secondary me-2" 
+                                                    @click="renamingStation = currentStation; renameInput = currentStation">
+                                                Rename
+                                            </button>
+                                            <button class="btn btn-outline-danger" 
+                                                    @click="deleteStation(currentStation)">
+                                                Delete
+                                            </button>
+                                        </div>
+                                    </template>
+                                    <template x-if="renamingStation === currentStation">
+                                        <div>
+                                            <button class="btn btn-success me-2" 
+                                                    @click="renameStation(renamingStation, renameInput)">
+                                                Save
+                                            </button>
+                                            <button class="btn btn-secondary" 
+                                                    @click="renamingStation = null; renameInput = ''">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+
+                            <!-- New Station Creation -->
+                            <div class="row mb-3">
+                                <label class="col-md-2 col-form-label text-md-end">New Station</label>
+                                <div class="col-md-6">
+                                    <input type="text" class="form-control" 
+                                           x-model="newStationName" 
+                                           placeholder="Enter station name"
+                                           @keyup.enter="createStation()">
+                                </div>
+                                <div class="col-md-4">
+                                    <button class="btn btn-success" @click="createStation()">Create Station</button>
+                                </div>
+                            </div>
+
+                            <!-- Station Editor -->
+                            <template x-if="editingStation">
+                                <div class="border-top pt-3">
+                                    <h5 x-text="'Editing: ' + editingStation"></h5>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Band</th>
+                                                    <th>Antenna Type</th>
+                                                    <th>Height</th>
+                                                    <th>Gain Offset (dBi)</th>
+                                                    <th>Azimuth</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template x-for="band in bands">
+                                                    <tr>
+                                                        <td x-text="band" class="align-middle"></td>
+                                                        <td>
+                                                            <select class="form-select form-select-sm" 
+                                                                    @change="updateAntenna(editingStation, band, 'type', $event.target.value)">
+                                                                <option value="" :selected="!getStation(editingStation)?.antennas[band]?.type">None</option>
+                                                                <template x-for="ant in antenna_types">
+                                                                    <option :value="ant.key" x-text="ant.name" :selected="ant.key === getStation(editingStation)?.antennas[band]?.type"></option>
+                                                                </template>
+                                                            </select>
+                                                        </td>
+                                                        <td>
+                                                            <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.height">
+                                                                <select class="form-select form-select-sm" 
+                                                                        @change="updateAntenna(editingStation, band, 'height', $event.target.value)">
+                                                                    <template x-for="height in antenna_heights">
+                                                                        <option :value="height.key" x-text="height.name" :selected="height.key === (getStation(editingStation)?.antennas[band]?.height || '35ft')"></option>
+                                                                    </template>
+                                                                </select>
+                                                            </template>
+                                                        </td>
+                                                        <td>
+                                                            <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.gos">
+                                                                <input type="number" class="form-control form-control-sm" 
+                                                                       step="0.1"
+                                                                       :value="getStation(editingStation)?.antennas[band]?.gain_offset || 0"
+                                                                       @input="updateAntenna(editingStation, band, 'gain_offset', parseFloat($event.target.value) || 0)">
+                                                            </template>
+                                                        </td>
+                                                        <td>
+                                                            <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.azimuth">
+                                                                <div class="d-flex gap-1">
+                                                                    <select class="form-select form-select-sm" 
+                                                                            @change="updateAntenna(editingStation, band, 'azimuth_mode', $event.target.value)">
+                                                                        <option value="peak" :selected="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'peak'">Peak gain towards destination</option>
+                                                                        <option value="fixed" :selected="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'fixed'">Fixed azimuth</option>
+                                                                    </select>
+                                                                    <template x-if="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'fixed'">
+                                                                        <input type="number" class="form-control form-control-sm" 
+                                                                               min="0" max="360" step="1"
+                                                                               :value="getStation(editingStation)?.antennas[band]?.azimuth || 0"
+                                                                               @input="updateAntenna(editingStation, band, 'azimuth', parseInt($event.target.value) || 0)"
+                                                                               placeholder="0-360°">
+                                                                    </template>
+                                                                </div>
+                                                            </template>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="text-end">
+                                        <button class="btn btn-secondary" @click="editingStation = null">Done Editing</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div> <!-- station definition row -->
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <div class="card card-form">
+                        <div class="card-header"><h4 class="card-title">TX Site</h4></div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-form-label text-md-end" for="txloc">Locator</label>
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control" name="txloc" required pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="txloc" x-model.lazy="txloc" placeholder="4 to 8 character grid locator" autofocus>
+                                </div>
+                                <div class="col-md-4 col-sm-4">
+                                    <button class="btn btn-primary" @click.prevent="txloc = await getGridSquare()">Get from Browser</button>
+                                </div>
+                            </div>
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-form-label text-md-end" for="txant_type">Antenna</label>
+                                <div class="col-md-8">
+                                    <select class="form-select" id="txant_type" name="txant_type" x-model="txant_type">
+                                        <template x-for="ant in antenna_types">
+                                            <option :value="ant.key" x-text="ant.name" :selected="ant.key == txant_type && 'selected'">
+                                        </template>
+                                    </select>
+                                </div>
+                            </div>
+                            <template x-if="ant_meta[txant_type]?.height">
+                                <div class="row mb-3">
+                                    <label class="col-md-4 col-form-label text-md-end" for="txant_height">Height</label>
+                                    <div class="col-md-8">
+                                        <select class="form-select" id="txant_height" name="txant_height" x-model="txant_height">
+                                            <template x-for="height in antenna_heights">
+                                                <option :value="height.key" x-text="height.name" :selected="height.key == txant_height && 'selected'">
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="ant_meta[txant_type]?.gos">
+                                <div class="row mb-3">
+                                    <label class="col-md-4 col-form-label text-md-end" for="txgos">Gain (dBi)</label>
+                                    <div class="col-md-8">
+                                        <input class="form-control" type="text" inputmode="numeric" name="gos" id="txgos" x-model.lazy.number="txgos">
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div> <!-- tx site card -->
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card card-form">
+                        <div class="card-header"><h4 class="card-title">RX Sites</h4></div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-sm-5 col-xs-5 text-md-end" for="custom_rx_enable">Custom Site</label>
+                                <div class="col-md-8 col-sm-7 col-xs-7 form-switch">
+                                    <input class="form-check-input" type="checkbox" name="custom_rx_enable" id="custom_rx_enable" x-model="custom_rx_enable">
+                                </div>
+                            </div>
+                            <template x-if="custom_rx_enable">
+                                <div class="row mb-3">
+                                    <label class="col-md-4 col-form-label text-md-end" for="custom_rx_loc">Locator</label>
+                                    <div class="col-md-8">
+                                        <input type="text" class="form-control" name="custom_rx_loc" pattern="[A-Ra-r]{2}\d{2}([A-Xa-x]{2}(\d{2})?)?" maxlength="8" id="custom_rx_loc" x-model.lazy="custom_rx_loc" placeholder="4 to 8 character grid locator">
+                                    </div>
+                                </div>
+                            </template>
+                            <div class="row mb-3">
+                                <label class="col-md-4 col-form-label text-md-end" for="rxant_type">Antenna</label>
+                                <div class="col-md-8">
+                                    <select class="form-select" id="rxant_type" name="rxant_type" x-model="rxant_type">
+                                        <template x-for="ant in antenna_types">
+                                            <option :value="ant.key" x-text="ant.name" :selected="ant.key == rxant_type && 'selected'">
+                                        </template>
+                                    </select>
+                                </div>
+                            </div>
+                            <template x-if="ant_meta[rxant_type]?.height">
+                                <div class="row mb-3">
+                                    <label class="col-md-4 col-form-label text-md-end" for="rxant_height">Height</label>
+                                    <div class="col-md-8">
+                                        <select class="form-select" id="rxant_height" name="rxant_height" x-model="rxant_height">
+                                            <template x-for="height in antenna_heights">
+                                                <option :value="height.key" x-text="height.name" :selected="height.key == rxant_height && 'selected'">
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="ant_meta[rxant_type]?.gos">
+                                <div class="row mb-3">
+                                    <label class="col-md-4 col-form-label text-md-end" for="rxgos">Gain (dBi)</label>
+                                    <div class="col-md-8">
+                                        <input class="form-control" type="text" inputmode="numeric" name="gos" id="rxgos" x-model.lazy.number="rxgos">
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div> <!-- rx sites card -->
+                </div>
+
+            </div> <!-- tx/rx row -->
+
+            <div class="row mb-4 px-3">
+                <div class="d-grid col-sm-8 col-md-6 col-lg-4 mx-auto">
+                    <button class="btn btn-primary" type="submit">Run Prediction</button>
+                </div>
+            </div>
+
+        </form>
+
+        <template x-if="global_error">
+            <div class="alert alert-danger" role="alert">
+                <strong>Error:</strong> <span x-text="global_error"></span>
+            </div>
+        </template>
+
+        <div class="row d-block d-md-none" id="bcr-table-normal">
+            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">0</td><td class="bcr-1">10</td><td class="bcr-2">20</td><td class="bcr-3">30</td><td class="bcr-4">40</td><td class="bcr-5">50</td><td class="bcr-6">60</td><td class="bcr-7">70</td><td class="bcr-8">80</td><td class="bcr-9">90</td> </tr> </tbody></table>
+        </div>
+
+        <div class="row d-none d-md-block" id="bcr-table-md">
+            <table class="table table-sm table-bordered text-center"> <caption class="text-center">BCR: Basic Circuit Reliability (%)</caption> <tbody><tr> <td class="bcr-0">&gt;=0%</td><td class="bcr-1">&gt;10%</td><td class="bcr-2">&gt;20%</td><td class="bcr-3">&gt;30%</td><td class="bcr-4">&gt;40%</td><td class="bcr-5">&gt;50%</td><td class="bcr-6">&gt;60%</td><td class="bcr-7">&gt;70%</td><td class="bcr-8">&gt;80%</td><td class="bcr-9">&gt;90%</td> </tr> </tbody></table>
+        </div>
+
+        <div class="row row-cols-1 row-cols-lg-2 gx-2 gx-lg-3 gx-xl-4 gx-xxl-5 d-flex" id="results-row">
+            <template x-for="result in results">
+                <div class="col mb-3" x-intersect="await loadResult(result)"
+                    x-effect="if (result.needs_load && elementInViewport($el)) { loadResult(result) }">
+                    <div class="card result-card" :class="result.loading && 'loading'">
+                        <div class="card-header"><h4 x-text="result.name"></div>
+                        <div class="card-body">
+                            <div class="overlay-wrapper">
+                                <div class="overlay"><div class="loader"></div></div>
+                            </div>
+                            <div x-show="result.content" x-html="result.content"></div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </div> <!-- results row -->
+
+    </div>
+</div>
+
+%= include 'footer'
+
+</body>
+</html>
