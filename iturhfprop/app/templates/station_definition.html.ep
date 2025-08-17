@@ -1,0 +1,237 @@
+<!-- Station Definition Widget -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card card-form">
+            <div class="card-header">
+                <h4 class="card-title position-relative">
+                    <a data-bs-toggle="collapse" href="#station-definition" class="stretched-link text-reset text-decoration-none">
+                        Station Definition
+                    </a>
+                </h4>
+            </div>
+            <div class="collapse" id="station-definition">
+                <div class="card-body"
+                    x-data="{
+                        currentStation: $persist(''),
+                        editingStation: null,
+                        newStationName: '',
+                        renamingStation: null,
+                        renameInput: '',
+
+                        createStation() {
+                            if (!this.newStationName.trim()) return;
+                            const station = {
+                                name: this.newStationName.trim(),
+                                antennas: {}
+                            };
+                            this.stations.push(station);
+                            this.currentStation = station.name;
+                            this.newStationName = '';
+                            this.editingStation = station.name;
+                        },
+
+                        renameStation(oldName, newName) {
+                            if (!newName.trim()) return;
+                            const station = this.getStation(oldName);
+                            if (!station) return;
+                            
+                            // Check if new name already exists
+                            if (this.stations.some(s => s.name === newName.trim() && s.name !== oldName)) {
+                                alert('A station with this name already exists');
+                                return;
+                            }
+                            
+                            station.name = newName.trim();
+                            if (this.currentStation === oldName) {
+                                this.currentStation = newName.trim();
+                            }
+                            if (this.editingStation === oldName) {
+                                this.editingStation = newName.trim();
+                            }
+                            this.renamingStation = null;
+                            this.renameInput = '';
+                        },
+
+                        deleteStation(stationName) {
+                            this.stations = this.stations.filter(s => s.name !== stationName);
+                            if (this.currentStation === stationName) {
+                                this.currentStation = '';
+                            }
+                            if (this.editingStation === stationName) {
+                                this.editingStation = null;
+                            }
+                        },
+
+                        getStation(name) {
+                            return this.stations.find(s => s.name === name);
+                        },
+
+                        updateAntenna(stationName, band, field, value) {
+                            const station = this.getStation(stationName);
+                            if (!station) return;
+                            if (!station.antennas[band]) {
+                                station.antennas[band] = {};
+                            }
+                            if (field === 'type' && !value) {
+                                delete station.antennas[band];
+                            } else {
+                                station.antennas[band][field] = value;
+                            }
+                        },
+
+                        loadStation(stationName) {
+                            const station = this.getStation(stationName);
+                            if (!station) return;
+
+                            // Apply station settings to current form
+                            // This is a simplified approach - in practice you might want to 
+                            // apply different antennas per band
+                            this.currentStation = stationName;
+                        }
+                    }"
+                >
+                    <!-- Station Selection -->
+                    <div class="row mb-3">
+                        <label class="col-md-2 col-form-label text-md-end">Current Station</label>
+                        <div class="col-md-6">
+                            <template x-if="renamingStation !== currentStation">
+                                <select class="form-select" x-model="currentStation" @change="loadStation(currentStation)">
+                                    <option value="">Select a station...</option>
+                                    <template x-for="station in stations">
+                                        <option :value="station.name" x-text="station.name"></option>
+                                    </template>
+                                </select>
+                            </template>
+                            <template x-if="renamingStation === currentStation">
+                                <input type="text" class="form-control" 
+                                       x-model="renameInput"
+                                       @keyup.enter="renameStation(renamingStation, renameInput)"
+                                       @keyup.escape="renamingStation = null; renameInput = ''"
+                                       x-init="$el.focus(); $el.select()">
+                            </template>
+                        </div>
+                        <div class="col-md-4">
+                            <template x-if="currentStation && renamingStation !== currentStation">
+                                <div>
+                                    <button class="btn btn-outline-primary me-2" 
+                                            @click="editingStation = currentStation">
+                                        Edit
+                                    </button>
+                                    <button class="btn btn-outline-secondary me-2" 
+                                            @click="renamingStation = currentStation; renameInput = currentStation">
+                                        Rename
+                                    </button>
+                                    <button class="btn btn-outline-danger" 
+                                            @click="deleteStation(currentStation)">
+                                        Delete
+                                    </button>
+                                </div>
+                            </template>
+                            <template x-if="renamingStation === currentStation">
+                                <div>
+                                    <button class="btn btn-success me-2" 
+                                            @click="renameStation(renamingStation, renameInput)">
+                                        Save
+                                    </button>
+                                    <button class="btn btn-secondary" 
+                                            @click="renamingStation = null; renameInput = ''">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- New Station Creation -->
+                    <div class="row mb-3">
+                        <label class="col-md-2 col-form-label text-md-end">New Station</label>
+                        <div class="col-md-6">
+                            <input type="text" class="form-control" 
+                                   x-model="newStationName" 
+                                   placeholder="Enter station name"
+                                   @keyup.enter="createStation()">
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-success" @click="createStation()">Create Station</button>
+                        </div>
+                    </div>
+
+                    <!-- Station Editor -->
+                    <template x-if="editingStation">
+                        <div class="border-top pt-3">
+                            <h5 x-text="'Editing: ' + editingStation"></h5>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Band</th>
+                                            <th>Antenna Type</th>
+                                            <th>Height</th>
+                                            <th>Gain Offset (dBi)</th>
+                                            <th>Azimuth</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="banddef in bands.toReversed()">
+                                            <tr x-data="{ band: banddef[0] }">
+                                                <td x-text="band" class="align-middle"></td>
+                                                <td>
+                                                    <select class="form-select form-select-sm" 
+                                                            @change="updateAntenna(editingStation, band, 'type', $event.target.value)">
+                                                        <option value="" :selected="!getStation(editingStation)?.antennas[band]?.type">None</option>
+                                                        <template x-for="ant in antenna_types">
+                                                            <option :value="ant.key" x-text="ant.name" :selected="ant.key === getStation(editingStation)?.antennas[band]?.type"></option>
+                                                        </template>
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.height">
+                                                        <select class="form-select form-select-sm" 
+                                                                @change="updateAntenna(editingStation, band, 'height', $event.target.value)">
+                                                            <template x-for="height in antenna_heights">
+                                                                <option :value="height.key" x-text="height.name" :selected="height.key === (getStation(editingStation)?.antennas[band]?.height || '35ft')"></option>
+                                                            </template>
+                                                        </select>
+                                                    </template>
+                                                </td>
+                                                <td>
+                                                    <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.gos">
+                                                        <input type="number" class="form-control form-control-sm" 
+                                                               step="0.1"
+                                                               :value="getStation(editingStation)?.antennas[band]?.gain_offset || 0"
+                                                               @input="updateAntenna(editingStation, band, 'gain_offset', parseFloat($event.target.value) || 0)">
+                                                    </template>
+                                                </td>
+                                                <td>
+                                                    <template x-if="getStation(editingStation)?.antennas[band]?.type && ant_meta[getStation(editingStation)?.antennas[band]?.type]?.azimuth">
+                                                        <div class="d-flex gap-1">
+                                                            <select class="form-select form-select-sm" 
+                                                                    @change="updateAntenna(editingStation, band, 'azimuth_mode', $event.target.value)">
+                                                                <option value="peak" :selected="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'peak'">Peak gain towards destination</option>
+                                                                <option value="fixed" :selected="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'fixed'">Fixed azimuth</option>
+                                                            </select>
+                                                            <template x-if="(getStation(editingStation)?.antennas[band]?.azimuth_mode || 'peak') === 'fixed'">
+                                                                <input type="number" class="form-control form-control-sm" 
+                                                                       min="0" max="360" step="1"
+                                                                       :value="getStation(editingStation)?.antennas[band]?.azimuth || 0"
+                                                                       @input="updateAntenna(editingStation, band, 'azimuth', parseInt($event.target.value) || 0)"
+                                                                       placeholder="0-360°">
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="text-end">
+                                <button class="btn btn-secondary" @click="editingStation = null">Done Editing</button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+</div> <!-- station definition row -->
