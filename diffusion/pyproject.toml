@@ -1,0 +1,36 @@
+[project]
+name = "pred4d"
+version = "0.0.1"
+
+dependencies = [
+    "psycopg[binary]==3.2.9",
+    "flask==2.2.5",
+    "pyyaml",
+    "pybind11",
+    "pandas",
+    "scikit-optimize",
+    "scikit-learn",
+    "uwsgi",
+    "matplotlib",
+    "h5py",
+    "hdf5plugin",
+    "numpy",
+    "torch==2.*",
+    "torchvision",
+    "lightning==2.*",
+    "tensorboard",
+    "datasets>=2.15.0",
+    "huggingface_hub",
+    "diffusers",
+    "jsonargparse",
+    "accelerate",
+]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
