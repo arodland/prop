@@ -1,2 +1,0 @@
-geojsoncontour==0.4.0
-Flask==2.2.5
