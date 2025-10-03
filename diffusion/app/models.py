@@ -496,6 +496,10 @@ class IRIData(L.LightningDataModule):
             # Don't waste CPU adding a gaussian blur of 0.
             self.augment_train = self.augment_test
 
+        self.century = datetime.date(year=2050, month=1, day=1) - datetime.date(year=1950, month=1, day=1)
+        self.midpoint = datetime.datetime(year=2000, month=1, day=1, hour=0, minute=0,
+                                          second=0, microsecond=0, tzinfo=datetime.timezone.utc)
+
     def dataset_row(self, sample, augment, which):
         images = None
         images = [ augment(image) for image in sample["image"]]
@@ -509,12 +513,12 @@ class IRIData(L.LightningDataModule):
         cos_toy = torch.cos(toys * 2 * math.pi)
         sin_tod = torch.sin(tods * 2 * math.pi)
         cos_tod = torch.cos(tods * 2 * math.pi)
-        years = torch.tensor([ dt.year for dt in dts ], dtype=torch.float32)
-        # -1 to 1 is 1950-2050, so the training data covers -0.84 to +0.50
-        secular = (years - 2000.0) / 50.
+
+        secular = torch.tensor([ (dt - self.midpoint) / self.century for dt in dts ], dtype=torch.float32)
 
         targets = torch.stack([secular, sin_toy, cos_toy, sin_tod, cos_tod,
                                torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
+
         return {"images": images, "target": targets}
 
     def prepare_data(self):
