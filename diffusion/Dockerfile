@@ -5,7 +5,7 @@ RUN apt-get update && apt-get -y install unzip build-essential cmake dumb-init l
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 RUN /root/.local/bin/uv tool install 'git+https://github.com/bluss/sysconfigpatcher'
 RUN /root/.local/bin/uv venv --python 3.13 /app/.venv
-RUN /root/.local/bin/sysconfigpatcher /root/.local/share/uv/python/cpython-3.13*
+RUN /root/.local/bin/sysconfigpatcher /root/.local/share/uv/python/cpython-*
 RUN chmod go+rx /root && chmod -R go+rx /root/.local
 
 ENV PATH="/app/.venv/bin:$PATH"
