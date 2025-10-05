@@ -266,8 +266,8 @@ class ConditionedDiffusionModel(L.LightningModule):
             # print("latents:", summarize_tensor(latents))
         encoded_targets = self.param_encoder(batch["raw_target"])
 
-        # Dropout targets 10% of the time to allow CFG.
-        use_targets = torch.rand(encoded_targets.size(0), device=encoded_targets.device) < 0.9
+        # Dropout targets 20% of the time to allow CFG.
+        use_targets = torch.rand(encoded_targets.size(0), device=encoded_targets.device) < 0.8
         encoded_targets = encoded_targets * use_targets.unsqueeze(1).float()
 
         noise = torch.randn_like(latents)
