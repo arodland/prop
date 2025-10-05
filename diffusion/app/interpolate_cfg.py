@@ -164,16 +164,13 @@ def main(
 
     guidance_target = torch.tensor([
         (year - 2000. + toy) / 50.,
-        math.sin(toy * 2 * math.pi),
-        math.cos(toy * 2 * math.pi),
-        math.sin(tod * 2 * math.pi),
-        math.cos(tod * 2 * math.pi),
+        toy,
+        tod,
         ssn / 100.0 - 1.0,
     ])
     guidance_target = guidance_target.to(dm.device)
-    encoded_target = dm.param_encoder(guidance_target)
     guidance_target = guidance_target.expand(num_samples, -1)
-    encoded_target = encoded_target.expand(num_samples, -1)
+    encoded_target = dm.param_encoder(guidance_target)
     null_target = torch.zeros_like(encoded_target)
 
     x = torch.randn((num_samples, 4, 24, 48), device=dm.device)

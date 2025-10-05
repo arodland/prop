@@ -167,19 +167,41 @@ class DiffusionModel(L.LightningModule):
         """Unscale latents by vae.latent_magnitude after encoding."""
         return latents / self.vae.latent_magnitude
 
+class RopeEncoder(L.LightningModule):
+    def __init__(self, dim=64):
+        super().__init__()
+        self.dim = dim
+        freq = (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("freq", freq)
+
+        self.scrambler = nn.Sequential(
+            nn.Linear(256, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 256),
+            nn.Tanh(),
+        )
+
+        nn.init.eye_(self.scrambler[0].weight)
+        nn.init.zeros_(self.scrambler[0].bias)
+        nn.init.eye_(self.scrambler[3].weight)
+        nn.init.zeros_(self.scrambler[3].bias)
+
+    def rope_enc(self, x):
+        positions = x.type_as(self.freq)
+        freqs = torch.einsum("bi, j -> bij", positions, self.freq) # (batch_size, seq_len, dim/2)
+        emb = torch.cat((freqs.sin(), freqs.cos()), dim=-1)
+        return emb.flatten(1)
+
+    def forward(self, x):
+        return self.scrambler(self.rope_enc(x))
+
 class ConditionedDiffusionModel(L.LightningModule):
     def __init__(self,
                  pred_type='epsilon'):
         super().__init__()
         self.save_hyperparameters()
-        self.param_encoder = nn.Sequential(
-            nn.Linear(6, 64),
-            nn.ReLU(),
-            nn.Linear(64, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-        )
+        self.param_encoder = RopeEncoder(dim=64)
 
         self.model = diffusers.models.UNet2DModel(
             sample_size=(24, 48),
@@ -231,7 +253,7 @@ class ConditionedDiffusionModel(L.LightningModule):
             latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
             # tv.utils.save_image(latents[0] * 2.0 + 1.0, "out/in_latents.png")
             # print("latents:", summarize_tensor(latents))
-        encoded_targets = self.param_encoder(batch["target"])
+        encoded_targets = self.param_encoder(batch["raw_target"])
 
         # Dropout targets 10% of the time to allow CFG.
         use_targets = torch.rand(encoded_targets.size(0), device=encoded_targets.device) < 0.9
@@ -251,7 +273,7 @@ class ConditionedDiffusionModel(L.LightningModule):
             images = batch["images"]
             latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
-        encoded_targets = self.param_encoder(batch["target"])
+        encoded_targets = self.param_encoder(batch["raw_target"])
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
@@ -265,7 +287,7 @@ class ConditionedDiffusionModel(L.LightningModule):
             images = batch["images"]
             latents_raw = self.vae.encode(scale_to_diffusion(images)).latents
             latents = F.pad(self.unscale_latents(latents_raw), (0, 2, 0, 1))
-        encoded_targets = self.param_encoder(batch["target"])
+        encoded_targets = self.param_encoder(batch["raw_target"])
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
@@ -519,7 +541,8 @@ class IRIData(L.LightningDataModule):
         targets = torch.stack([secular, sin_toy, cos_toy, sin_tod, cos_tod,
                                torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
 
-        return {"images": images, "target": targets}
+        raw_targets = torch.stack([secular, toys, tods, torch.tensor(sample["ssn"]) / 100. - 1.], dim=1)
+        return {"images": images, "target": targets, "raw_target": raw_targets}
 
     def prepare_data(self):
         load_dataset("arodland/IRI-iono-maps", self.metric)
