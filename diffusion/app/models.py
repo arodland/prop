@@ -243,6 +243,17 @@ class ConditionedDiffusionModel(L.LightningModule):
             prediction_type=self.hparams.pred_type,
         )
 
+    def model_loss(self, prediction, x, noise, step):
+        if self.hparams.pred_type == 'epsilon':
+            target = noise
+        elif self.hparams.pred_type == 'v_prediction':
+            alpha_t = self.scheduler.alphas_cumprod[step].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+            sigma_t = (1 - self.scheduler.alphas_cumprod[step]).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+            target = alpha_t.sqrt() * noise - sigma_t.sqrt() * x
+        else:
+            raise ValueError(f"Unknown prediction type: {self.hparams.pred_type}")
+        return F.mse_loss(prediction, target)
+
     def training_step(self, batch, batch_idx):
         with torch.no_grad():
             images = batch["images"]
@@ -262,8 +273,8 @@ class ConditionedDiffusionModel(L.LightningModule):
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
-        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
-        loss = F.mse_loss(residual, noise)
+        model_pred = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = self.model_loss(model_pred, latents, noise, steps)
         self.log("train_loss", loss, prog_bar=True)
         self.log("lr", self.optimizers().param_groups[0]["lr"], prog_bar=True)
         return loss
@@ -277,8 +288,8 @@ class ConditionedDiffusionModel(L.LightningModule):
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
-        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
-        loss = F.mse_loss(residual, noise)
+        model_pred = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = self.model_loss(model_pred, latents, noise, steps)
         self.log("test_loss", loss, prog_bar=True)
         return loss
 
@@ -291,8 +302,8 @@ class ConditionedDiffusionModel(L.LightningModule):
         noise = torch.randn_like(latents)
         steps = torch.randint(self.scheduler.config.num_train_timesteps, (images.size(0),), device=self.device)
         noisy_latents = self.scheduler.add_noise(latents, noise, steps)
-        residual = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
-        loss = F.mse_loss(residual, noise)
+        model_pred = self.model(noisy_latents, steps, class_labels=encoded_targets).sample
+        loss = self.model_loss(model_pred, latents, noise, steps)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
