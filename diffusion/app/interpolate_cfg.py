@@ -182,7 +182,7 @@ def main(
 
         torch.compiler.cudagraph_mark_step_begin()
         model_input = scheduler.scale_model_input(x, t)
-        with torch.no_grad:
+        with torch.no_grad():
             noise_pred_guided = dm.model(model_input, t, class_labels=encoded_target).sample
             noise_pred_unguided = dm.model(model_input, t, class_labels=null_target).sample
             noise_pred = noise_pred_unguided + guidance_scale * (noise_pred_guided - noise_pred_unguided)
@@ -202,7 +202,9 @@ def main(
             guidance_loss = F.mse_loss(guidance_out, guidance_target)
             stats["guidance_loss"] = guidance_loss.item()
 
-        dilate_mask_by = int(round(((num_timesteps - i) * max_dilate) / num_timesteps))
+        dilate_mask_by = int(round(
+            (1 - (i / num_timesteps)**2) * max_dilate
+        ))
         dilate_mask_by = 0 if dilate_mask_by < 0 else dilate_mask_by
         mask_dilated = dilated_masks[dilate_mask_by]
         out_target = out_targets[dilate_mask_by]
