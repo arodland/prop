@@ -25,14 +25,14 @@ model_params = {
     },
     'latent_cfg_epsilon': {
         'mode': 'cfg',
-        'diffusion_checkpoint': '/checkpoints/diffusion/cdiffusion-averaged-v7.ckpt',
+        'diffusion_checkpoint': '/checkpoints/diffusion/cdiffusion-averaged-v19.ckpt',
         'steps': 100,
         'guidance_scale': 5,
         'fit_scale': 100,
     },
     'latent_cfg_vpredict': {
         'mode': 'cfg',
-        'diffusion_checkpoint': '/checkpoints/diffusion/cdiffusion-averaged-v5.ckpt',
+        'diffusion_checkpoint': '/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt',
         'steps': 100,
         'guidance_scale': 5,
         'fit_scale': 100,
@@ -157,6 +157,20 @@ def make_guidance_target(ts, essn):
         essn / 100.0 - 1.0,
     ])
 
+def make_cfg_target(ts, essn):
+    dt = datetime.datetime.fromtimestamp(ts)
+    year = dt.year
+    toy = (dt - dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)) / datetime.timedelta(days=365)
+    toy = min(max(toy, 0.0), 1.0)
+    tod = (dt - dt.replace(hour=0, minute=0, second=0, microsecond=0)) / datetime.timedelta(hours=24)
+
+    return torch.tensor([
+        (year - 2000. + toy) / 50.,
+        toy,
+        tod,
+        essn / 100.0 - 1.0,
+    ])
+
 def run_diffusion(model, ts, essn, df_pred, num_samples=5):
     params = model_params[model]
     cfg = params['mode'] == 'cfg'
@@ -182,12 +196,12 @@ def run_diffusion(model, ts, essn, df_pred, num_samples=5):
 
     targets, masks = create_targets(df_pred, device=dm.device, num_samples=num_samples)
 
-    guidance_target = make_guidance_target(ts, essn).to(device=dm.device)
     if cfg:
-        encoded_target = dm.param_encoder(guidance_target).expand(num_samples, -1)
+        guidance_target = make_cfg_target(ts, essn).to(device=dm.device).expand(num_samples, -1)
+        encoded_target = dm.param_encoder(guidance_target)
         null_target = torch.zeros_like(encoded_target)
-
-    guidance_target = guidance_target.expand(num_samples, -1)
+    else:
+        guidance_target = make_guidance_target(ts, essn).to(device=dm.device).expand(num_samples, -1)
 
     x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
 
