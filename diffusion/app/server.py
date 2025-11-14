@@ -21,21 +21,50 @@ model_params = {
         'guidance_checkpoint': '/checkpoints/guidance/guidance--v_num=0-epoch=343-val_loss=7.9e-05.ckpt',
         'steps': 100,
         'guidance_scale': 15,
-        'fit_scale': 250,
+        'fit_scale_start': 250.0,
+        'fit_scale_end': 250.0,
+        'ema_alpha': 0.0,
+        'max_grad': 100.0,
     },
     'latent_cfg_epsilon': {
         'mode': 'cfg',
         'diffusion_checkpoint': '/checkpoints/diffusion/cdiffusion-averaged-v19.ckpt',
         'steps': 100,
         'guidance_scale': 5,
-        'fit_scale': 100,
+        'fit_scale_start': 100.0,
+        'fit_scale_end': 100.0,
+        'ema_alpha': 0.0,
+        'max_grad': 100.0,
     },
     'latent_cfg_vpredict': {
         'mode': 'cfg',
         'diffusion_checkpoint': '/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt',
         'steps': 100,
         'guidance_scale': 5,
-        'fit_scale': 100,
+        'fit_scale_start': 100.0,
+        'fit_scale_end': 100.0,
+        'ema_alpha': 0.0,
+        'max_grad': 100.0,
+    },
+    'latent_cfg_vpredict_v2': {
+        'mode': 'cfg',
+        'diffusion_checkpoint': '/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt',
+        'steps': 100,
+        'guidance_scale': 5,
+        'fit_scale_start': 1.0,
+        'fit_scale_end': 100.0,
+        'ema_alpha': 0.7,
+        'max_grad': 1.0,
+    },
+    'latent_cfg_vpredict_v3': {
+        'mode': 'cfg',
+        'diffusion_checkpoint': '/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt',
+        'steps': 100,
+        'guidance_scale': 1,
+        'fit_scale_start': 1.0,
+        'fit_scale_end': 100.0,
+        'ema_alpha': 0.7,
+        'max_grad': 1.0,
     },
 }
 
@@ -206,6 +235,7 @@ def run_diffusion(model, ts, essn, df_pred, num_samples=5):
     x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
 
     zero_dilate_timestep = params['steps'] if cfg else params['steps'] * 0.95
+    grad_ema = None
 
     for i, t in enumerate(scheduler.timesteps):
         torch.compiler.cudagraph_mark_step_begin()
@@ -253,13 +283,20 @@ def run_diffusion(model, ts, essn, df_pred, num_samples=5):
         # And apply the target-fitting loss
         if cfg or i <= zero_dilate_timestep:
             fit_loss = (x0_decoded - out_target).pow(2).mul(mask_dilated).sum() / mask_dilated.sum()
-            loss += fit_loss * params['fit_scale']
+            progress = i / params['steps']
+            fit_scale = params['fit_scale_start'] + (params['fit_scale_end'] - params['fit_scale_start']) * progress
+            loss += fit_loss * fit_scale
 
         print(i, loss)
 
         # Backward the loss and take a step to decrease it
         grad = -torch.autograd.grad(loss, x)[0]
-        x = x.detach() + grad
+        grad = torch.clamp(grad, -params['max_grad'], params['max_grad'])
+        if grad_ema is None or params['ema_alpha'] == 0.0:
+            grad_ema = grad
+        else:
+            grad_ema = params['ema_alpha'] * grad_ema + (1.0 - params['ema_alpha']) * grad
+        x = x.detach() + grad_ema
         x = scheduler.step(noise_pred, t, x).prev_sample
 
     outs = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x)).sample)
