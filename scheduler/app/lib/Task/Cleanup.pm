@@ -27,7 +27,6 @@ sub gcs_upload {
   $args{data} = b64_encode($args{data}) if defined $args{data};
   $minion->enqueue('gcs_upload', [ %args ], {
       attempts => 3,
-      queue => 'gcs_upload',
   });
 }
 

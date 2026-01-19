@@ -211,7 +211,6 @@ sub one_run {
       {
         parents => [ $essn_24h ],
         attempts => 2,
-        queue => 'pred',
         expire => 18 * 60,
       },
     );
@@ -301,7 +300,6 @@ sub one_run {
         parents => [ @preds, $irimap, ($jobs->{ipe} ? $ipe : ()) ],
         attempts => 2,
         expire => 18 * 60,
-        queue => 'assimilate',
       },
     );
     if ($jobs->{make_maps}) {
@@ -378,7 +376,6 @@ sub one_run {
         parents => [ @preds, $irimap ],
         attempts => 2,
         expire => 18 * 60,
-        queue => 'assimilate',
       },
     );
     push @holdout_deps, $assimilate;
@@ -453,7 +450,6 @@ sub fallback_run {
       {
         parents => [ $essn_24h ],
         attempts => 2,
-        queue => 'pred',
         expire => 18 * 60,
       },
     );
@@ -485,7 +481,6 @@ sub fallback_run {
         parents => [ @preds, $irimap ],
         attempts => 2,
         expire => 18 * 60,
-        queue => 'assimilate',
       },
     );
 
