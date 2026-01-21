@@ -73,10 +73,13 @@ def main(
     num_samples: int = 9,
     seed: int = 0,
     guidance_scale: float = 5.0,
-    fit_scale: float = 15.0,
+    fit_scale_start: float = 1.0,
+    fit_scale_end: float = 20.0,
     geometry_scale: float = 1.0,
     max_dilate: int = 45,
     debug_images: bool = False,
+    ema_alpha: float = 0.9,
+    max_grad: float = 1.0,
 ):
     """Generates images from a trained diffusion model."""
 
@@ -176,6 +179,7 @@ def main(
     x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
     # x = x * (1 - mask) + ((out_target * 2.) - 1) * mask
 
+    grad_ema = None
     bar = tqdm(enumerate(scheduler.timesteps), total=num_timesteps)
     for i, t in bar:
         stats = {}
@@ -212,6 +216,10 @@ def main(
         stats["dilate"] = dilate_mask_by
         stats["fit_loss"] = fit_loss.item()
 
+        progress = i / num_timesteps
+        fit_scale = fit_scale_start + (fit_scale_end - fit_scale_start) * progress
+        stats["fit_scale"] = fit_scale
+
         loss = fit_loss * fit_scale
 
         wrap_loss_lat = F.mse_loss(
@@ -227,8 +235,13 @@ def main(
         bar.set_postfix(stats)
 
         grad = -torch.autograd.grad(loss, x)[0]
+        grad = torch.clamp(grad, -max_grad, max_grad)
+        if grad_ema is None or ema_alpha == 0.0:
+            grad_ema = grad
+        else:
+            grad_ema = ema_alpha * grad_ema + (1.0 - ema_alpha) * grad
 
-        x = x.detach() + grad
+        x = x.detach() + grad_ema
         x = scheduler.step(noise_pred, t, x).prev_sample
 
     outs = scale_from_diffusion(dm.vae.decode(dm.scale_latents(x)).sample)

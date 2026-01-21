@@ -93,6 +93,7 @@ def main(
     debug_images: bool = False,
     jump_length: int = 10,
     jump_n_sample: int = 10,
+    mask_strength: float = 1.0,
 ):
     """Generates images from a trained diffusion model."""
 
@@ -286,17 +287,21 @@ def main(
         with torch.no_grad():
             torch.compiler.cudagraph_mark_step_begin()
 
-            # Line 5 of Algorithm 1: Sample x_known from the known region at timestep t
-            # x_known_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * epsilon
-            alpha_bar = scheduler.alphas_cumprod[t.long()]
+            # Line 5 of Algorithm 1: Sample x_known_{t-1} from the known region
+            # We're denoising FROM timestep t TO timestep t-1
+            # So we need to sample x_known at the TARGET noise level (t-1)
+            # x_known_{t-1} = sqrt(alpha_bar_{t-1}) * x_0 + sqrt(1 - alpha_bar_{t-1}) * epsilon
             if i < num_timesteps - 1:
+                # Get the next timestep (lower noise level)
+                t_next = scheduler.timesteps[i + 1]
+                alpha_bar = scheduler.alphas_cumprod[t_next.long()]
                 noise = torch.randn_like(known_latent)
                 x_known = (
                     torch.sqrt(alpha_bar) * known_latent
                     + torch.sqrt(1 - alpha_bar) * noise
                 )
             else:
-                # At final timestep, no noise
+                # At final timestep (i == num_timesteps - 1), target is clean x_0
                 x_known = known_latent
 
             # Lines 6-7: Denoise the unknown region
@@ -313,7 +318,9 @@ def main(
             x_unknown = scheduler.step(noise_pred, t, x).prev_sample
 
             # Line 8: Combine known and unknown regions
-            x = mask_latent * x_known + (1 - mask_latent) * x_unknown
+            # Apply mask_strength to control adherence to target points
+            effective_mask = mask_latent * mask_strength
+            x = effective_mask * x_known + (1 - effective_mask) * x_unknown
 
         # Check if we should resample (jump back) at this timestep
         if i in jump_counts and jump_counts[i] > 0 and i < num_timesteps - 1:

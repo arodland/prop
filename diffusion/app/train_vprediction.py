@@ -14,6 +14,8 @@ if __name__ == "__main__":
     else:
         model = ConditionedDiffusionModel(pred_type='v_prediction')
 
+    model.vae.train()
+
     checkpoint_callback = ModelCheckpoint(dirpath="checkpoints", filename='vprediction-' +
                                           '{epoch}-{val_loss:.2g}', save_top_k=1, monitor="val_loss", mode="min")
     data = IRIData("combined", train_batch=64, add_noise=0.000)
