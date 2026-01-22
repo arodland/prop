@@ -10,77 +10,56 @@ import math
 import torch
 import torchvision as tv
 import diffusers
-from models import DiffusionModel, ConditionedDiffusionModel, GuidanceModel
+from models import DiffusionModel, ConditionedDiffusionModel, DiTDiffusionModel, ObservationConditionedDiT, GuidanceModel
 import torch.nn.functional as F
 from util import scale_from_diffusion
 
 model_params = {
-    "latent_classifier": {
-        "mode": "classifier",
-        "diffusion_checkpoint": "/checkpoints/diffusion/vdiffusion-averaged-v4.ckpt",
-        "guidance_checkpoint": "/checkpoints/guidance/guidance--v_num=0-epoch=343-val_loss=7.9e-05.ckpt",
-        "steps": 100,
-        "guidance_scale": 15,
-        "fit_scale_start": 250.0,
-        "fit_scale_end": 250.0,
-        "ema_alpha": 0.0,
-        "max_grad": 100.0,
-    },
-    "latent_cfg_epsilon": {
+    "unet_cfg": {
         "mode": "cfg",
-        "diffusion_checkpoint": "/checkpoints/diffusion/cdiffusion-averaged-v19.ckpt",
+        "diffusion_checkpoint": "/checkpoints/diffusion/cdiffusion-v-epoch=99-val_loss=0.0019.ckpt",
         "steps": 100,
         "guidance_scale": 5,
-        "fit_scale_start": 100.0,
-        "fit_scale_end": 100.0,
-        "ema_alpha": 0.0,
-        "max_grad": 100.0,
-    },
-    "latent_cfg_vpredict": {
-        "mode": "cfg",
-        "diffusion_checkpoint": "/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt",
-        "steps": 100,
-        "guidance_scale": 5,
-        "fit_scale_start": 100.0,
-        "fit_scale_end": 100.0,
-        "ema_alpha": 0.0,
-        "max_grad": 100.0,
-    },
-    "latent_cfg_vpredict_v2": {
-        "mode": "cfg",
-        "diffusion_checkpoint": "/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt",
-        "steps": 100,
-        "guidance_scale": 5,
-        "fit_scale_start": 1.0,
+        "fit_scale_start": 20.0,
         "fit_scale_end": 100.0,
         "ema_alpha": 0.7,
-        "max_grad": 1.0,
+        "max_grad": 10.0,
     },
-    "latent_cfg_vpredict_v3": {
-        "mode": "cfg",
-        "diffusion_checkpoint": "/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt",
-        "steps": 100,
-        "guidance_scale": 1,
-        "fit_scale_start": 1.0,
-        "fit_scale_end": 100.0,
-        "ema_alpha": 0.7,
-        "max_grad": 1.0,
-    },
-    "repaint_epsilon": {
+    "unet_repaint": {
         "mode": "repaint",
-        "diffusion_checkpoint": "/checkpoints/diffusion/cdiffusion-averaged-v19.ckpt",
-        "steps": 100,
-        "guidance_scale": 5,
-        "jump_n_length": 10,
-        "jump_n_sample": 10,
-    },
-    "repaint_vpredict": {
-        "mode": "repaint",
-        "diffusion_checkpoint": "/checkpoints/diffusion/vdiffusion-averaged-v6.ckpt",
+        "diffusion_checkpoint": "/checkpoints/diffusion/cdiffusion-v-epoch=99-val_loss=0.0019.ckpt",
         "steps": 100,
         "guidance_scale": 5,
         "jump_length": 10,
         "jump_n_sample": 10,
+    },
+    "dit_cfg": {
+        "mode": "cfg",
+        "model_class": "DiTDiffusionModel",
+        "diffusion_checkpoint": "/checkpoints/diffusion/dit-diffusion-v-epoch=226-val_loss=0.001.ckpt",
+        "steps": 100,
+        "guidance_scale": 5,
+        "fit_scale_start": 20.0,
+        "fit_scale_end": 100.0,
+        "ema_alpha": 0.7,
+        "max_grad": 10.0,
+    },
+    "dit_repaint": {
+        "mode": "repaint",
+        "model_class": "DiTDiffusionModel",
+        "diffusion_checkpoint": "/checkpoints/diffusion/dit-diffusion-v-epoch=226-val_loss=0.001.ckpt",
+        "steps": 100,
+        "guidance_scale": 5,
+        "jump_length": 10,
+        "jump_n_sample": 10,
+    },
+    "dit_obs": {
+        "mode": "observation_conditioned",
+        "model_class": "ObservationConditionedDiT",
+        "diffusion_checkpoint": "/checkpoints/diffusion/obs-dit-v-epoch=211-val_loss=0.0023.ckpt",
+        "steps": 25,
+        "guidance_scale": 1.2,
+        "obs_guidance_scale": 1.0,
     },
 }
 
@@ -269,9 +248,16 @@ def run_diffusion(model, ts, essn, df_pred, num_samples=5):
 
     if cfg:
         if "dm" not in params:
-            params["dm"] = ConditionedDiffusionModel.load_from_checkpoint(
-                params["diffusion_checkpoint"]
-            ).to(device="cuda")
+            # Check if a specific model class is specified (e.g., DiTDiffusionModel)
+            model_class_name = params.get("model_class", "ConditionedDiffusionModel")
+            if model_class_name == "DiTDiffusionModel":
+                params["dm"] = DiTDiffusionModel.load_from_checkpoint(
+                    params["diffusion_checkpoint"]
+                ).to(device="cuda")
+            else:
+                params["dm"] = ConditionedDiffusionModel.load_from_checkpoint(
+                    params["diffusion_checkpoint"]
+                ).to(device="cuda")
             params["dm"].eval()
         dm = params["dm"]
     else:
@@ -297,7 +283,11 @@ def run_diffusion(model, ts, essn, df_pred, num_samples=5):
         guidance_target = (
             make_cfg_target(ts, essn).to(device=dm.device).expand(num_samples, -1)
         )
-        encoded_target = dm.param_encoder(guidance_target)
+        # Use rope_enc for DiT (matches training), full encoder for UNet
+        if isinstance(dm, DiTDiffusionModel):
+            encoded_target = dm.param_encoder.rope_enc(guidance_target)
+        else:
+            encoded_target = dm.param_encoder(guidance_target)
         null_target = torch.zeros_like(encoded_target)
     else:
         guidance_target = (
@@ -418,9 +408,16 @@ def run_repaint(model, ts, essn, df_pred, num_samples=5):
 
     # Load the model
     if "dm" not in params:
-        params["dm"] = ConditionedDiffusionModel.load_from_checkpoint(
-            params["diffusion_checkpoint"]
-        ).to(device="cuda")
+        # Check if a specific model class is specified (e.g., DiTDiffusionModel)
+        model_class_name = params.get("model_class", "ConditionedDiffusionModel")
+        if model_class_name == "DiTDiffusionModel":
+            params["dm"] = DiTDiffusionModel.load_from_checkpoint(
+                params["diffusion_checkpoint"]
+            ).to(device="cuda")
+        else:
+            params["dm"] = ConditionedDiffusionModel.load_from_checkpoint(
+                params["diffusion_checkpoint"]
+            ).to(device="cuda")
         params["dm"].eval()
     dm = params["dm"]
 
@@ -437,7 +434,11 @@ def run_repaint(model, ts, essn, df_pred, num_samples=5):
     guidance_target = (
         make_cfg_target(ts, essn).to(device=dm.device).expand(num_samples, -1)
     )
-    encoded_target = dm.param_encoder(guidance_target)
+    # Use rope_enc for DiT (matches training), full encoder for UNet
+    if isinstance(dm, DiTDiffusionModel):
+        encoded_target = dm.param_encoder.rope_enc(guidance_target)
+    else:
+        encoded_target = dm.param_encoder(guidance_target)
     null_target = torch.zeros_like(encoded_target)
 
     # Start from random noise
@@ -566,6 +567,144 @@ def run_repaint(model, ts, essn, df_pred, num_samples=5):
     return ret
 
 
+def run_observation_diffusion(model, ts, essn, df_pred, num_samples=5):
+    """Run observation-conditioned DiT inference.
+
+    Uses cross-attention to sparse observations instead of gradient-based fitting.
+    """
+    params = model_params[model]
+
+    # Load the observation-conditioned model
+    if "dm" not in params:
+        params["dm"] = ObservationConditionedDiT.load_from_checkpoint(
+            params["diffusion_checkpoint"]
+        ).to(device="cuda")
+        params["dm"].eval()
+    dm = params["dm"]
+
+    max_obs = dm.hparams.max_observations
+
+    # Process station data into observations
+    observations_list = []
+    for _, station in df_pred.iterrows():
+        lat = station["station.latitude"] + 90  # Convert to [0, 180]
+        lon = station["station.longitude"] + 180  # Convert to [0, 360]
+        cs = float(station["cs"])  # Confidence score
+
+        if not (0 <= lat < 181 and 0 <= lon < 361):
+            continue
+
+        # Build observation entry: [lat_norm, lon_norm, fof2, mufd, hmf2, weight_fof2, weight_mufd, weight_hmf2]
+        obs = [0.0] * 8
+
+        # Normalize location to [-1, 1]
+        obs[0] = (lat / 181.0) * 2 - 1
+        obs[1] = (lon / 361.0) * 2 - 1
+
+        # Extract channel values and weights
+        has_any_channel = False
+        for metric_name, metric_info in metrics.items():
+            ch = metric_info["ch"]
+            min_val = metric_info["min"]
+            max_val = metric_info["max"]
+
+            if station[metric_name] is not None:
+                normalized_value = (station[metric_name] - min_val) / (max_val - min_val)
+                obs[2 + ch] = normalized_value
+                obs[5 + ch] = cs  # Weight = confidence score
+                has_any_channel = True
+
+        # Only include observations with at least one channel
+        if has_any_channel:
+            observations_list.append(obs)
+
+    # If more than max_observations, keep highest confidence
+    if len(observations_list) > max_obs:
+        observations_list.sort(key=lambda x: x[8], reverse=True)  # Sort by weight (cs)
+        observations_list = observations_list[:max_obs]
+
+    # Convert to tensor and pad to max_observations
+    num_obs = len(observations_list)
+    observations = torch.zeros(num_samples, max_obs, 8, device=dm.device)
+    for i, obs in enumerate(observations_list):
+        observations[:, i, :] = torch.tensor(obs, device=dm.device)
+
+    # Setup time/SSN conditioning
+    params_tensor = make_cfg_target(ts, essn).to(device=dm.device).expand(num_samples, -1)
+
+    # Encode parameters and observations
+    with torch.no_grad():
+        param_embeds = dm.param_encoder.rope_enc(params_tensor)
+        obs_embeds = dm.obs_encoder(observations)
+        obs_weights = observations[..., 5:8]  # Extract per-channel weights for soft masking
+
+        # Null conditioning for CFG
+        null_param_embeds = torch.zeros_like(param_embeds)
+
+        # Setup scheduler
+        scheduler = diffusers.schedulers.DDPMScheduler(
+            rescale_betas_zero_snr=False,
+            prediction_type=dm.inference_scheduler.config.prediction_type,
+        )
+        scheduler.set_timesteps(params["steps"], device=dm.device)
+
+        # Start from random noise
+        x = torch.randn(num_samples, 4, 24, 48, device=dm.device)
+
+        # Get observation guidance scale
+        obs_guidance_scale = params.get("obs_guidance_scale", 1.0)
+
+        # Denoising loop with CFG
+        for t in scheduler.timesteps:
+            torch.compiler.cudagraph_mark_step_begin()
+            model_input = scheduler.scale_model_input(x, t)
+
+            # Guided prediction (with time/SSN parameters and observations)
+            noise_pred_guided = dm.model_forward_with_obs_guidance(
+                model_input, t, param_embeds, obs_embeds, obs_weights,
+                obs_guidance_scale=obs_guidance_scale
+            )
+
+            torch.compiler.cudagraph_mark_step_begin()
+            # Unguided prediction (no parameters, with/without observations based on obs_guidance_scale)
+            noise_pred_unguided = dm.model_forward_with_obs_guidance(
+                model_input, t, null_param_embeds, obs_embeds, obs_weights,
+                obs_guidance_scale=obs_guidance_scale
+            )
+
+            # Apply classifier-free guidance for parameters
+            noise_pred = noise_pred_unguided + params["guidance_scale"] * (
+                noise_pred_guided - noise_pred_unguided
+            )
+
+            # Denoise step
+            x = scheduler.step(noise_pred, t, x).prev_sample
+
+        # Decode final latents
+        latents_crop = x[:, :, :23, :46]
+        outs = dm.vae.decode(dm.scale_latents(latents_crop)).sample
+        outs = scale_from_diffusion(outs)
+        outs = outs[:, :, :181, :361]  # Crop to valid region
+        outs = outs.clamp(0.0, 1.0)
+
+        # Force 180E and 180W to be equal
+        outs[..., 360] = outs[..., 0]
+
+    ensemble = torch.quantile(outs, 0.5, dim=0)
+
+    ret = {}
+    for metric in metrics:
+        mval = ensemble[metrics[metric]["ch"], ...].detach().cpu().numpy()
+        mval = (
+            mval * (metrics[metric]["max"] - metrics[metric]["min"])
+            + metrics[metric]["min"]
+        )
+        ret[metric] = mval
+
+    ret["md"] = ret["mufd"] / ret["fof2"]
+    return ret
+
+
 def assimilate(run_id, ts, holdout, model):
     df_cur = get_current()
     df_pred = get_pred(run_id, ts)
@@ -594,6 +733,9 @@ def assimilate(run_id, ts, holdout, model):
     params = model_params[model]
     if params.get("mode") == "repaint":
         diffusion_out = run_repaint(model, ts, irimap["/essn/ssn"][()], df_pred)
+    elif params.get("mode") == "observation_conditioned":
+        num_samples = params.get("num_samples", 5)
+        diffusion_out = run_observation_diffusion(model, ts, irimap["/essn/ssn"][()], df_pred, num_samples=num_samples)
     else:
         diffusion_out = run_diffusion(model, ts, irimap["/essn/ssn"][()], df_pred)
 

@@ -4,7 +4,7 @@ import torchvision as tv
 import diffusers
 import jsonargparse
 from pathlib import Path
-from models import ConditionedDiffusionModel, GuidanceModel
+from models import ConditionedDiffusionModel, DiTDiffusionModel, GuidanceModel
 from tqdm import tqdm
 import torch.nn.functional as F
 import contextlib
@@ -68,6 +68,7 @@ metrics = {
 
 def main(
     diffuser_checkpoint: Path = Path("diffuser_checkpoint.ckpt"),
+    model_type: str = "unet",
     guidance_checkpoint: Path = None,
     num_timesteps: int = 20,
     num_samples: int = 9,
@@ -81,10 +82,22 @@ def main(
     ema_alpha: float = 0.9,
     max_grad: float = 1.0,
 ):
-    """Generates images from a trained diffusion model."""
+    """Generates images from a trained diffusion model.
+
+    Args:
+        model_type: Model architecture - "unet" or "dit"
+    """
 
     torch.manual_seed(seed)
-    dm = ConditionedDiffusionModel.load_from_checkpoint(diffuser_checkpoint).to(device="cuda")
+
+    # Load appropriate model class
+    if model_type == "dit":
+        dm = DiTDiffusionModel.load_from_checkpoint(diffuser_checkpoint).to(device="cuda")
+    elif model_type == "unet":
+        dm = ConditionedDiffusionModel.load_from_checkpoint(diffuser_checkpoint).to(device="cuda")
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}. Must be 'unet' or 'dit'")
+
     dm.eval()
 
     if guidance_checkpoint is None:
@@ -173,7 +186,13 @@ def main(
     ])
     guidance_target = guidance_target.to(dm.device)
     guidance_target = guidance_target.expand(num_samples, -1)
-    encoded_target = dm.param_encoder(guidance_target)
+
+    # DiT uses rope_enc (no scrambler), UNet uses full param_encoder (with scrambler)
+    if model_type == "dit":
+        encoded_target = dm.param_encoder.rope_enc(guidance_target)
+    else:
+        encoded_target = dm.param_encoder(guidance_target)
+
     null_target = torch.zeros_like(encoded_target)
 
     x = torch.randn((num_samples, 4, 24, 48), device=dm.device)
