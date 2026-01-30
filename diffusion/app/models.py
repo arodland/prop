@@ -651,6 +651,68 @@ class ContinuousClassEmbedder(nn.Module):
         return self.norm(self.linear(x))
 
 
+class MultiheadSDPA(nn.Module):
+    """
+    Drop-in replacement for nn.MultiheadAttention using F.scaled_dot_product_attention.
+    Automatically uses flash attention when available (PyTorch 2.0+, CUDA capability >= 8.0).
+    """
+    def __init__(self, embed_dim, num_heads, batch_first=True, bias=True):
+        super().__init__()
+        assert batch_first, "Only batch_first=True is supported"
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == embed_dim, "embed_dim must be divisible by num_heads"
+
+        # QKV projections
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def forward(self, query, key, value, key_padding_mask=None, need_weights=False, attn_mask=None):
+        """
+        Args:
+            query: (B, N_q, embed_dim)
+            key: (B, N_kv, embed_dim)
+            value: (B, N_kv, embed_dim)
+            key_padding_mask: (B, N_kv) boolean mask where True means ignore
+            need_weights: ignored (for compatibility)
+            attn_mask: ignored (for compatibility)
+
+        Returns:
+            Tuple of (output, None) to match nn.MultiheadAttention API
+        """
+        B, N_q, _ = query.shape
+        N_kv = key.shape[1]
+
+        # Project and reshape to (B, num_heads, N, head_dim)
+        q = self.q_proj(query).view(B, N_q, self.num_heads, self.head_dim).transpose(1, 2)
+        k = self.k_proj(key).view(B, N_kv, self.num_heads, self.head_dim).transpose(1, 2)
+        v = self.v_proj(value).view(B, N_kv, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Convert key_padding_mask from (B, N_kv) to (B, 1, 1, N_kv) for broadcasting
+        attn_mask_sdpa = None
+        if key_padding_mask is not None:
+            # True in key_padding_mask means "ignore this position"
+            # SDPA expects attn_mask where True means "keep", so we invert
+            attn_mask_sdpa = ~key_padding_mask.view(B, 1, 1, N_kv)
+
+        # Flash attention via scaled_dot_product_attention
+        out = F.scaled_dot_product_attention(
+            q, k, v,
+            attn_mask=attn_mask_sdpa,
+            dropout_p=0.0,
+            is_causal=False,
+        )
+
+        # Reshape back: (B, num_heads, N_q, head_dim) -> (B, N_q, embed_dim)
+        out = out.transpose(1, 2).contiguous().view(B, N_q, self.embed_dim)
+        out = self.out_proj(out)
+
+        return out, None  # Return None for weights to match API
+
+
 class DiTBlock(nn.Module):
     """
     A DiT block with adaptive layer norm (AdaLN-Zero) conditioning.
@@ -1110,15 +1172,16 @@ class DiTBlockWithObservations(nn.Module):
     """
     DiT block with cross-attention to observations.
     Adds observation cross-attention after self-attention.
+    Uses MultiheadSDPA for flash attention support on cross-attention.
     """
     def __init__(self, hidden_size=768, num_heads=12, mlp_ratio=4.0):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         self.attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
 
-        # Cross-attention to observations
+        # Cross-attention to observations (uses flash attention)
         self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.cross_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
+        self.cross_attn = MultiheadSDPA(hidden_size, num_heads, batch_first=True)
 
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
 
@@ -1678,6 +1741,45 @@ class ObservationConditionedDiT(DiffusionUtilsMixin, VAEUtilsMixin, L.LightningM
             filename = "out/obs_checkpoint.png"
             tv.utils.save_image(image_grid, filename)
             print(f"Generated observation-conditioned images saved to {filename}")
+
+    def on_load_checkpoint(self, checkpoint):
+        """Migrate old nn.MultiheadAttention weights to new MultiheadSDPA format"""
+        state_dict = checkpoint['state_dict']
+        needs_migration = any('cross_attn.in_proj_weight' in k for k in state_dict.keys())
+
+        if needs_migration:
+            print("Migrating checkpoint from nn.MultiheadAttention to MultiheadSDPA format...")
+            for i in range(len(self.blocks)):
+                prefix = f'blocks.{i}.cross_attn'
+                in_proj_weight_key = f'{prefix}.in_proj_weight'
+                in_proj_bias_key = f'{prefix}.in_proj_bias'
+
+                if in_proj_weight_key in state_dict:
+                    # Split combined in_proj into separate q, k, v projections
+                    in_proj_weight = state_dict.pop(in_proj_weight_key)
+                    embed_dim = in_proj_weight.shape[1]
+                    q_weight, k_weight, v_weight = in_proj_weight.chunk(3, dim=0)
+
+                    state_dict[f'{prefix}.q_proj.weight'] = q_weight
+                    state_dict[f'{prefix}.k_proj.weight'] = k_weight
+                    state_dict[f'{prefix}.v_proj.weight'] = v_weight
+
+                if in_proj_bias_key in state_dict:
+                    # Split bias similarly
+                    in_proj_bias = state_dict.pop(in_proj_bias_key)
+                    q_bias, k_bias, v_bias = in_proj_bias.chunk(3, dim=0)
+
+                    state_dict[f'{prefix}.q_proj.bias'] = q_bias
+                    state_dict[f'{prefix}.k_proj.bias'] = k_bias
+                    state_dict[f'{prefix}.v_proj.bias'] = v_bias
+
+            # Clear optimizer state since parameter structure changed
+            if 'optimizer_states' in checkpoint:
+                checkpoint['optimizer_states'] = []
+            if 'lr_schedulers' in checkpoint:
+                checkpoint['lr_schedulers'] = []
+
+            print("Migration complete! Training will resume with fresh optimizer state.")
 
     def sample_observations_from_images(self, images, num_obs=25):
         """
