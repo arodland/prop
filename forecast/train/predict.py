@@ -55,8 +55,8 @@ def predict_dir(model, samples, name, dev, bs_q=4096, drop_iono=False, drop_glot
             means, lvs = [], []
             H, PAD = model.encode(tok, tmask, g, tok_g, g_mask, tok_s, s_mask)
             qarr = z["qry"]
-            if drop_iono and qarr.shape[1] > F_QRY:
-                qarr = qarr.copy(); qarr[:, F_QRY:] = 0  # nearest-station state columns (--qstate) are ionosonde data
+            if drop_iono and qarr.shape[1] > F_QRY:  # nearest-station state columns (--qstate) are ionosonde data; dist_nearest
+                qarr = qarr.copy(); qarr[:, F_QRY:] = 0; qarr[:, F_QRY + 1] = 1.0  # is query_state()'s "none in reach" = 1, not 0
             if os.environ.get("RO_AS_MAP"):  # diagnostic: score RO points with the query kind flag cleared (as a map pixel would be)
                 qarr = qarr.copy(); qarr[:, 9] = 0.0
             for i in range(0, len(qarr), bs_q):

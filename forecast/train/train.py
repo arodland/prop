@@ -5,6 +5,16 @@
 Source dropout (PLAN.md): with prob P_DROP_GLOB the global token is zeroed; station dropout: each sample
 keeps a random 50-100% of its tokens. Loss: Gaussian NLL on normalised anomalies, held-out queries
 weighted x2 (they are the primary metric). Val metric: RMSE (in MHz) on held-out ionosonde fof2.
+
+Diagnostic val columns (2026-09-21), all scored on the same held-out rows by the model best.pt would hold:
+  --val-modes      only ionosondes / only GloTEC / only spots / no inputs
+  --val-ablate     the primary minus one source at a time: which pathway is a rising primary coming from
+  --val-augmented  the primary over val samples carrying this run's *training* augmentation, draws fixed by
+                   --val-aug-seed. The plain column scores all sources with every token, which training visits
+                   on only ~3% of steps once --glotec is on (GloTEC exists from 2025-05 = ~6.5% of training
+                   samples, and whole-source dropout removes it from 30% of those); if this column keeps
+                   improving while the plain one rises, the scored configuration is drifting from the trained
+                   one rather than the model overfitting.
 """
 import argparse
 import copy
@@ -73,7 +83,7 @@ def spatial_cap(tok, tok_g, tok_s, qry, issue, r_lo, r_hi, rng):
 
 
 class Samples(Dataset):
-    def __init__(self, d, train, max_q=1024, max_tok=None, recency_tau=None, p_drop_iono=0.0, p_drop_glotec=P_DROP_GLO, p_drop_spots=P_DROP_SPOT, p_drop_iono_glotec=None, lead_window=0.0, p_spatial=0.0, spatial_km=(1500.0, 6000.0)):
+    def __init__(self, d, train, max_q=1024, max_tok=None, recency_tau=None, p_drop_iono=0.0, p_drop_glotec=P_DROP_GLO, p_drop_spots=P_DROP_SPOT, p_drop_iono_glotec=None, lead_window=0.0, p_spatial=0.0, spatial_km=(1500.0, 6000.0), aug_seed=None):
         self.files = sorted(glob.glob(f"{d}/*.npz")); self.train = train; self.max_q = max_q
         self.max_tok = max_tok; self.recency_tau = recency_tau  # token-budget study: applied at load time, train and val alike
         # whole-source dropout. Ionosondes were never dropped whole before 2026-09-08 (only 50-100% token keep), so the
@@ -81,6 +91,9 @@ class Samples(Dataset):
         self.p_drop_iono, self.p_drop_glotec, self.p_drop_spots = p_drop_iono, p_drop_glotec, p_drop_spots
         self.lead_window = lead_window
         self.p_spatial, self.spatial_km = p_spatial, spatial_km
+        # aug_seed: draw every augmentation from a stream keyed by (aug_seed, index) instead of the worker's stream, so the
+        # augmented view of a sample is identical on every epoch. Used by the --val-augmented pass (see main), never in training.
+        self.aug_seed = aug_seed
         # GloTEC exists only from 2025-05, i.e. ~7% of training samples, so the GloTEC-only mode gets ~0.5% of the
         # steps spots-only gets; a higher ionosonde-drop rate on GloTEC-era samples evens that up.
         self.p_drop_iono_glotec = p_drop_iono if p_drop_iono_glotec is None else p_drop_iono_glotec
@@ -89,6 +102,16 @@ class Samples(Dataset):
         return len(self.files)
 
     def __getitem__(self, i):
+        if self.aug_seed is None:
+            return self._get(i)
+        st = np.random.get_state()  # restored, so a seeded view never perturbs the training stream in the same worker
+        np.random.seed((self.aug_seed * 1000003 + i) % 2**32)
+        try:
+            return self._get(i)
+        finally:
+            np.random.set_state(st)
+
+    def _get(self, i):
         z = np.load(self.files[i])
         tok, qry, tgt, held = pad_tok(z["tok"]), z["qry"], z["tgt"], z["held"]
         glob_ = np.nan_to_num(z["glob"].copy())  # defensive: index gaps must never poison a batch
@@ -103,7 +126,8 @@ class Samples(Dataset):
             has_g = len(tok_g_all) > 0
             if np.random.rand() < (self.p_drop_iono_glotec if has_g else self.p_drop_iono):
                 tok = tok[:0]  # whole-source drop: the model must answer from GloTEC / spots / indices alone
-                qry = qry.copy(); qry[:, F_QRY:] = 0  # the nearest-station state (--qstate columns) is ionosonde data too
+                if qry.shape[1] > F_QRY:  # the nearest-station state (--qstate columns) is ionosonde data too. query_state()
+                    qry = qry.copy(); qry[:, F_QRY:] = 0; qry[:, F_QRY + 1] = 1.0  # codes "no station in reach" as dist 1, not 0
             else:
                 keep = np.random.rand(len(tok)) < np.random.uniform(0.5, 1.0)
                 tok = tok[keep] if keep.sum() >= 5 else tok
@@ -160,7 +184,9 @@ def evaluate(model, dl, dev, chunk=1024, drop=()):
     with torch.no_grad():
         for tok, tmask, g, qry, tgt, held, kind, tok_g, g_mask, tok_s, s_mask in dl:
             if "iono" in drop:
-                tok, tmask = tok[:, :0], tmask[:, :0]; qry = qry.clone(); qry[..., F_QRY:] = 0  # and the query-state columns
+                tok, tmask = tok[:, :0], tmask[:, :0]
+                if qry.shape[-1] > F_QRY:  # and the query-state columns, with dist_nearest back to query_state()'s "none in reach" = 1
+                    qry = qry.clone(); qry[..., F_QRY:] = 0; qry[..., F_QRY + 1] = 1.0
             if "glotec" in drop:
                 tok_g, g_mask = tok_g[:, :0], g_mask[:, :0]
             if "spots" in drop:
@@ -194,6 +220,9 @@ def main():
     ap.add_argument("--short-lead-weight", type=float, default=1.0, help="loss weight multiplier for queries with lead <= --short-lead-h (1 = off). Short leads are 1/24 of the queries but hold the largest known loss (own-station 0-4 h); 3 is a sensible first try")
     ap.add_argument("--short-lead-h", type=float, default=3.0)
     ap.add_argument("--val-modes", action="store_true", help="also print per-epoch val foF2 with only ionosondes / only GloTEC / only spots / no inputs (4 extra val passes)")
+    ap.add_argument("--val-ablate", action="store_true", help="also print per-epoch val foF2 with one source removed at a time (no GloTEC / no spots / no ionosondes). The 'only' columns of --val-modes cannot say which pathway a rising primary is coming from; these can, since each is the primary minus one source (1 pass per enabled source)")
+    ap.add_argument("--val-augmented", action="store_true", help="also print per-epoch val foF2 over val samples carrying the *training* augmentation (whole-source dropout, per-token keep, GloTEC dt jitter, global-token zeroing, --p-spatial) at this run's target rates, with the draws fixed by --val-aug-seed so the set is identical every epoch. The plain val column scores all sources, all tokens, no jitter, which is a configuration training rarely visits once --glotec is on; if this column keeps improving while the plain one rises, the model is not overfitting, the scored configuration is drifting from the trained one (1 extra val pass)")
+    ap.add_argument("--val-aug-seed", type=int, default=12345, help="seed for --val-augmented's fixed augmentation draws")
     ap.add_argument("--p-spatial", type=float, default=0.0, help="spatial dropout: fraction of training samples reduced to the observation tokens inside a random cap (see spatial_cap); 0.3 is the first try")
     ap.add_argument("--spatial-km", default="1500,6000", help="cap radius range in km for --p-spatial")
     ap.add_argument("--seed", type=int, default=None, help="seed torch/numpy and the DataLoader (worker augmentation varies per epoch but is reproducible)")
@@ -217,6 +246,15 @@ def main():
     tr = DataLoader(Samples(a.train, True, max_tok=a.max_tok, recency_tau=a.recency_tau, p_drop_iono=a.p_drop_iono, p_drop_glotec=a.p_drop_glotec, p_drop_spots=a.p_drop_spots, p_drop_iono_glotec=a.p_drop_iono_glotec, lead_window=a.lead_window, p_spatial=a.p_spatial, spatial_km=tuple(float(x) for x in a.spatial_km.split(","))),
                     a.bs, shuffle=True, collate_fn=collate, num_workers=a.workers, drop_last=True, generator=gen, worker_init_fn=_worker_init)
     va = DataLoader(Samples(a.val, False, max_tok=a.max_tok, recency_tau=a.recency_tau), a.bs, shuffle=False, collate_fn=collate, num_workers=a.workers)
+    va_aug = None
+    if a.val_augmented:  # same samples and the same held-out rows, seen the way training sees them. Input augmentation only:
+        # max_q and --lead-window are off so every query is still scored and the column is as precise as the plain one. The
+        # rates are this run's targets, held fixed under --curriculum too, so the column is comparable across all epochs.
+        va_aug = DataLoader(Samples(a.val, True, max_q=1 << 30, max_tok=a.max_tok, recency_tau=a.recency_tau, p_drop_iono=a.p_drop_iono,
+                                    p_drop_glotec=a.p_drop_glotec, p_drop_spots=a.p_drop_spots, p_drop_iono_glotec=a.p_drop_iono_glotec,
+                                    lead_window=0.0, p_spatial=a.p_spatial, spatial_km=tuple(float(x) for x in a.spatial_km.split(",")),
+                                    aug_seed=a.val_aug_seed),
+                            a.bs, shuffle=False, collate_fn=collate, num_workers=a.workers)
     z0 = np.load(tr.dataset.files[0]); f_spot = int(z0["tok_s"].shape[1]) if a.spots else 29  # token format is set by the samples
     pool = bool(z0["pool"]) if "pool" in z0.files else False  # pooled ionosonde tokens (build_samples --pool); the service must match
     spot_res = int(z0["spot_res"]) if "spot_res" in z0.files else 60
@@ -279,11 +317,16 @@ def main():
                 best_raw = rmse[0]; torch.save({"model": model.state_dict(), "args": args, "val_rmse": rmse.tolist(), "epoch": ep + 1}, out / "best_raw.pt")
         elif rmse[0] < best:
             best = rmse[0]; torch.save({"model": model.state_dict(), "args": args, "val_rmse": rmse.tolist(), "epoch": ep + 1}, out / "best.pt")
-        if a.val_modes:  # single-source / no-input foF2 on the same val rows, from the model that best.pt would hold
-            sel = ema if ema is not None else model
+        sel = ema if ema is not None else model  # the model best.pt would hold
+        if a.val_modes:  # single-source / no-input foF2 on the same val rows
             modes = {"iono": ("glotec", "spots"), "glotec": ("iono", "spots"), "spots": ("iono", "glotec"), "none": ("iono", "glotec", "spots")}
             modes = {k: d for k, d in modes.items() if (a.glotec or k != "glotec") and (a.spots or k != "spots")}  # only pathways the model has
             line += "  | only:" + " ".join(f"{k} {evaluate(sel, va, dev, drop=d)[0][0]:.3f}" for k, d in modes.items())
+        if a.val_ablate:  # leave-one-out: which pathway is the primary losing to?
+            abl = {k: (k,) for k in ("glotec", "spots", "iono") if (a.glotec or k != "glotec") and (a.spots or k != "spots")}
+            line += "  | no:" + " ".join(f"{k} {evaluate(sel, va, dev, drop=d)[0][0]:.3f}" for k, d in abl.items())
+        if va_aug is not None:
+            line += f"  | aug-val fof2 {evaluate(sel, va_aug, dev)[0][0]:.3f}"
         print(f"{line}   (IRI: {rmse_iri[0]:.3f} / {rmse_iri[1]:.1f} / {rmse_iri[2]:.2f})  {time.time() - t0:.0f}s", flush=True)
     print("best val fof2 RMSE", best, "(EMA; raw best %.3f in best_raw.pt)" % best_raw if ema is not None else "")
 
