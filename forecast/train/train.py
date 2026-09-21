@@ -222,6 +222,19 @@ def main():
     spot_res = int(z0["spot_res"]) if "spot_res" in z0.files else 60
     spot_baseline = str(z0["spot_baseline"]) if "spot_baseline" in z0.files else "frozen"  # baseline scheme of the samples
     f_qry = int(z0["qry"].shape[1])  # 18 with --qstate samples  # spot bin resolution the samples were built with (SPOT_RES for the service)
+    # Every format fact above is read from --train and then assumed of --val. A val set built with
+    # different build_samples flags otherwise surfaces as a matmul shape error inside decode() after
+    # the first epoch has already been spent, or worse, as a silently wrong number.
+    zv = np.load(va.dataset.files[0])
+    val_fmt = (int(zv["qry"].shape[1]), int(zv["tok_s"].shape[1]) if a.spots else 29,
+               bool(zv["pool"]) if "pool" in zv.files else False,
+               int(zv["spot_res"]) if "spot_res" in zv.files else 60,
+               str(zv["spot_baseline"]) if "spot_baseline" in zv.files else "frozen")
+    if val_fmt != (f_qry, f_spot, pool, spot_res, spot_baseline):
+        raise SystemExit(f"--val was built with different build_samples flags than --train, as (f_qry, f_spot, pool, spot_res, spot_baseline):\n"
+                         f"  train {a.train}: {(f_qry, f_spot, pool, spot_res, spot_baseline)}\n"
+                         f"  val   {a.val}: {val_fmt}\n"
+                         f"Rebuild the val set with the same flags (f_qry 18 = --qstate, f_spot 52 = --spots-cp).")
     model = AnomalyModel(d=a.d, enc_layers=a.layers, dropout=a.dropout, query_self_attn=False, glotec=a.glotec, spots=a.spots, f_spot=f_spot, f_qry=f_qry).to(dev)
     print(f"{sum(p.numel() for p in model.parameters()) / 1e6:.2f}M params, {len(tr.dataset)} train / {len(va.dataset)} val samples, device {dev}")
     if a.optimizer == "muon":
