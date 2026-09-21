@@ -25,8 +25,15 @@ my %URSICodeToName = (
     "30" => "foEs", "31" => "fxEs", "32" => "fbEs", "34" => "h'Es", "36" => "typeEs",
     "42" => "fmin",
     "60" => "f(h'F2)", "61" => "f(h'F)",
-    "70" => "TEC",
-    "80" => "fminE", "83" => "yE", "84" => "QF", "85" => "QE", "86" => "FF", "87" => "FE",
+    # ARTIST writes TEC as 71, not 70, so TEC was being dropped from every SAOXML file. Checked
+    # against 540 files spanning all 12 SAOXML-emitting stations in the /kass/mids archive: 71
+    # carries Name="TEC" in every one of them and 70 never appears. 70 is left in place because
+    # it has been in production without producing bad values, so something may still emit it.
+    "70" => "TEC", "71" => "TEC",
+    # 80 is fminF and 81 is fminE, not the other way round. Neither reaches the measurement
+    # table (load.pl's %map has no fmin column), so this only matters to other users of the lib.
+    "80" => "fminF", "81" => "fminE",
+    "83" => "yE", "84" => "QF", "85" => "QE", "86" => "FF", "87" => "FE",
     "90" => "zmE", "91" => "zmF1", "92" => "zmF2", "93" => "zhalfNm", "94" => "yF2", "95" => "yF1",
     "D0" => "B0", "D1" => "B1", "D2" => "D1",
 );
