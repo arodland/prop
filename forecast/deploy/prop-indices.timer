@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily indices fetch (GFZ publishes the previous day's Kp/ap/F10.7 by ~02:00 UTC)
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=600
+Persistent=true
+[Install]
+WantedBy=timers.target

@@ -133,6 +133,10 @@ for key in sorted(bins.keys()):
     print("===", key, "===")
 
     ins = con.cursor()
+    # Raw observations, independent of model runs (PLAN.md Phase 0).
+    ins.executemany("insert into ro_obs(time, latitude, longitude, fof2, hmf2, source) values (%s, %s, %s, %s, %s, %s) on conflict do nothing",
+                    [(r['ts'], r['lat'], r['lon'], r['fof2'], r['hmf2'], r['source']) for r in records])
+    con.commit()
 
     with con.cursor() as cur:
         cur.row_factory = psycopg.rows.dict_row

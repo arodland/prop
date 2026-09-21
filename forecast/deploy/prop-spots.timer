@@ -1,0 +1,8 @@
+[Unit]
+Description=Spot pull every 15 min, with the ionosonde fetch (:08/:23/:38/:53), ahead of the :10/:25/:40/:55 forecast runs
+[Timer]
+OnCalendar=*-*-* *:08,23,38,53:00 UTC
+AccuracySec=15s
+Persistent=true
+[Install]
+WantedBy=timers.target

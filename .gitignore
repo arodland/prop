@@ -1,1 +1,6 @@
 pred/*.txt
+forecast/.venv/
+__pycache__/
+forecast/out/
+forecast/live_forecast/
+forecast/analysis/*.parquet

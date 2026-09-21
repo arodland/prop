@@ -1,0 +1,13 @@
+[Unit]
+Description=Live WSPR/pskreporter spot pull and hourly aggregates for the forecast service
+PartOf=kc2gprop.target
+[Service]
+Type=oneshot
+Delegate=yes
+ExecStartPre=/usr/bin/rm -f %t/%N-pid %t/%N-cid
+ExecStart=/usr/bin/podman run --rm --replace --pod=prop --name %N --conmon-pidfile /%t/%N-pid --cidfile /%t/%N-cid --cgroups=no-conmon --attach stdin --log-driver journald --user 1001 --mount type=bind,src=/home/prop/checkpoints,dst=/checkpoints prop-forecast /app/.venv/bin/python /app/service/spots.py
+TimeoutStartSec=600
+ExecStop=/usr/bin/podman stop --ignore --cidfile %t/%N-cid -t 10
+ExecStopPost=/usr/bin/podman rm --ignore -f --cidfile %t/%N-cid
+[Install]
+WantedBy=kc2gprop.target

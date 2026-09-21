@@ -5,3 +5,5 @@ Type=oneshot
 User=prop
 Group=prop
 ExecStart=/usr/bin/wget -q -P /home/prop/iri-index/chain -N https://chain-new.chain-project.net/echaim_downloads/apf107.dat https://chain-new.chain-project.net/echaim_downloads/ig_rz.dat
+# Keep a dated copy so "indices as published on date X" can be replayed later (PLAN.md Phase 0).
+ExecStartPost=/bin/sh -c 'd=/home/prop/iri-index/archive/$(date -u +%%F); mkdir -p "$d"; cp -p /home/prop/iri-index/chain/*.dat /home/prop/iri-index/predicted/* "$d"/'
