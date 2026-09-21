@@ -1576,6 +1576,52 @@ product question.
   (`uv run train/spot_tokens.py rolling <out> 2019-01 2026-08`), rebuild `train_v9b`/`val_v9b`, one
   training run against the v9b control, and the W3USR standalone re-run — under a causal baseline the
   "own baseline" build it needed should no longer be a separate thing.
+- 2026-09-21: **rolling spot baseline is skill-neutral; shelved, `v9b_spatial_3` stays the production
+  candidate.** `v9b_rolling_1` (`train_v9r`, `--seed 1 --p-spatial 0.25 --curriculum 3 --logvar-floor -4
+  --target-noise 0.05 --optimizer muon --ema 0.999`, best at **epoch 5** of 20, EMA and raw, val 1.045)
+  scored on `val_v9r2` against the frozen-baseline models on `val_v9b`. The two sample sets share
+  filenames, holdout mask and `qid` exactly, so every pairing below is on identical truth rows and
+  differs only in the spot-token scheme. Held-out foF2 paired vs `cur_4ng`: rolling1 −0.006 [−0.015,
+  +0.002] against spatial_3 −0.004 [−0.013, +0.005] (RMSE 1.045 vs 1.042, `cur_4ng` 1.038, `v9b` 1.010
+  the known lucky draw, recipe floor 1.036–1.040). Full mode: **+0.043 both** ([+0.033, +0.052] vs
+  [+0.032, +0.054]). RO over IRI: **+0.234 both** ([+0.223, +0.245] vs [+0.218, +0.244]). σ calibration
+  cov1/cov2 0.673/0.940 vs 0.675/0.939. Distance to nearest contributing ionosonde, held-out:
+  0.772/0.923/1.138/1.316/1.108 vs 0.768/0.923/1.140/1.309/1.093 — indistinguishable at every range.
+  Source modes vs its own no-inputs: ionosondes-only +0.068, all inputs +0.067, spots-only +0.032, so
+  spots stay load-bearing standalone and still additive-free on top of ionosondes. The gain the scheme
+  was meant to recover (the control-point tokens the old inner join deleted, one in five in this window)
+  does not appear. On network data the baseline does do its job: mean non-zero activity anomaly
+  +0.008 on `val_v9r2` against +0.137 on `val_v9b`. **One seed only**, and 1.045 sits just outside the
+  noise floor, so a second seed would be needed to call the small deficit real. Coherence gate not run.
+  **Decision (Andrew): not worth the operational complexity without a benefit — stay on
+  `v9b_spatial_3`, revisit later.** Files: `model_v9b_rolling_1.parquet`, `eval/skill_rolling1.json`,
+  `eval/val2025/rolling1_{iono_only,spots_only_oct,spots_only_nov,spots_only_dec,noinputs}.parquet`,
+  samples `val_v9r2`.
+- 2026-09-21: **the causal baseline does NOT remove the W3USR own-baseline build; it makes the lone
+  receiver worse.** Contradicts the expectation in the 2026-09-21 design entry above. `w3usr_v9r` (488
+  samples, May–Jun 2025, receiver aggregates from `eval/w3usr/` with the *global* rolling baseline),
+  `v9b_rolling_1 --drop-iono --drop-glotec`, paired against its own no-input mode: **−0.224 [−0.292,
+  −0.159] at holdout stations, −0.109 [−0.131, −0.087] at RO** — against `sp3`'s +2.4% / +1.0% on the
+  receiver's own frozen baseline. Cause, from mean non-zero activity anomaly (`tok_s[:, 6:16]`):
+  receiver + global rolling **−1.414**, receiver + own frozen −0.017, network + global rolling +0.008,
+  network + frozen +0.137. So the lone receiver reads −1.41 "bands dead" against the rolling baseline,
+  more than 3× the −0.42 the frozen global baseline gave on 2026-09-06. Mechanism is the fallback added
+  on purpose for the network: the `cell_lat IS NULL` row means a cell with no baseline key yields a
+  token instead of vanishing, so the receiver emits 2896 tokens/sample against 2296, and the extra ones
+  are the cells it barely covers, each reading hard negative. **The own-baseline route is still open but
+  not runnable**: a causal own-baseline for May 2025 needs the two prior calendar months (`BASELINE_WINDOW`
+  2, `BASELINE_WIDEN` 6) and the receiver aggregates hold 2025-05-01 → 2025-06-30 only (wspr 51,939 rows,
+  same window for all four sources). Needs `analysis/wspr_aggregate.py --rx 41.40,-75.63` re-run back to
+  at least 2025-03, 6+ months for the widening, against the wd20 / wd10 archives under the 100 Mbit/s cap.
+  Files: samples `w3usr_v9r`, `eval/w3usr/w3usr_rolling1_{w3usr,noinputs}.parquet`.
+- 2026-09-21: **`train.py` now fails fast on a train/val recipe mismatch.** It read five sample-format
+  facts (`f_qry`, `f_spot`, `pool`, `spot_res`, `spot_baseline`) from the first `--train` sample and
+  assumed them of `--val`, which was never inspected. A `val_v9r` built with none of the build flags
+  therefore survived model construction and a whole first epoch, then died in `decode()` as
+  `mat1 and mat2 shapes cannot be multiplied (8192x10 and 18x128)` — 10 query columns against an
+  18-column `qry_in`, i.e. no `--qstate`. The silent version is worse: a `pool` or `spot_baseline`
+  mismatch agrees on shapes and just produces a wrong val number. Now compared against the val set's
+  first sample, naming both tuples, before any compute.
 
 ## Open questions
 
