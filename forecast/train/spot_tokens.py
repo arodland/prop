@@ -63,7 +63,11 @@ def con():
             if files:
                 _con.execute(f"CREATE VIEW {src} AS SELECT * FROM read_parquet({[str(f) for f in files]}, union_by_name=true)")
         if BASELINE.exists():
-            _con.execute(f"CREATE VIEW base AS SELECT * FROM '{BASELINE}'")
+            # materialised, not a view over the parquet: build_samples calls spot_tokens once per issue time
+            # (~17k times) and a rolling baseline is ~8x the rows of a frozen one, so re-scanning the file every
+            # call is the whole cost. `base` stays a view over it so the presence checks below still see it.
+            _con.execute(f"CREATE TABLE _base_rows AS SELECT * FROM '{BASELINE}'")
+            _con.execute("CREATE VIEW base AS SELECT * FROM _base_rows")
             SCHEME[0] = baseline_scheme()
     return _con
 
