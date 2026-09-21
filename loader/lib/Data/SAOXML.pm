@@ -25,10 +25,12 @@ my %URSICodeToName = (
     "30" => "foEs", "31" => "fxEs", "32" => "fbEs", "34" => "h'Es", "36" => "typeEs",
     "42" => "fmin",
     "60" => "f(h'F2)", "61" => "f(h'F)",
-    # ARTIST writes TEC as 71, not 70, so TEC was being dropped from every SAOXML file. Checked
-    # against 540 files spanning all 12 SAOXML-emitting stations in the /kass/mids archive: 71
-    # carries Name="TEC" in every one of them and 70 never appears. 70 is left in place because
-    # it has been in production without producing bad values, so something may still emit it.
+    # Per the SAOXML-5 spec these are different measurements: 70 is I2000, electron content by
+    # the Faraday technique, and 71 is I, total electron content to a geostationary satellite.
+    # Only 70 was mapped, but ARTIST writes 71, so TEC was dropped from every SAOXML file.
+    # Checked against 540 files spanning all 12 SAOXML-emitting stations in the /kass/mids
+    # archive: 71 carries Name="TEC" in every one and 70 appears in none. Mapping both onto TEC
+    # would conflate the two techniques, but 70 is never seen in practice, so nothing is.
     "70" => "TEC", "71" => "TEC",
     # 80 is fminF and 81 is fminE, not the other way round. Neither reaches the measurement
     # table (load.pl's %map has no fmin column), so this only matters to other users of the lib.

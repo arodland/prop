@@ -39,10 +39,10 @@ SAO_CHARS = (
     "foF2p fminEs yF2 yF1 TEC scaleF2 B0 B1 D1 foEa h'Ea foP h'P fbEs typeEs"
 ).split(" ")
 
-# SAOXML-5 <URSI ID=> codes, used only when an element has no Name attribute (they all did in
-# a 300-file sample). Two entries differ from Data::SAOXML's %URSICodeToName, which the files
-# themselves contradict: TEC is 71 there, not 70, and 80/81 are fminF/fminE, not fminE/QF.
-# The live Perl loader consequently drops TEC from every SAOXML file it reads.
+# SAOXML-5 <URSI ID=> codes, used only when an element has no Name attribute (they all had one
+# in a 540-file sample spanning every SAOXML-emitting station here). ARTIST writes TEC as 71,
+# "I", total electron content to a geostationary satellite -- not 70, which the spec defines as
+# "I2000", electron content by the Faraday technique. 80/81 are fminF/fminE, not fminE/QF.
 XML_URSI = {
     "00": "foF2", "01": "fxF2", "02": "fzF2", "03": "M(D)", "04": "h'F2", "07": "MUF(D)",
     "09": "scaleF2", "10": "foF1", "11": "fxF1", "14": "h'F1", "16": "h'F", "20": "foE",
