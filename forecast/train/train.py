@@ -220,6 +220,7 @@ def main():
     z0 = np.load(tr.dataset.files[0]); f_spot = int(z0["tok_s"].shape[1]) if a.spots else 29  # token format is set by the samples
     pool = bool(z0["pool"]) if "pool" in z0.files else False  # pooled ionosonde tokens (build_samples --pool); the service must match
     spot_res = int(z0["spot_res"]) if "spot_res" in z0.files else 60
+    spot_baseline = str(z0["spot_baseline"]) if "spot_baseline" in z0.files else "frozen"  # baseline scheme of the samples
     f_qry = int(z0["qry"].shape[1])  # 18 with --qstate samples  # spot bin resolution the samples were built with (SPOT_RES for the service)
     model = AnomalyModel(d=a.d, enc_layers=a.layers, dropout=a.dropout, query_self_attn=False, glotec=a.glotec, spots=a.spots, f_spot=f_spot, f_qry=f_qry).to(dev)
     print(f"{sum(p.numel() for p in model.parameters()) / 1e6:.2f}M params, {len(tr.dataset)} train / {len(va.dataset)} val samples, device {dev}")
@@ -241,7 +242,7 @@ def main():
     ema = copy.deepcopy(model).eval() if a.ema > 0 else None
     for p_ in (ema.parameters() if ema else []):
         p_.requires_grad_(False)
-    args = {**vars(a), "query_self_attn": False, "glotec": a.glotec, "spots": a.spots, "f_spot": f_spot, "pool": pool, "spot_res": spot_res, "f_qry": f_qry}
+    args = {**vars(a), "query_self_attn": False, "glotec": a.glotec, "spots": a.spots, "f_spot": f_spot, "pool": pool, "spot_res": spot_res, "spot_baseline": spot_baseline, "f_qry": f_qry}
     best = best_raw = float("inf"); step = 0
     targets = (a.p_drop_iono, a.p_drop_glotec, a.p_drop_spots, tr.dataset.p_drop_iono_glotec)
     starts = [float(x) for x in a.curriculum_start.split(",")]; starts.append(max(starts[0], targets[3]))

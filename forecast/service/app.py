@@ -59,6 +59,9 @@ def load_model(name):
         m.load_state_dict(ck["model"]); m.eval(); m.pool = bool(ck["args"].get("pool", False)); _models[name] = m  # pooled ionosonde tokens?
         if m.spots and int(ck["args"].get("spot_res", 60)) != spot_mod.RES[0]:
             raise RuntimeError(f"checkpoint {name} was trained on {ck['args'].get('spot_res', 60)}-min spot bins but SPOT_RES={spot_mod.RES[0]}; set SPOT_RES for the loader and the service")
+        if m.spots and ck["args"].get("spot_baseline", "frozen") != spot_mod.baseline_scheme():
+            raise RuntimeError(f"checkpoint {name} was trained against a {ck['args'].get('spot_baseline', 'frozen')} spot baseline but "
+                               f"{os.environ['SPOT_BASELINE']} is {spot_mod.baseline_scheme()}; the anomaly means different things under the two")
     return _models[name]
 
 

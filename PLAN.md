@@ -1545,6 +1545,38 @@ product question.
   everything +28.3 / +14.4 (+7.4 / +2.9), ionosondes-only +28.3 / +14.3 (+7.3 / +2.8), spots-only
   +25.4 / +13.8 (+3.7 / +2.2), indices-only +22.5 / +11.8.
 
+- 2026-09-21: **the spot activity baseline is causal now, not frozen** (`train/spot_tokens.py`
+  `build_rolling_baseline`, `service/spots.py` archive + monthly rebuild; write-up and the measurement
+  script in the project files as `spot-baseline-design.md` / `spot_baseline_drift.py`). Measured on the
+  full archive (218M aggregate rows, 2019-01 → 2026-08): against `spot_baseline_cp.parquet` the WSPR
+  activity anomaly drifts **+0.0591 log10/yr** (+14.6% spots a year), reaching +0.19 in the Oct–Dec 2025
+  val window and +0.301 by 2026-07 (2.0× the baseline-era rate) — traffic, not the cycle, since 2026 is
+  above 2025 in all eight overlapping months while cycle 25 is past peak. It is not the cause of the
+  epoch 7–10 val turn (the 2025-01→09 training months carry +0.189 against val's +0.191), but it is
+  three other things: `cell_rms` 0.27 against an `act_std` of 0.457, i.e. a static per-cell offset three
+  quarters the size of everything else in the column; FT8 reading 0.000 throughout because its baseline
+  takes all years, so the two sources differ by 0.19 through one shared `spot_in`; and `drop_frac`
+  stepping at the baseline window's edge (WSPR 0.03→0.09 at 2024-01, control points 0.07→0.15) and
+  climbing to one control-point token in four by 2026 — newly active cells deleted by the inner join.
+  For scale, the W3USR test (2026-09-06) measured a −0.42 offset turning the channel from +29.1% at RO
+  into +13.2%, against +30.4% for no spots at all. **Rolling scheme**: for each target month, the median
+  over the `BASELINE_WINDOW` (2) calendar months before it, keyed (source, cell, band, UT); same rule for
+  every source, so no year range to pick and no FT8 leak; keys under `MIN_HOURS` there are remeasured
+  over `BASELINE_WIDEN` (6) months; a `cell_lat IS NULL` row per (source, band, UT, month) is the fallback
+  so a new cell yields a token instead of vanishing. Rescoring all 92 months against it: trend
+  **+0.0592 → −0.0018/yr**, `act_std` 0.457 → 0.430 in the val window and 0.505 → 0.433 in 2026 (the
+  smaller support costs nothing — the offset was part of the spread), `cell_rms` 0.273 → 0.164 and flat,
+  `drop_frac` trend +0.0172 → −0.0020/yr. Costs: a seasonal residual of amplitude 0.034 (every September
+  and October positive, June negative), which a longer window makes worse not better; and a feed gap
+  poisoning the baseline for the next 2 months (FT8 2026-02 `drop_frac` 0.49 against 0.08), which the
+  widening and the fallback are there to absorb. The scheme is detected from the baseline file's columns,
+  recorded in every sample as `spot_baseline`, carried into the checkpoint, and checked at load in
+  `service/app.py`, so a checkpoint cannot be served against the other scheme. The frozen builder and the
+  frozen token path are unchanged and verified bit-identical. **Next**: build the rolling baseline
+  (`uv run train/spot_tokens.py rolling <out> 2019-01 2026-08`), rebuild `train_v9b`/`val_v9b`, one
+  training run against the v9b control, and the W3USR standalone re-run — under a causal baseline the
+  "own baseline" build it needed should no longer be a separate thing.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly

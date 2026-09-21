@@ -33,6 +33,7 @@ GLOTEC = [False]  # set by --glotec: add GloTEC cell tokens (tok_g) where the ar
 POOL = [False]  # set by --pool: pool_hourly() the ionosonde rows before tokenising
 SPOT_RES = [60]  # set by --spot-res; recorded in each sample so train.py can put it in the checkpoint
 SPOTS = [False]  # set by --spots: add WSPR/FT8 activity tokens (tok_s) from the hourly aggregates
+SPOT_BASELINE = ["frozen"]  # baseline scheme of $SPOT_BASELINE ('frozen' or 'rolling'); recorded in each sample
 
 # token features: lat/90, sin lon, cos lon, sin LT, cos LT, dt_h/24, iri fof2/hmf2/mufd (scaled), anomaly x3, present x3, cs/100
 F_TOK = 1 + 2 + 2 + 1 + 3 + 3 + 3 + 1
@@ -193,7 +194,8 @@ def build(con, t, rng, f107, held_stations=None):
     held_q = np.isin(qcluster, list(held)) | (kind == 1)
     return dict(tok=tok, qry=qry, tgt=tgt, held=held_q, qkind=kind.astype(np.int8), qcluster=np.nan_to_num(qcluster, nan=-1).astype(np.int32),
                 tok_g=(glotec_tokens(t0, f107, rng) if GLOTEC[0] else np.zeros((0, 14), np.float32)),
-                tok_s=(spot_tokens(t0, rng) if SPOTS[0] else np.zeros((0, 29), np.float32)), pool=np.bool_(POOL[0]), spot_res=np.int16(SPOT_RES[0]), qstate=np.bool_(QSTATE[0]),
+                tok_s=(spot_tokens(t0, rng) if SPOTS[0] else np.zeros((0, 29), np.float32)), pool=np.bool_(POOL[0]), spot_res=np.int16(SPOT_RES[0]),
+                spot_baseline=np.str_(SPOT_BASELINE[0]), qstate=np.bool_(QSTATE[0]),
                 # identity for the harness schema (eval/report.py pairs on issue_time, target_id, time, lat, lon)
                 qtime=qt.astype("datetime64[s]").astype(np.int64), qlat=tg.lat.to_numpy(np.float32), qlon=tg.lon.to_numpy(np.float32),
                 qid=np.nan_to_num(tg["target_id"].to_numpy(dtype=float), nan=-1).astype(np.int32),
@@ -220,6 +222,8 @@ def main():
         global spot_tokens
         sys.path.insert(0, str(Path(__file__).resolve().parent)); from spot_tokens import spot_tokens, CP  # noqa: E402
         CP[0] = a.spots_cp; sys.modules["spot_tokens"].RES[0] = a.spot_res; SPOT_RES[0] = a.spot_res
+        SPOT_BASELINE[0] = sys.modules["spot_tokens"].baseline_scheme()
+        print(f"spot baseline: {SPOT_BASELINE[0]} ({sys.modules['spot_tokens'].BASELINE})", flush=True)
         if a.max_spot:
             sys.modules["spot_tokens"].MAX_SPOT = a.max_spot
     if a.glotec:
