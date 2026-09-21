@@ -5,12 +5,18 @@
 Writes <out>/year=YYYY/<URSI>.parquet plus <out>/station.parquet and <out>/report.json.
 Re-running skips station-years already written, so it resumes after an interrupt.
 
-Measured on the 2.5Gb link to kass: ~1000 files/s, ~0.2 cores. The job is bound by seek
-latency on kass's array, not by CPU -- parsing a SAO file costs 39us against a 4000us cold
-read -- so files are walked in directory order (shuffling them halves throughput) and the
-thread pool only exists to keep several reads in flight.
+Measured over the 2.5Gb link to kass: 621 files/s and 0.14 cores across 1.85M files of DB049,
+which is the worst case since nearly every sounding there exists as both a SAO and an XML.
+SAO-only stations run nearer 1000 files/s. The job is bound by seek latency on kass's array,
+not by CPU -- parsing a SAO file costs 39us against a 4000us cold read -- so files are walked
+in directory order (shuffling them across stations halves throughput) and the thread pool only
+exists to keep several reads in flight. Expect roughly a day for the full corpus.
 
 .ART files (the pre-2000 binary format) are ignored.
+
+Files that fail to parse are listed in <out>/bad_files.txt rather than only counted. In the
+sample so far they are all truncated mid-transfer (every size an exact multiple of 4096), so
+they are worth fetching again; delete the affected year=*/CODE.parquet to have them re-read.
 """
 import json
 import os
@@ -21,6 +27,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from xml.etree import ElementTree
 
+import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -78,9 +85,13 @@ COLS = {
 # These stations send M(D) in the MUF(D) slot. Same list and threshold as loader/app/load.pl.
 MD_AS_MUF = {"MM168", "SD266", "KB548", "MG560", "TK356"}
 
+# lat/lon/name are per-station, not per-sounding, but they are carried on every row so that each
+# partition is self-describing and station.parquet can be rebuilt from the output alone. They are
+# constant within a file, so run-length encoding makes them almost free.
 SCHEMA = pa.schema(
     [("code", pa.string()), ("time", pa.timestamp("us")), ("cs", pa.int16()),
-     ("source", pa.string()), ("format", pa.string())]
+     ("source", pa.string()), ("format", pa.string()), ("name", pa.string()),
+     ("lat", pa.float64()), ("lon", pa.float64())]
     + [(c, pa.float64()) for c in COLS.values()]
 )
 
@@ -240,13 +251,13 @@ def read_one(path, name):
     """(row dict, note) for one sounding file. note is a non-fatal complaint, or None."""
     m = FNAME_RE.match(name)
     if not m:
-        return None, f"unparseable filename {name}"
+        return None, f"unparseable filename: {path}"
     code, year, doy, hh, mm, ss = m.group(1), *(int(g) for g in m.groups()[1:6])
     when = datetime(year, 1, 1) + timedelta(days=doy - 1, hours=hh, minutes=mm, seconds=ss)
     try:
         raw = path.read_bytes()
     except OSError as e:
-        return None, f"read failed {name}: {e}"
+        return None, f"read failed: {path} ({e})"
     try:
         if name.endswith(".SAO"):
             got = parse_sao(raw.decode("ascii", "replace"))
@@ -261,16 +272,18 @@ def read_one(path, name):
             inner = xml_time(rec)
             fmt = "xml"
     except Exception as e:  # a corrupt file must not take the station-year down
-        return None, f"parse failed {name}: {type(e).__name__}: {e}"
+        return None, f"parse failed: {path} ({type(e).__name__}: {e})"
     row = clean(chars, code)
     if not row:
         return None, None  # nothing scaled; load.pl skips these too
-    row.update(code=code, time=when, cs=cs, source=SOURCE, format=fmt)
+    name_, lat, lon = station
+    row.update(code=code, time=when, cs=cs, source=SOURCE, format=fmt,
+               name=name_, lat=lat, lon=lon)
     # The path is the authority for when a sounding happened -- it is how the archive is
     # organised, and it sidesteps the decade-shifted years in the IONFM-converted files that
     # Data::SAO4 has to special-case. Disagreement is still worth counting.
-    note = None if inner == when else f"time mismatch {name}: file says {inner}"
-    return (row, station), note
+    note = None if inner == when else f"time mismatch: {path} (file says {inner})"
+    return row, note
 
 
 def sounding_files(year_dir):
@@ -291,54 +304,70 @@ def sounding_files(year_dir):
 
 
 def convert_station_year(year_dir, out_path, pool):
-    """Parse one station-year, dedupe, write a parquet. Returns (n_rows, stations, notes)."""
+    """Parse one station-year, dedupe, write a parquet. Returns (n_rows, notes)."""
     files = list(sounding_files(year_dir))
     if not files:
-        return 0, [], []
+        return 0, []
     results = list(pool.map(lambda a: read_one(*a), files, chunksize=32))
     notes = [n for _, n in results if n]
-    by_time, stations = {}, []
-    for ok, _ in results:
-        if not ok:
+    by_time = {}
+    for row, _ in results:
+        if not row:
             continue
-        row, station = ok
-        # One sounding can appear as both .SAO and _SAO.XML. The characteristics agree, so keep
-        # the SAO row -- 96% of the archive is SAO-only and should stay consistent. cs is the
+        # One sounding can appear as both .SAO and .XML. The characteristics agree, so keep the
+        # SAO row -- 96% of the archive is SAO-only and should stay consistent. cs is the
         # exception: SAO almost never carries a Confidence comment and falls back to the ARTIST
         # flags, which only resolve 25/50/75/100, while XML usually has the real percentage.
         prev = by_time.get(row["time"])
         if prev is None:
             by_time[row["time"]] = row
-        else:
-            sao, xml = (prev, row) if prev["format"] == "sao" else (row, prev)
-            sao["cs"], sao["format"] = xml["cs"], "sao+xml"
-            by_time[row["time"]] = sao
-        if station[1] is not None:
-            stations.append(station)
+            continue
+        sao, xml = (prev, row) if prev["format"] == "sao" else (row, prev)
+        sao["cs"], sao["format"] = xml["cs"], "sao+xml"
+        # SAO descriptions often carry no NAME, where SAOXML always has StationName.
+        for k in ("name", "lat", "lon"):
+            if sao.get(k) is None:
+                sao[k] = xml.get(k)
+        by_time[row["time"]] = sao
     rows = [by_time[t] for t in sorted(by_time)]
     if not rows:
-        return 0, stations, notes
+        return 0, notes
     table = pa.Table.from_pylist(rows, schema=SCHEMA)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_suffix(".parquet.tmp")
     pq.write_table(table, tmp, compression="zstd")
     tmp.replace(out_path)  # atomic, so an interrupted run never leaves a half file to resume past
-    return len(rows), stations, notes
+    return len(rows), notes
 
 
-def merge_station(seen, code, samples):
-    """Collapse per-file station metadata, flagging lat/lon that moves for a given code."""
-    lats = sorted({round(s[1], 2) for s in samples if s[1] is not None})
-    lons = sorted({round(s[2], 2) for s in samples if s[2] is not None})
-    names = {s[0].strip() for s in samples if s[0] and s[0].strip()}
-    rec = seen.setdefault(code, {"code": code, "lats": set(), "lons": set(), "names": set()})
-    rec["lats"].update(lats)
-    rec["lons"].update(lons)
-    rec["names"].update(names)
+def write_stations(out: Path):
+    """Derive station.parquet from the partitions on disk, so a resumed run is still complete.
+
+    Position is the median of the per-sounding values rounded to 0.01 degrees. A code whose
+    position moves is flagged rather than silently averaged -- it usually means the sonde was
+    relocated, or that two sites have shared a URSI code over the years.
+    """
+    con = duckdb.connect()
+    rows = con.execute(f"""
+        WITH r AS (
+            SELECT code, name,
+                   round(lat, 2) AS lat, round(lon, 2) AS lon
+            FROM read_parquet('{out}/year=*/*.parquet')
+            WHERE lat IS NOT NULL AND lon IS NOT NULL)
+        SELECT code,
+               -- The URSI code is the honest fallback; SAO descriptions often carry no NAME.
+               coalesce(max(name), code) AS name,
+               median(lat) AS lat, median(lon) AS lon,
+               count(DISTINCT lat) > 1 AS lat_varies,
+               count(DISTINCT lon) > 1 AS lon_varies,
+               count(DISTINCT lat) AS n_lat, count(DISTINCT lon) AS n_lon
+        FROM r GROUP BY code ORDER BY code""").to_arrow_table()
+    pq.write_table(rows, out / "station.parquet", compression="zstd")
+    return rows.to_pylist()
 
 
 def main(root: Path, out: Path):
-    seen, report = {}, {"rows": 0, "station_years": 0, "skipped": 0, "notes": {}, "drift": []}
+    report = {"rows": 0, "station_years": 0, "skipped": 0, "notes": {}, "examples": {}}
     out.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(THREADS) as pool:
         for station in sorted(os.scandir(root), key=lambda e: e.name):
@@ -351,35 +380,31 @@ def main(root: Path, out: Path):
                 if dest.exists():
                     report["skipped"] += 1
                     continue
-                n, stations, notes = convert_station_year(Path(year.path), dest, pool)
-                merge_station(seen, station.name, stations)
+                n, notes = convert_station_year(Path(year.path), dest, pool)
                 report["rows"] += n
                 report["station_years"] += 1
                 for note in notes:
-                    key = note.split(":")[0].rsplit(" ", 1)[0]
+                    key = note.split(":")[0]
                     report["notes"][key] = report["notes"].get(key, 0) + 1
+                    report["examples"].setdefault(key, note)  # one sample of each kind
+                if notes:
+                    # Named in full and appended as we go, so an interrupted run keeps them.
+                    # Most are files truncated in transfer, which can simply be fetched again;
+                    # delete the affected year=*/CODE.parquet afterwards to have them re-read.
+                    with (out / "bad_files.txt").open("a") as fh:
+                        fh.write("".join(n + "\n" for n in notes))
                 print(f"{station.name} {year.name} {n:>7} rows"
                       f"{f'  {len(notes)} bad files' if notes else ''}", flush=True)
 
-    rows = []
-    for code, rec in sorted(seen.items()):
-        if len(rec["lats"]) > 1 or len(rec["lons"]) > 1:
-            report["drift"].append({"code": code, "lat": sorted(rec["lats"]),
-                                    "lon": sorted(rec["lons"])})
-        # Name is often absent from SAO descriptions; the URSI code is the honest fallback.
-        name = sorted(rec["names"])[0] if rec["names"] else code
-        def median(vals):
-            return sorted(vals)[len(vals) // 2] if vals else None
-        rows.append({"code": code, "name": name,
-                     "lat": median(rec["lats"]), "lon": median(rec["lons"]),
-                     "lat_varies": len(rec["lats"]) > 1, "lon_varies": len(rec["lons"]) > 1})
-    if rows:
-        pq.write_table(pa.Table.from_pylist(rows), out / "station.parquet", compression="zstd")
+    stations = write_stations(out)
+    report["stations"] = len(stations)
+    report["drift"] = [s for s in stations if s["lat_varies"] or s["lon_varies"]]
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str))
     print(f"\n{report['rows']:,} rows over {report['station_years']} station-years "
-          f"({report['skipped']} already done)")
+          f"({report['skipped']} already done), {len(stations)} stations")
     if report["drift"]:
-        print(f"lat/lon varies for {len(report['drift'])} codes -- see report.json 'drift'")
+        print(f"position varies for {len(report['drift'])} codes -- see report.json 'drift':",
+              ", ".join(s["code"] for s in report["drift"][:10]))
     if report["notes"]:
         print("bad files:", report["notes"])
 
@@ -390,8 +415,8 @@ def _selfcheck():
     if not p.with_suffix(".SAO").exists():
         print("selfcheck skipped: /kass/mids not mounted")
         return
-    (sao, _), sao_note = read_one(p.with_suffix(".SAO"), "DB049_2017292142502.SAO")
-    (xml, _), xml_note = read_one(Path(str(p) + "_SAO.XML"), "DB049_2017292142502_SAO.XML")
+    sao, sao_note = read_one(p.with_suffix(".SAO"), "DB049_2017292142502.SAO")
+    xml, xml_note = read_one(Path(str(p) + "_SAO.XML"), "DB049_2017292142502_SAO.XML")
     assert sao_note is None and xml_note is None, (sao_note, xml_note)  # path vs in-file time
     assert sao["time"] == datetime(2017, 10, 19, 14, 25, 2), sao["time"]
     assert sao["time"] == xml["time"]
