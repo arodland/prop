@@ -97,8 +97,8 @@ SCHEMA = pa.schema(
 
 CONF_RE = re.compile(r"Confidence: (\d+)%")
 NAME_RE = re.compile(r"NAME\s+([^,]+)")
-FNAME_RE = re.compile(r"^([A-Z0-9]{5})_(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})(?:[._]SAO)?\.(SAO|XML)$")
-URSI_RE = re.compile(r"^[A-Z0-9]{5}$")
+FNAME_RE = re.compile(r"^([A-Z0-9_]{5})_(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})(?:[._]SAO)?\.(SAO|XML)$")
+URSI_RE = re.compile(r"^[A-Z0-9_]{5}$")  # NI63_ pads its code with an underscore
 XML_TIME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?: -\d{3})? (\d{2}):(\d{2}):(\d{2})")
 
 
@@ -442,6 +442,7 @@ def _selfcheck():
     assert FNAME_RE.match("DB049_2017292142502.SAO.XML"), "the .SAO.XML spelling must parse"
     assert FNAME_RE.match("DB049_2017292142502_SAO.XML")
     assert FNAME_RE.match("DB049_2017292142502.SAO")
+    assert FNAME_RE.match("NI63__2010020120000.SAO").group(1) == "NI63_"  # underscore-padded code
     print("selfcheck ok")
 
 
