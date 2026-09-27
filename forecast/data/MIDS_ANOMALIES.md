@@ -13,7 +13,6 @@ TLDR: none of this is a loader bug. Every bad position is the literal constants 
 - Several stations carry corrupted coordinates in their own files. Harmless while positions come
   from `station.parquet`; wrong if anything uses the row-level `lat`/`lon`.
 - ND51R has no row in `station.parquet`, so a join on it drops all 459 of its rows.
-- 1,556 CAJ2M files from 2012 are not loaded at all.
 
 Distances below are from the code's main position (the lat/lon carried by the most rows), with
 longitude taken modulo 360. Under 25 km the differences are precision (40.0 against 40.3) or short
@@ -94,11 +93,6 @@ and hmF2 between 2018 and 2024. Each file names its own station, and the shared 
 median 0.05 MHz from its neighbours in both series, where the two stations normally differ by
 0.1 MHz. Autoscala reports foF2 to 0.1 MHz with hmF2 often at a 200 km floor, so this is the rate
 chance gives. MA155's 47 scattered matches with GM037, RA041 and MZ152 are the same.
-
-## Not loaded
-
-1,556 CAJ2M 2012 files sit directly in `CAJ2M/2012/individual/`. The loader reads only
-`individual/DDD/*/`.
 
 ## Reproducing
 

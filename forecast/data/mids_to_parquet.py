@@ -405,6 +405,9 @@ def sounding_files(year_dir):
         return  # a station-year can be marked .complete with nothing in it
     for doy in sorted(os.scandir(individual), key=lambda e: e.name):
         if not doy.is_dir():
+            # CAJ2M/2012 keeps its first two weeks (1,556 files) directly in individual/.
+            if doy.name.endswith(".SAO") or doy.name.endswith(".XML"):
+                yield Path(doy.path), doy.name
             continue
         # Almost always 'scaled', but at least one station-year files soundings under 'misc'.
         for sub in sorted(os.scandir(doy.path), key=lambda e: e.name):
