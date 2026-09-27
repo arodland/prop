@@ -25,6 +25,7 @@ times more than a minute from the path. The truncated XML among them (sizes an e
 """
 import bisect
 import json
+import math
 import os
 import re
 import sys
@@ -133,6 +134,19 @@ URSI_RE = re.compile(r"^[A-Z0-9_]{5}$")  # NI63_ pads its code with an underscor
 XML_TIME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?: -\d{3})? (\d{2}):(\d{2}):(\d{2})")
 
 
+def _num(s):
+    """A finite float from file text, else None.
+
+    float() accepts 'nan', '-nan' and 'inf', which the ESIR autoscaler writes into SAO fields
+    (and a few other writers as 'NaN'); those mean "no value", the same as the 9999 fill.
+    """
+    try:
+        v = float(s)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
+
+
 # --- SAO-4 ------------------------------------------------------------------
 
 def _sao_fields(lines, pos, n, per_line, width):
@@ -214,7 +228,7 @@ def sao_row(got):
             break
         # A Fortran overflow ('********') or two values run together spoils one field, not the
         # sounding: treat it as missing, as the 9999 fill value would be.
-        v = _or_none(float, s)
+        v = _num(s)
         if v is not None and v != MISSING:
             chars[SAO_CHARS[i]] = v
     return chars, sao_confidence(got)
@@ -233,8 +247,8 @@ def sao_station(got):
     name = m.group(1).strip() if (m := NAME_RE.search(desc)) else None
     const = got.get(0) or []
     # ND51R's longitude overflows F7.3 as '*******'; station.parquet medians over other files.
-    lat = _or_none(float, const[2]) if len(const) > 2 else None
-    lon = _or_none(float, const[3]) if len(const) > 3 else None
+    lat = _num(const[2]) if len(const) > 2 else None
+    lon = _num(const[3]) if len(const) > 3 else None
     return name, lat, lon
 
 
@@ -283,10 +297,9 @@ def xml_row(rec):
         name = canonical(el.get("Name")) if el.get("Name") else XML_URSI.get(el.get("ID"))
         if name is None:
             continue
-        try:
-            chars[name] = float(el.get("Val"))
-        except (TypeError, ValueError):
-            pass
+        v = _num(el.get("Val"))
+        if v is not None:
+            chars[name] = v
     return chars, xml_confidence(rec)
 
 
@@ -299,12 +312,7 @@ def xml_time(rec):
 
 
 def xml_station(rec):
-    def num(a):
-        try:
-            return float(rec.get(a))
-        except (TypeError, ValueError):
-            return None
-    return rec.get("StationName"), num("GeoLatitude"), num("GeoLongitude")
+    return rec.get("StationName"), _num(rec.get("GeoLatitude")), _num(rec.get("GeoLongitude"))
 
 
 # --- shared -----------------------------------------------------------------
@@ -561,6 +569,9 @@ def main(root: Path, out: Path):
 def _selfcheck():
     """Pure checks first, then files from /kass/mids when it is mounted."""
     assert len(SAO_PER_LINE) == 60  # Data::SAO4 has 60 groups
+    for s in ("     nan", "    -nan", "     NaN", "     inf", "    -inf", "*******", "", None):
+        assert _num(s) is None, s
+    assert _num(" 232.667") == 232.667
     for name, groups in [
         ("DB049_2017292142502.SAO", ("DB049", "2017", "292", "14", "25", "02", "SAO")),
         ("DB049_2017292142502.SAO.XML", ("DB049", "2017", "292", "14", "25", "02", "XML")),
@@ -648,6 +659,12 @@ def _selfcheck():
         rows, notes = read_one(d, d.name)
         assert not any(n.startswith("parse failed") for n in notes), (f, notes)
         assert all(x["format"] == fmt for x in rows), (f, [x["format"] for x in rows])
+
+    # ESIR writes 'nan' into h'E and zmE here; they must come out missing, not NaN.
+    d = Path("/kass/mids/SJJ18/2011/individual/262/scaled/SJJ18_2011262232902.SAO")
+    (row,), _ = read_one(d, d.name)
+    assert "he" not in row and "hme" not in row and all(
+        math.isfinite(v) for k, v in row.items() if k in COLS.values()), row
     print("selfcheck ok")
 
 
