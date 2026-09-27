@@ -12,12 +12,18 @@ not by CPU -- parsing a SAO file costs 39us against a 4000us cold read -- so fil
 in directory order (shuffling them across stations halves throughput) and the thread pool only
 exists to keep several reads in flight. Expect roughly a day for the full corpus.
 
-.ART files (the pre-2000 binary format) are ignored.
+.ART files (the pre-2000 binary format) are ignored. Date-only day files (CODE_YYYYDDD.SAO)
+concatenate a day's soundings and are read record by record; they mostly repeat soundings that
+have their own file, and merge_rows drops those repeats.
 
-Files that fail to parse are listed in <out>/bad_files.txt rather than only counted. In the
-sample so far they are all truncated mid-transfer (every size an exact multiple of 4096), so
-they are worth fetching again; delete the affected year=*/CODE.parquet to have them re-read.
+The path is the authority for a sounding's time. Filenames on day 000 are the rest of December
+31 of the same year. Station-years whose dates cannot be right go to <out>-quarantine (QUARANTINE).
+
+Files that fail are listed in <out>/bad_files.txt rather than only counted, along with in-file
+times more than a minute from the path. The truncated XML among them (sizes an exact multiple of
+4096) can be fetched again; delete the affected year=*/CODE.parquet to have it re-read.
 """
+import bisect
 import json
 import os
 import re
@@ -38,6 +44,19 @@ MISSING = 9999.0  # SAO-4 fill value
 # SAO-4 group table, truncated at the last group we read. (values per line, field width).
 # Group 0 geophysical constants, 1 description, 2 timestamp, 3 characteristics, 4 analysis flags.
 SAO_GROUPS = [(16, 7), (1, 120), (120, 1), (15, 8), (60, 2)]
+
+# Values per line for every SAO-4 group, in index order, from Data::SAO4's @GROUPS. Only needed to
+# find where one record ends in the day files that concatenate a whole day's soundings.
+SAO_PER_LINE = [
+    16, 1, 120, 15, 60, 16,                              # constants .. doppler table
+    15, 15, 40, 120, 15, 15, 15, 40, 120, 15,            # F2 O, F1 O
+    15, 15, 40, 120, 15,                                 # E O
+    15, 40, 120, 15, 15, 40, 120, 15, 15, 40, 120, 15,   # F2 X, F1 X, E X
+    40, 40, 40, 10, 10, 10, 6, 120, 10,                  # median amplitudes .. valley
+    15, 40, 120, 15, 15, 40, 120, 15,                    # Es O, E auroral
+    15, 15, 15, 120, 120, 120,                           # profile, letters, edit flags
+    10, 15, 15, 15,                                      # auroral E profile
+]
 
 # Positional order of group 3, from the SAO-4 spec (mirrors Data::SAO4's @CHARACTERISTICS).
 SAO_CHARS = (
@@ -85,6 +104,13 @@ COLS = {
 # These stations send M(D) in the MUF(D) slot. Same list and threshold as loader/app/load.pl.
 MD_AS_MUF = {"MM168", "SD266", "KB548", "MG560", "TK356"}
 
+# Station-years whose dates cannot be right, written to <out>-quarantine instead of <out> so that
+# nothing reading the main tree picks them up, but nothing is thrown away either.
+QUARANTINE = {
+    ("NQJ61", "1980"): "runs ARTIST 0599, a 1999 release; 9 of its files say February 2000",
+    ("CO764", "1980"): "runs ARTIST 0189, a 1989 release",
+}
+
 # lat/lon/name are per-station, not per-sounding, but they are carried on every row so that each
 # partition is self-describing and station.parquet can be rebuilt from the output alone. They are
 # constant within a file, so run-length encoding makes them almost free.
@@ -97,7 +123,11 @@ SCHEMA = pa.schema(
 
 CONF_RE = re.compile(r"Confidence: (\d+)%")
 NAME_RE = re.compile(r"NAME\s+([^,]+)")
-FNAME_RE = re.compile(r"^([A-Z0-9_]{5})_(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})(?:[._]SAO)?\.(SAO|XML)$")
+# CODE_YYYYDDDHHMMSS.SAO, plus the variants the archive actually holds: _SAO.XML and .SAO.XML,
+# no seconds (FZA0M and three others), a doubled dot, and date-only day files (CODE_YYYYDDD.SAO,
+# sometimes with a letter suffix) that concatenate a whole day's soundings.
+FNAME_RE = re.compile(
+    r"^([A-Z0-9_]{5})_(\d{4})(\d{3})(?:(\d{2})(\d{2})(\d{2})?)?[A-Za-z]*(?:[._]SAO)?\.+(SAO|XML)$")
 URSI_RE = re.compile(r"^[A-Z0-9_]{5}$")  # NI63_ pads its code with an underscore
 XML_TIME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})(?: -\d{3})? (\d{2}):(\d{2}):(\d{2})")
 
@@ -113,15 +143,49 @@ def _sao_fields(lines, pos, n, per_line, width):
     return out, pos
 
 
+def _sao_record(lines, pos, whole):
+    """Parse the record starting at lines[pos]: ({group: fields} for groups 0..4, next pos).
+
+    With whole=False it stops after group 4, which is all a single-sounding file needs and
+    tolerates trailing groups this module has no table for. With whole=True it steps over every
+    group, so that the returned pos is where the next record starts.
+    """
+    # Only as many counts as are used get read. JR055 and a few others write a mangled index from
+    # the doppler table onward (a 127-character first line), after the five this needs.
+    n_counts = 80 if whole else len(SAO_GROUPS)
+    idx = [int(lines[pos + i // 40][(i % 40) * 3:(i % 40) * 3 + 3] or 0) for i in range(n_counts)]
+    pos, got = pos + 2, {}
+    for g in range(79 if whole else len(SAO_GROUPS)):  # slot 80 holds the version, not a count
+        n = idx[g]
+        if not n:
+            continue
+        if g < len(SAO_GROUPS):
+            got[g], pos = _sao_fields(lines, pos, n, *SAO_GROUPS[g])
+        elif not whole:
+            break
+        elif g < len(SAO_PER_LINE):
+            pos += -(-n // SAO_PER_LINE[g])
+        else:
+            raise ValueError(f"records in unknown SAO group {g + 1}")
+    return got, pos
+
+
 def parse_sao(text):
-    """Return {group index: [raw fields]} for groups 0..4. Later groups are never read."""
+    """{group index: [raw fields]} for groups 0..4 of the first record. Later groups are skipped."""
+    return _sao_record(text.replace("\r", "").split("\n"), 0, whole=False)[0]
+
+
+def sao_records(text):
+    """Every record of a day file that concatenates a day's soundings, each as parse_sao gives it."""
     lines = text.replace("\r", "").split("\n")
-    idx = [int(lines[i // 40][(i % 40) * 3:(i % 40) * 3 + 3] or 0) for i in range(80)]
-    pos, got = 2, {}
-    for g in range(len(SAO_GROUPS)):
-        if idx[g]:
-            got[g], pos = _sao_fields(lines, pos, idx[g], *SAO_GROUPS[g])
-    return got
+    pos, out = 0, []
+    while pos < len(lines):
+        if not lines[pos].strip():
+            pos += 1
+            continue
+        got, pos = _sao_record(lines, pos, whole=True)
+        out.append(got)
+    return out
 
 
 def sao_confidence(got):
@@ -147,8 +211,10 @@ def sao_row(got):
     for i, s in enumerate(got.get(3, ())):
         if i >= len(SAO_CHARS):
             break
-        v = float(s)
-        if v != MISSING:
+        # A Fortran overflow ('********') or two values run together spoils one field, not the
+        # sounding: treat it as missing, as the 9999 fill value would be.
+        v = _or_none(float, s)
+        if v is not None and v != MISSING:
             chars[SAO_CHARS[i]] = v
     return chars, sao_confidence(got)
 
@@ -165,8 +231,9 @@ def sao_station(got):
     desc = (got.get(1) or [""])[0]
     name = m.group(1).strip() if (m := NAME_RE.search(desc)) else None
     const = got.get(0) or []
-    lat = float(const[2]) if len(const) > 2 else None
-    lon = float(const[3]) if len(const) > 3 else None
+    # ND51R's longitude overflows F7.3 as '*******'; station.parquet medians over other files.
+    lat = _or_none(float, const[2]) if len(const) > 2 else None
+    lon = _or_none(float, const[3]) if len(const) > 3 else None
     return name, lat, lon
 
 
@@ -178,7 +245,8 @@ def parse_xml(raw):
     except ElementTree.ParseError:
         # Some files hold latin1 with no encoding declaration, so they are not legal UTF-8.
         root = ElementTree.fromstring(raw.decode("latin1").encode("utf-8"))
-    rec = root.find("SAORecord")
+    # Usually <SAORecordList><SAORecord>, but PA836 and two others write a bare <SAORecord>.
+    rec = root if root.tag == "SAORecord" else root.find("SAORecord")
     if rec is None:
         raise ValueError("no SAORecord")
     return rec
@@ -247,43 +315,86 @@ def clean(chars, code):
     return {COLS[k]: v for k, v in chars.items() if k in COLS and v != 0}
 
 
+def sao_tod(got):
+    """Time of day from the timestamp group, for day-file records whose date comes from the path.
+
+    Read on its own because some records stamp year 0000 beside a perfectly good time.
+    """
+    ts = "".join(got[2][2:19])
+    h, m, s = int(ts[11:13]), int(ts[13:15]), int(ts[15:17])
+    if h > 23 or m > 59 or s > 59:
+        raise ValueError(f"no time of day in {ts!r}")
+    return timedelta(hours=h, minutes=m, seconds=s)
+
+
+def _or_none(f, arg):
+    try:
+        return f(arg)
+    except (ValueError, IndexError, KeyError):
+        return None
+
+
 def read_one(path, name):
-    """(row dict, note) for one sounding file. note is a non-fatal complaint, or None."""
+    """(rows, notes) for one file: usually one sounding, a whole day's for date-only day files.
+
+    notes are non-fatal complaints. A row carries _approx=True when its time is only good to
+    about a minute; merge_rows uses that to drop repeats of soundings that have their own file.
+    """
     m = FNAME_RE.match(name)
-    if not m:
-        return None, f"unparseable filename: {path}"
-    code, year, doy, hh, mm, ss = m.group(1), *(int(g) for g in m.groups()[1:6])
-    when = datetime(year, 1, 1) + timedelta(days=doy - 1, hours=hh, minutes=mm, seconds=ss)
+    if not m or (m.group(4) is None and not name.endswith(".SAO")):
+        return [], [f"unparseable filename: {path}"]
+    code, year, doy, hh, mm, ss, _ = m.groups()
+    year, doy = int(year), int(doy)
+    # Day 000 is the rest of December 31 of the same year: in every such directory the soundings
+    # continue where that year's day 365 leaves off, and the files agree to the second.
+    day = datetime(year, 12, 31) if doy == 0 else datetime(year, 1, 1) + timedelta(days=doy - 1)
     try:
         raw = path.read_bytes()
     except OSError as e:
-        return None, f"read failed: {path} ({e})"
+        return [], [f"read failed: {path} ({e})"]
+
+    # (chars, cs), station, when, in-file time (None if unreadable), approx
+    found, notes = [], []
+    # Go by content, not extension: TM308 writes SAO text into files named _SAO.XML.
+    fmt = "xml" if raw.lstrip()[:1] == b"<" else "sao"
     try:
-        if name.endswith(".SAO"):
-            got = parse_sao(raw.decode("ascii", "replace"))
-            chars, cs = sao_row(got)
-            station = sao_station(got)
-            inner = sao_time(got)
-            fmt = "sao"
-        else:
+        if fmt == "xml":
             rec = parse_xml(raw)
-            chars, cs = xml_row(rec)
-            station = xml_station(rec)
-            inner = xml_time(rec)
-            fmt = "xml"
+            when = day + timedelta(hours=int(hh), minutes=int(mm), seconds=int(ss or 0))
+            found.append((xml_row(rec), xml_station(rec), when, _or_none(xml_time, rec), ss is None))
+        elif hh is None:
+            unreadable = 0
+            gots = sao_records(raw.decode("ascii", "replace"))
+            for got in gots:
+                tod = _or_none(sao_tod, got)
+                if tod is None:
+                    unreadable += 1
+                    continue
+                found.append((sao_row(got), sao_station(got), day + tod, _or_none(sao_time, got), True))
+            if unreadable:
+                notes.append(f"unreadable record time: {path} ({unreadable} of {len(gots)} records)")
+        else:
+            got = parse_sao(raw.decode("ascii", "replace"))
+            when = day + timedelta(hours=int(hh), minutes=int(mm), seconds=int(ss or 0))
+            found.append((sao_row(got), sao_station(got), when, _or_none(sao_time, got), ss is None))
     except Exception as e:  # a corrupt file must not take the station-year down
-        return None, f"parse failed: {path} ({type(e).__name__}: {e})"
-    row = clean(chars, code)
-    if not row:
-        return None, None  # nothing scaled; load.pl skips these too
-    name_, lat, lon = station
-    row.update(code=code, time=when, cs=cs, source=SOURCE, format=fmt,
-               name=name_, lat=lat, lon=lon)
-    # The path is the authority for when a sounding happened -- it is how the archive is
-    # organised, and it sidesteps the decade-shifted years in the IONFM-converted files that
-    # Data::SAO4 has to special-case. Disagreement is still worth counting.
-    note = None if inner == when else f"time mismatch: {path} (file says {inner})"
-    return row, note
+        return [], [f"parse failed: {path} ({type(e).__name__}: {e})"]
+
+    rows = []
+    for (chars, cs), (name_, lat, lon), when, inner, approx in found:
+        row = clean(chars, code)
+        if not row:
+            continue  # nothing scaled; load.pl skips these too
+        row.update(code=code, time=when, cs=cs, source=SOURCE, format=fmt,
+                   name=name_, lat=lat, lon=lon, _approx=approx)
+        rows.append(row)
+        # The path is the authority for when a sounding happened -- it is how the archive is
+        # organised, and it sidesteps the decade-shifted years in the IONFM-converted files and
+        # the months MZ152 mangles. Under a minute is the scheduled start in the filename against
+        # the actual start in the file, 5M files' worth of it, so only larger gaps are recorded.
+        if inner is not None and abs(inner - when) >= timedelta(minutes=1) and len(notes) < 5:
+            notes.append(f"time mismatch: {path} (file says {inner})")
+    return rows, notes
 
 
 def sounding_files(year_dir):
@@ -303,33 +414,54 @@ def sounding_files(year_dir):
                     yield Path(f.path), f.name
 
 
+def merge_rows(rows):
+    """One row per sounding, sorted by time.
+
+    A sounding filed as both .SAO and .XML keeps the SAO row -- 96% of the archive is SAO-only
+    and should stay consistent -- but takes cs from the XML: SAO almost never carries a
+    Confidence comment and falls back to the ARTIST flags, which only resolve 25/50/75/100.
+    The same sounding filed twice in one format (under scaled/ and misc/, or as a doubled-dot
+    copy) keeps the first.
+
+    Rows timed only to about a minute (no seconds in the filename, or out of a day file) mostly
+    repeat soundings that also have their own file, with seconds that differ, so they are kept
+    only where no other row lies within a minute of them.
+    """
+    exact, approx = {}, []
+    for row in rows:
+        if row.pop("_approx"):
+            approx.append(row)
+            continue
+        prev = exact.get(row["time"])
+        if prev is None:
+            exact[row["time"]] = row
+        elif {prev["format"], row["format"]} == {"sao", "xml"}:
+            sao, xml = (prev, row) if prev["format"] == "sao" else (row, prev)
+            sao["cs"], sao["format"] = xml["cs"], "sao+xml"
+            # SAO descriptions often carry no NAME, where SAOXML always has StationName.
+            for k in ("name", "lat", "lon"):
+                if sao.get(k) is None:
+                    sao[k] = xml.get(k)
+            exact[row["time"]] = sao
+    times = sorted(exact)
+    for row in sorted(approx, key=lambda r: r["time"]):
+        t = row["time"]
+        i = bisect.bisect_left(times, t)
+        if any(abs(times[j] - t) < timedelta(minutes=1) for j in (i - 1, i) if 0 <= j < len(times)):
+            continue
+        bisect.insort(times, t)
+        exact[t] = row
+    return [exact[t] for t in times]
+
+
 def convert_station_year(year_dir, out_path, pool):
     """Parse one station-year, dedupe, write a parquet. Returns (n_rows, notes)."""
     files = list(sounding_files(year_dir))
     if not files:
         return 0, []
     results = list(pool.map(lambda a: read_one(*a), files, chunksize=32))
-    notes = [n for _, n in results if n]
-    by_time = {}
-    for row, _ in results:
-        if not row:
-            continue
-        # One sounding can appear as both .SAO and .XML. The characteristics agree, so keep the
-        # SAO row -- 96% of the archive is SAO-only and should stay consistent. cs is the
-        # exception: SAO almost never carries a Confidence comment and falls back to the ARTIST
-        # flags, which only resolve 25/50/75/100, while XML usually has the real percentage.
-        prev = by_time.get(row["time"])
-        if prev is None:
-            by_time[row["time"]] = row
-            continue
-        sao, xml = (prev, row) if prev["format"] == "sao" else (row, prev)
-        sao["cs"], sao["format"] = xml["cs"], "sao+xml"
-        # SAO descriptions often carry no NAME, where SAOXML always has StationName.
-        for k in ("name", "lat", "lon"):
-            if sao.get(k) is None:
-                sao[k] = xml.get(k)
-        by_time[row["time"]] = sao
-    rows = [by_time[t] for t in sorted(by_time)]
+    notes = [n for _, ns in results for n in ns]
+    rows = merge_rows([r for rs, _ in results for r in rs])
     if not rows:
         return 0, notes
     table = pa.Table.from_pylist(rows, schema=SCHEMA)
@@ -362,13 +494,16 @@ def write_stations(out: Path):
                count(DISTINCT lon) > 1 AS lon_varies,
                count(DISTINCT lat) AS n_lat, count(DISTINCT lon) AS n_lon
         FROM r GROUP BY code ORDER BY code""").to_arrow_table()
-    pq.write_table(rows, out / "station.parquet", compression="zstd")
+    tmp = out / "station.parquet.tmp"
+    pq.write_table(rows, tmp, compression="zstd")
+    tmp.replace(out / "station.parquet")  # atomic: the tree may already be in use
     return rows.to_pylist()
 
 
 def main(root: Path, out: Path):
     report = {"rows": 0, "station_years": 0, "skipped": 0, "notes": {}, "examples": {}}
     out.mkdir(parents=True, exist_ok=True)
+    quarantine = out.with_name(out.name + "-quarantine")
     with ThreadPoolExecutor(THREADS) as pool:
         for station in sorted(os.scandir(root), key=lambda e: e.name):
             if not station.is_dir() or not URSI_RE.match(station.name):
@@ -376,7 +511,8 @@ def main(root: Path, out: Path):
             for year in sorted(os.scandir(station.path), key=lambda e: e.name):
                 if not year.is_dir() or not year.name.isdigit():
                     continue
-                dest = out / f"year={year.name}" / f"{station.name}.parquet"
+                tree = quarantine if (station.name, year.name) in QUARANTINE else out
+                dest = tree / f"year={year.name}" / f"{station.name}.parquet"
                 if dest.exists():
                     report["skipped"] += 1
                     continue
@@ -410,21 +546,49 @@ def main(root: Path, out: Path):
 
 
 def _selfcheck():
-    """Parse one known SAO/XML pair and check they agree with each other and with the Perl."""
+    """Pure checks first, then files from /kass/mids when it is mounted."""
+    assert len(SAO_PER_LINE) == 60  # Data::SAO4 has 60 groups
+    for name, groups in [
+        ("DB049_2017292142502.SAO", ("DB049", "2017", "292", "14", "25", "02", "SAO")),
+        ("DB049_2017292142502.SAO.XML", ("DB049", "2017", "292", "14", "25", "02", "XML")),
+        ("DB049_2017292142502_SAO.XML", ("DB049", "2017", "292", "14", "25", "02", "XML")),
+        ("NI63__2010020120000.SAO", ("NI63_", "2010", "020", "12", "00", "00", "SAO")),
+        ("FZA0M_20010411952.SAO", ("FZA0M", "2001", "041", "19", "52", None, "SAO")),
+        ("JR055_2008264085810..SAO", ("JR055", "2008", "264", "08", "58", "10", "SAO")),
+        ("JI91J_2007158.SAO", ("JI91J", "2007", "158", None, None, None, "SAO")),
+        ("WP937_1998316ab.SAO", ("WP937", "1998", "316", None, None, None, "SAO")),
+    ]:
+        m = FNAME_RE.match(name)
+        assert m and m.groups() == groups, (name, m and m.groups())
+    assert not FNAME_RE.match("DB049_201729214250.SAO")  # 12 digits is neither form
+
+    t = datetime(2020, 5, 1, 12, 0, 0)
+    def r(fmt, when, approx=False, cs=50, name=None):
+        return dict(time=when, format=fmt, cs=cs, name=name, lat=1.0, lon=2.0, _approx=approx)
+    out = merge_rows([r("sao", t, cs=75), r("xml", t, cs=80, name="X")])
+    assert len(out) == 1 and out[0]["format"] == "sao+xml" and out[0]["cs"] == 80 and out[0]["name"] == "X"
+    out = merge_rows([r("sao", t, cs=75), r("sao", t, cs=25)])  # one sounding filed twice
+    assert len(out) == 1 and out[0]["format"] == "sao" and out[0]["cs"] == 75
+    out = merge_rows([r("sao", t + timedelta(seconds=3)), r("sao", t, approx=True),
+                      r("sao", t + timedelta(minutes=15), approx=True)])
+    assert [o["time"] for o in out] == [t + timedelta(seconds=3), t + timedelta(minutes=15)]
+    out = merge_rows([r("sao", t, approx=True), r("sao", t + timedelta(seconds=20), approx=True)])
+    assert len(out) == 1  # a day file and its lettered twin repeat each other too
+
     p = Path("/kass/mids/DB049/2017/individual/292/scaled/DB049_2017292142502")
     if not p.with_suffix(".SAO").exists():
-        print("selfcheck skipped: /kass/mids not mounted")
+        print("selfcheck ok (file checks skipped: /kass/mids not mounted)")
         return
-    sao, sao_note = read_one(p.with_suffix(".SAO"), "DB049_2017292142502.SAO")
-    xml, xml_note = read_one(Path(str(p) + "_SAO.XML"), "DB049_2017292142502_SAO.XML")
-    assert sao_note is None and xml_note is None, (sao_note, xml_note)  # path vs in-file time
+    (sao,), sao_notes = read_one(p.with_suffix(".SAO"), "DB049_2017292142502.SAO")
+    (xml,), xml_notes = read_one(Path(str(p) + "_SAO.XML"), "DB049_2017292142502_SAO.XML")
+    assert not sao_notes and not xml_notes, (sao_notes, xml_notes)  # path vs in-file time
     assert sao["time"] == datetime(2017, 10, 19, 14, 25, 2), sao["time"]
     assert sao["time"] == xml["time"]
     assert abs(sao["fof2"] - 6.825) < 1e-9, sao["fof2"]
     assert abs(sao["mufd"] - 23.988) < 1e-9, sao["mufd"]
     # Characteristics must agree exactly. cs is expected to differ: SAO quantizes it out of the
     # ARTIST flags (75 here) where XML carries the scaler's real percentage (80).
-    for k in set(sao) & set(xml) - {"format", "cs"}:
+    for k in set(sao) & set(xml) - {"format", "cs", "_approx"}:
         assert sao[k] == xml[k], f"{k}: sao {sao[k]} != xml {xml[k]}"
     assert sao["cs"] == 75 and xml["cs"] == 80, (sao["cs"], xml["cs"])
     # Group 4 flag "55" -> cl 5 -> 125-125 = 0, matching Data::SAO4 on the same file.
@@ -439,10 +603,38 @@ def _selfcheck():
     assert clean({"foF2": 0.0, "foE": 2.0}, "DB049") == {"foe": 2.0}  # zeros dropped
     assert canonical("h`F") == "h'F" and canonical("scale F2") == "scaleF2"
     assert canonical("hmF2") == "zmF2"  # XML's name for SAO's zmF2
-    assert FNAME_RE.match("DB049_2017292142502.SAO.XML"), "the .SAO.XML spelling must parse"
-    assert FNAME_RE.match("DB049_2017292142502_SAO.XML")
-    assert FNAME_RE.match("DB049_2017292142502.SAO")
-    assert FNAME_RE.match("NI63__2010020120000.SAO").group(1) == "NI63_"  # underscore-padded code
+
+    # Day 000 is the rest of December 31 of the same year, not of the year before.
+    d = Path("/kass/mids/TO536/2010/individual/000/scaled/TO536_2010000151500.SAO")
+    (row,), notes = read_one(d, d.name)
+    assert row["time"] == datetime(2010, 12, 31, 15, 15) and not notes, (row["time"], notes)
+
+    # A day file holds a whole day: 95 records, every one dated from the path.
+    d = Path("/kass/mids/JI91J/2007/individual/158/scaled/JI91J_2007158.SAO")
+    rows, notes = read_one(d, d.name)
+    assert len(sao_records(d.read_bytes().decode("ascii", "replace"))) == 95
+    assert rows and all(x["_approx"] and x["time"].date() == datetime(2007, 6, 7).date() for x in rows)
+
+    # Records stamped year 0000 keep their time of day instead of sinking the file. (This day is
+    # nearly all blank soundings; its 97 records match the station's individual files exactly.)
+    d = Path("/kass/mids/SN437/2001/individual/025/scaled/SN437_2001025.SAO")
+    recs = sao_records(d.read_bytes().decode("ascii", "replace"))
+    zero = [g for g in recs if "".join(g[2][2:6]) == "0000"]
+    assert len(recs) == 97 and len(zero) == 3 and all(_or_none(sao_tod, g) for g in zero)
+    assert not read_one(d, d.name)[1]
+
+    # Files the first full run dropped as 'parse failed' that hold a usable sounding:
+    for f, fmt in [
+        ("PA836/2010/individual/188/scaled/PA836_2010188231500_SAO.XML", "xml"),  # bare <SAORecord>
+        ("TM308/2009/individual/034/scaled/TM308_2009034122050_SAO.XML", "sao"),  # SAO under an XML name
+        ("ND51R/2010/individual/310/scaled/ND51R_2010310050000.SAO", "sao"),      # '*******' field
+        ("PA836/1998/individual/127/scaled/PA836_1998127230005.SAO", "sao"),      # in-file hour out of range
+        ("PQ052/2022/individual/093/scaled/PQ052_2022093154500.SAO", "sao"),      # index mangled after group 5
+    ]:
+        d = Path("/kass/mids") / f
+        rows, notes = read_one(d, d.name)
+        assert not any(n.startswith("parse failed") for n in notes), (f, notes)
+        assert all(x["format"] == fmt for x in rows), (f, [x["format"] for x in rows])
     print("selfcheck ok")
 
 
