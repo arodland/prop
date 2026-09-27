@@ -109,6 +109,7 @@ MD_AS_MUF = {"MM168", "SD266", "KB548", "MG560", "TK356"}
 QUARANTINE = {
     ("NQJ61", "1980"): "runs ARTIST 0599, a 1999 release; 9 of its files say February 2000",
     ("CO764", "1980"): "runs ARTIST 0189, a 1989 release",
+    ("AN438", "1980"): "runs ARTIST 0897, a 1997 release",
 }
 
 # lat/lon/name are per-station, not per-sounding, but they are carried on every row so that each
@@ -461,7 +462,16 @@ def convert_station_year(year_dir, out_path, pool):
         return 0, []
     results = list(pool.map(lambda a: read_one(*a), files, chunksize=32))
     notes = [n for _, ns in results for n in ns]
-    rows = merge_rows([r for rs, _ in results for r in rs])
+    # A few files sit under another year's directory (FZA0M/2015 holds 306 named for 2016,
+    # AU930/2012 156 for 2013). Most have a correctly filed copy, so keeping them would put
+    # duplicates in the wrong partition. They are listed instead, to be moved and reloaded.
+    year, rows = int(year_dir.name), []
+    for (path, _), (rs, _) in zip(files, results):
+        if any(r["time"].year != year for r in rs):
+            notes.append(f"misfiled: {path} (named for {rs[0]['time'].year})")
+        else:
+            rows += rs
+    rows = merge_rows(rows)
     if not rows:
         return 0, notes
     table = pa.Table.from_pylist(rows, schema=SCHEMA)
