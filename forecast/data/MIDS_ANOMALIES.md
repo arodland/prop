@@ -9,10 +9,14 @@ TLDR: none of this is a loader bug. Every bad position is the literal constants 
 
 - Six codes hold another station's soundings. Positions come from `station.parquet`, which takes
   the median per code, so these rows are placed at the wrong site and most of them duplicate the
-  true station. GR13L is the big one: 94.6k rows of College, Alaska filed as Grahamstown.
+  true station. GR13L is the big one: 91.6k rows of College, Alaska filed as Grahamstown.
 - Several stations carry corrupted coordinates in their own files. Harmless while positions come
   from `station.parquet`; wrong if anything uses the row-level `lat`/`lon`.
 - ND51R has no row in `station.parquet`, so a join on it drops all 459 of its rows.
+
+The parquet tree keeps all of this as reported. `mids_to_duckdb.py` builds the working copy,
+`/kass/forecast/mids.duckdb`, without the misfiled rows (its `EXCLUDE` and `REPEATS` lists, with
+counts in the `excluded` table) and with M(D)/MUF(D) filled as `loader/app/load.pl` does.
 
 Distances below are from the code's main position (the lat/lon carried by the most rows), with
 longitude taken modulo 360. Under 25 km the differences are precision (40.0 against 40.3) or short
@@ -26,8 +30,8 @@ minutes carrying identical foF2, MUF(D) and hmF2.
 
 | code | period | rows | file says | twins | notes |
 |---|---|---|---|---|---|
-| GR13L | 1999-01-04 to 2003-12-31 | 88,766 at 64.9/212.0 | `DGS-256 082/CO764` | 74,268 with CO764, a few with GA762/GSJ53 | about 15k exist only here |
-| GR13L | 2002-11-28 to 2003-03-07 | 5,892 at 64.9/102.0 | `082/CO764` | with CO764 | same corrupted longitude as CO764's own files then |
+| GR13L | 1999-01-04 to 2003-12-31 | 86,196 at 64.9/212.0 | `DGS-256 082/CO764` | 74,268 with CO764, a few with GA762/GSJ53 | about 13k have no matching copy |
+| GR13L | 2002-11-28 to 2003-03-07 | 5,453 at 64.9/102.0 | `082/CO764` | with CO764 | same corrupted longitude as CO764's own files then |
 | FF051 | 2009-10-27 to 2009-11-10 | 1,219 at 37.9/284.5 | `DGS-256 081/WP937` | 1,117 with WP937 | Wallops |
 | CW46O | 2008-01-04 to 2008-01-05 | 130 at 38.0/23.5 | `DPS-4 204/AT138` | 128 with AT138 | Athens; plus one row at -34.05/150.67 twinned with CN53L |
 | OS768 | 2000-10-25 to 2000-10-27 | the whole code | `DGS-256 096/SN437` | 184 with SN437 | one day file; same site, so position is unaffected |
