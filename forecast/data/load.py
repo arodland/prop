@@ -25,6 +25,9 @@ BOUNDS = {
     "tec": (0.0, 200.0),   # TECU
     "foe": (0.1, 10.0),    # MHz
 }
+# Codes kept to their first quality-passing sounding in each UTC hour, from both sources. WI937
+# (VIPIR) sounds every few seconds, and its foF2 anomaly vs IRI has ~1.7x the network's RMS.
+THIN_HOURLY = ("WI937",)
 CLUSTER_KM = 50  # co-located URSI codes (Rome x3, Tromso x2, ...) share a cluster id
 
 
@@ -92,6 +95,7 @@ def connect(snapshot: Path = SNAPSHOT, mids: tuple[str, str] | None = None) -> d
     None, the default, is the snapshot alone.
     """
     con = duckdb.connect()
+    THIN_SQL = "(" + ", ".join(f"'{c}'" for c in THIN_HOURLY) + ")"
     station_src = f"SELECT * FROM '{snapshot}/station.parquet'"
     iono_src = f"SELECT id, station_id, time, cs, source, {_null_out_of_bounds()} FROM '{snapshot}/ionosonde.parquet' WHERE {QUALITY}"
     if mids is not None:
@@ -113,7 +117,14 @@ def connect(snapshot: Path = SNAPSHOT, mids: tuple[str, str] | None = None) -> d
                  + cos(radians(a.lat))*cos(radians(b.lat))*cos(radians(a.lon-b.lon)))) < {CLUSTER_KM}
             GROUP BY a.id)
         SELECT s.*, p.cluster FROM station_raw s JOIN pairs p USING (id);
-        CREATE VIEW iono AS {iono_src};
+        CREATE VIEW iono_all AS {iono_src};
+        CREATE TEMP TABLE iono_thin AS
+        SELECT * FROM iono_all
+        WHERE station_id IN (SELECT id FROM station_raw WHERE code IN {THIN_SQL})
+        QUALIFY row_number() OVER (PARTITION BY station_id, date_trunc('hour', time) ORDER BY time) = 1;
+        CREATE VIEW iono AS
+        SELECT * FROM iono_all WHERE station_id NOT IN (SELECT id FROM station_raw WHERE code IN {THIN_SQL})
+        UNION ALL SELECT * FROM iono_thin;
         CREATE VIEW ro AS
         SELECT * FROM '{snapshot}/ro_full.parquet' WHERE NOT isnan(fof2) AND fof2 BETWEEN 0.5 AND 25;  -- continuous UCAR re-derivation (2019-10 ->)
     """)
@@ -174,4 +185,8 @@ if __name__ == "__main__":
     near = """SELECT count(*) FROM iono x JOIN iono y ON x.station_id = y.station_id AND x.time < y.time
               AND epoch(y.time) - epoch(x.time) <= 60 WHERE x.time::DATE = '2020-03-15' AND y.time::DATE = '2020-03-15'"""
     assert m.execute(near).fetchone() == con.execute(near).fetchone(), "archive rows duplicated snapshot rows"
+    thin = """SELECT count(*), count(DISTINCT date_trunc('hour', time)) FROM iono
+              WHERE station_id = (SELECT id FROM station WHERE code = 'WI937')"""
+    n, h = m.execute(thin).fetchone()
+    assert n == h > 0, (n, h)
     print(f"ok with archive: {n_all} stations; inputs@{t0}: {a} -> {b} rows; 2024 slice unchanged")

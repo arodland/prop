@@ -1577,6 +1577,19 @@ product question.
   training run against the v9b control, and the W3USR standalone re-run — under a causal baseline the
   "own baseline" build it needed should no longer be a separate thing.
 
+- 2026-09-28: **Baseline ladder on the NOAA archive years** (`replay.py --mids`, 6 h issue times,
+  `/kass/forecast/eval/mids_ladder/`; 2014-18 pending the IRI prebuild). Holdout foF2, IRI / kernel
+  (τ48 L2000 s1) RMSE and skill: 1999-2008 1.16 / 1.11, +4.7% [+4.4, +5.0]; 2009-13 1.28 / 1.23,
+  +4.6% [+4.1, +5.1]; against 2024's 1.39 / 1.26, +9.0%. MUF(D) +3.5 / +4.5%, hmF2 < 1%. Full mode
+  1999-2013 +7.0%; persistence beats IRI only inside 1 h. IRI is closer in the old eras and the kernel
+  gains half as much, probably because sparser networks put holdouts farther from inputs (unchecked).
+  cs = -1 is not a bad class in either era, so the quality rule stays. Per-station anomaly
+  (`analysis/mids_station_anomaly.py`) flagged AU930, CL424, MQ55M, MW26P and CW46O before 2009:
+  **excluded in `mids_to_duckdb.py`** (108k rows). WI937 (foF2 anomaly RMS 2.18 vs ~1.3 network,
+  soundings seconds apart, 9% of 2009-13): **thinned to one sounding per hour in `load.py`, both
+  sources** (2.70M → 75k rows); this also changes the default `connect()` for 2019-21, so samples
+  built before it (train_v9b) differ from a rebuild. 2024 has no WI937 rows and is unchanged.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly

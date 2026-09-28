@@ -5,8 +5,8 @@
 The parquet tree stays as the instruments reported it, for export. This copy is what training
 reads, and differs from it in two ways:
 
-- Rows known to be another station's soundings are left out (EXCLUDE; the evidence is in
-  MIDS_ANOMALIES.md). Rows with corrupted coordinates but the right station stay in.
+- Rows known to be another station's soundings, and station-eras that disagree badly with the
+  rest of the network, are left out (EXCLUDE). Rows with corrupted coordinates but the right station stay in.
 - Missing M(D) and MUF(D) are filled the way loader/app/load.pl does, and flagged:
   MUF(D) = foF2 * M(D) when M(D) is there; otherwise M(D) is taken from hmF2 over a 3000 km
   path and MUF(D) = foF2 * M(D). md_derived / mufd_derived say which values were filled.
@@ -19,14 +19,20 @@ from pathlib import Path
 
 import duckdb
 
-# (label, SQL predicate on the parquet rows). Each is a code-and-period whose rows carry another
-# station's soundings; see MIDS_ANOMALIES.md for the evidence.
+# (label, SQL predicate on the parquet rows). The first five are codes and periods whose rows carry
+# another station's soundings (MIDS_ANOMALIES.md). The rest are station-eras whose anomaly against
+# IRI is far off the network's (|robust z| > 3; analysis/mids_station_anomaly.py, 2026-09-28).
 EXCLUDE = [
     ("GR13L holding CO764 (College) 1999-2003", "code = 'GR13L' AND lat = 64.9"),
     ("FF051 holding WP937 (Wallops) 2009", "code = 'FF051' AND lat = 37.9 AND lon = 284.5"),
     ("CW46O holding AT138 (Athens) 2008", "code = 'CW46O' AND lat = 38.0 AND lon = 23.5"),
     ("CW46O holding CN53L 2008", "code = 'CW46O' AND lat = -34.05 AND lon = 150.67"),
     ("OS768 is SN437", "code = 'OS768'"),
+    ("AU930 1999: foF2 3.3 MHz and hmF2 42 km below IRI", "code = 'AU930' AND year(time) < 2009"),
+    ("CL424 2000-07: foF2 1.3 MHz and hmF2 37 km below IRI", "code = 'CL424' AND year(time) < 2009"),
+    ("MQ55M 2003-08: foF2 anomaly RMS 2.9 MHz", "code = 'MQ55M' AND year(time) < 2009"),
+    ("MW26P 2000-08: foF2 anomaly RMS 2.4 MHz", "code = 'MW26P' AND year(time) < 2009"),
+    ("CW46O 2003-08: foF2 anomaly RMS 2.0 MHz", "code = 'CW46O' AND year(time) < 2009"),
 ]
 # (label, code, other): same site as the station they repeat, so only the rows with a sounding of
 # `other` within a minute are dropped; the rest fill gaps.
