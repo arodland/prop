@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from baselines.iri_cache import iri_points_cached as iri_points  # noqa: E402
 from baselines.simple import MODELS, VARS  # noqa: E402
 from data.drivers import attach_essn, attach_indices, f107_trailing  # noqa: E402
-from data.load import SNAPSHOT, connect, inputs_at, targets_after  # noqa: E402
+from data.load import MIDS_TRAIN, SNAPSHOT, connect, inputs_at, targets_after  # noqa: E402
 
 HOLDOUT_FRAC = 0.2
 
@@ -69,9 +69,10 @@ def main():
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--out", required=True)
     ap.add_argument("--snapshot", default=str(SNAPSHOT))
+    ap.add_argument("--mids", action="store_true", help="add the archive (load.MIDS_TRAIN) to the snapshot")
     ap.add_argument("--holdouts", help="parquet with issue_time, station_id: use these issue times and holdout stations")
     a = ap.parse_args()
-    con = connect(Path(a.snapshot))
+    con = connect(Path(a.snapshot), mids=MIDS_TRAIN if a.mids else None)
     attach_indices(con, a.snapshot)
     attach_essn(con, a.snapshot)
     models = {m: MODELS[m] for m in a.models.split(",")}
