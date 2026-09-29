@@ -1590,6 +1590,17 @@ product question.
   sources** (2.70M → 75k rows); this also changes the default `connect()` for 2019-21, so samples
   built before it (train_v9b) differ from a rebuild. 2024 has no WI937 rows and is unchanged.
 
+- 2026-09-29: **Archive ladder rerun, 1999-2018, with the exclusions and WI937 thinning**
+  (`/kass/forecast/eval/mids_ladder/`; pre-exclusion files in `pre-exclusion/`). Holdout foF2 kernel
+  skill vs IRI: 1999-2008 +5.0% [+4.7, +5.3], 2009-18 +5.4% [+5.0, +5.7]; MUF(D) +3.5% both; hmF2
+  +0.6% both. Anomaly RMS vs IRI 1.14 MHz in both eras (2024: 1.40). New 2014-18 outliers not acted
+  on: JB57N hmF2 +71 km bias (193k rows; also flagged in 2024), SD266/LO168/PB671/GR160 hmF2 +50-70 km,
+  PK553/LO168/AM269 foF2 RMS 2.8-3.6. **Ablation samples built** (v9b recipe, frozen cp spot
+  baseline, `samples/build_mids_ablation.sh`): `train_v9t` A' (17,419; v9b + WI937 thinning),
+  `train_v9m` B (17,536; + archive gap-fill), `train_old` (60,623; 1999 → 2019-10); symlink sets
+  `train_mids_c` (B + 2009 →, 48,936) and `train_mids_d` (B + all, 78,159). Val: `val_v9b` unchanged.
+  Current code with thinning off reproduces a stored v9b sample bit-exactly.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
