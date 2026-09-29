@@ -22,7 +22,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from baselines.iri_cache import iri_points_cached  # noqa: E402
 from data.drivers import attach_indices, f107_trailing  # noqa: E402
-from data.load import SNAPSHOT, connect, inputs_at, targets_after  # noqa: E402
+from data.load import MIDS_TRAIN, SNAPSHOT, connect, inputs_at, targets_after  # noqa: E402
 
 VARS = ("fof2", "hmf2", "mufd")
 ANOM_SCALE = np.array([1.5, 40.0, 4.5])  # ~RMS of obs-IRI per variable
@@ -215,6 +215,7 @@ def main():
     ap.add_argument("--spot-res", type=int, default=60, help="spot aggregate resolution in minutes: 60 = clock hours (v5..v7), 5 = bins ending at T-15 min")
     ap.add_argument("--max-spot", type=int, help="spot token cap (default 3000; control-point builds need ~6000 so midpoint tokens are not displaced)")
     ap.add_argument("--qstate", action="store_true", help="append the nearest input station's latest state to every query (query_state; F_QRY 10 -> 18)")
+    ap.add_argument("--mids", action="store_true", help="add the NOAA archive (load.MIDS_TRAIN) to the snapshot")
     ap.add_argument("--max-tok", type=int, default=MAX_TOK, help="ionosonde token cap per sample (default 2048; 8192 keeps ~everything)")
     a = ap.parse_args()
     GLOTEC[0] = a.glotec; SPOTS[0] = a.spots; MAX_TOK = a.max_tok; POOL[0] = a.pool; QSTATE[0] = a.qstate
@@ -230,7 +231,7 @@ def main():
         global glotec_tokens
         sys.path.insert(0, str(Path(__file__).resolve().parent)); from glotec_tokens import glotec_tokens  # noqa: E402
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
-    con = connect(); attach_indices(con, SNAPSHOT)
+    con = connect(mids=MIDS_TRAIN if a.mids else None); attach_indices(con, SNAPSHOT)
     daily = con.execute("SELECT date, Ap, f107_obs FROM daily").df().set_index("date")
     ap8 = con.execute("SELECT date, ap3h FROM daily ORDER BY date").df()
     ap_series = pd.Series(np.concatenate(ap8.ap3h.to_list()).astype(float),
