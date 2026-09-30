@@ -1601,6 +1601,18 @@ product question.
   `train_mids_c` (B + 2009 →, 48,936) and `train_mids_d` (B + all, 78,159). Val: `val_v9b` unchanged.
   Current code with thinning off reproduces a stored v9b sample bit-exactly.
 
+- 2026-09-30: **Archive ablations, paired on val_v9b (Oct-Dec 2025, 736 issue times, seed 1 each;
+  `eval/val2025/REPORT_mids.txt`).** Skill vs A' (`mids_v9t`, v9b + WI937 thinning), holdout foF2 /
+  MUF(D) / hmF2: B (gap-fill 2019-23) +0.4% [-0.2, +0.9] / +0.2 / +0.5; C (+2009-18) +1.6% [+0.9, +2.3]
+  / +1.6 / -0.1; **D (+1999-2008) +4.0% [+2.9, +5.1] / +4.0 / +0.7**, better at every lead (0-1 h 0.951
+  vs 1.018). Full mode D +3.2%, RO foF2 +1.1% [+0.8, +1.4]. spatial_3 vs A' +0.7% [+0.2, +1.2], so the
+  WI937 thinning cost ~0.7% on this window, or seed/order noise. D's best EMA epoch is 9 (others 5),
+  σ slightly narrow (cov1 0.662). Andrew's caveat (D's spots-only val peaked epochs before the
+  combined minimum): at the selected checkpoint D spots-only vs A' spots-only is +0.6% [-0.7, +1.7] at
+  holdouts, -0.5% [-0.9, -0.1] at RO — small. Likely cause: 78% of D's samples predate the spot
+  archive, so the spot pathway sees ~22% of steps. **D is the new candidate**, pending a second seed
+  and the coherence gate.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
