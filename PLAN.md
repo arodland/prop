@@ -1613,6 +1613,10 @@ product question.
   archive, so the spot pathway sees ~22% of steps. **D is the new candidate**, pending a second seed
   and the coherence gate.
 
+- 2026-10-01: **D' (D recipe with `--p-drop-spots 0.1`) abandoned** (Andrew): both the combined and the
+  spots-only val foF2 were worse than D's, so no paired run. Spot dropout stays at 0.3; D remains the
+  candidate.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
