@@ -1617,6 +1617,14 @@ product question.
   spots-only val foF2 were worse than D's, so no paired run. Spot dropout stays at 0.3; D remains the
   candidate.
 
+- 2026-10-01: **D on the monthly coherence gate: passes two of three, sign flips just over the line**
+  (October 2025 daily 00Z, 31 days, ionosonde inputs; `eval/coherence_oct2025_midsd.parquet`, maps in
+  `maps/coh/2025-10-DD_midsd`). Monthly means GP / sp3 / D: anomaly RMS 0.75 / 0.92 / 0.91; fine-scale
+  0.000 / 0.0004 / 0.0004 (gate < 0.01, pass); grad_far 0.020 / 0.048 / 0.059, D 2.9× GP (gate 3.5×,
+  pass; above sp3 on all 31 days); change per hour 0.12 / 0.22 / 0.22; **sign flips 2.4 / 9.7 / 10.2%**
+  (gate < 10%; worst day 16.2%, sp3 16.9%). D − sp3 sign flips +0.5 pp [−0.2, +1.1], so not
+  distinguishable from sp3, which passed. Decision (Andrew) pending the GIFs.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
