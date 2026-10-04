@@ -1625,6 +1625,13 @@ product question.
   (gate < 10%; worst day 16.2%, sp3 16.9%). D − sp3 sign flips +0.5 pp [−0.2, +1.1], so not
   distinguishable from sp3, which passed. Decision (Andrew) pending the GIFs.
 
+- 2026-10-04: **Seed 2 confirms D's gain, at about half seed 1's size** (val_v9b, paired;
+  `eval/val2025/REPORT_mids_seed2.txt`). D vs A' within seed, holdout foF2: seed 1 +4.0% [+2.9, +5.1],
+  seed 2 +1.8% [+0.9, +2.5]; MUF(D) +4.0 / +2.5%; all stations foF2 +3.2 / +1.2%; RO foF2 +1.1 / −0.1%
+  (n.s.); hmF2 +0.7 / +0.4%. Seed spread: A' seed 1 vs 2 0.7%, D 1.5% (seed 1 D was the lucky draw;
+  D seed 2 best at epoch 6, seed 1 at 9). Every seed-2 D holdout lead beats both A' seeds. Reading:
+  the archive is worth ~2-4% on holdout foF2 and MUF(D), real at both seeds, little at RO.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
