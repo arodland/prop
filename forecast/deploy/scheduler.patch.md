@@ -60,6 +60,21 @@
           make_maps => 1, renderhtml => 1, no_holdout => 1,
       });
     },
+    # mids_d: the sp3 recipe trained with the NOAA archive back to 1999 (PLAN.md 2026-09-30, 2026-10-04);
+    # checkpoint /kass/forecast/models/mids_mids_d (seed 1) -> /home/prop/checkpoints/mids_d. Same features and
+    # spot baseline as sp3, so it runs beside the sp3 pair for a direct comparison.
+    sub {
+      one_run($run_time, $state, '2026-10-midsd', {
+          forecast_v2 => { model => 'mids_d', glotec => 0, spots => 0 },
+          make_maps => 1, renderhtml => 1, no_holdout => 1,
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2026-10-midsd-spots', {
+          forecast_v2 => { model => 'mids_d', glotec => 0, spots => 1 },
+          make_maps => 1, renderhtml => 1, no_holdout => 1,
+      });
+    },
     # v7p6 side by side with and without live spot tokens (spots => 1 needs prop-spots.timer running)
     sub {
       one_run($run_time, $state, '2026-09-v7p6', {
