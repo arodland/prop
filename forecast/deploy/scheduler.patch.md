@@ -75,7 +75,8 @@
           make_maps => 1, renderhtml => 1, no_holdout => 1,
       });
     },
-    # v7p6 side by side with and without live spot tokens (spots => 1 needs prop-spots.timer running)
+    # v7p6 side by side with and without live spot tokens (spots => 1 needs prop-spots.timer running);
+    # shut down 2026-10-05 (trailed v4 and v9b live)
     sub {
       one_run($run_time, $state, '2026-09-v7p6', {
           forecast_v2 => { model => 'v7p6', glotec => 1, spots => 0 },

@@ -1632,6 +1632,11 @@ product question.
   D seed 2 best at epoch 6, seed 1 at 9). Every seed-2 D holdout lead beats both A' seeds. Reading:
   the archive is worth ~2-4% on holdout foF2 and MUF(D), real at both seeds, little at RO.
 
+- 2026-10-05: **mids_d live trial running** (Andrew; `2026-10-midsd` experiments on the server, beside v4 and
+  v9b). By inspection it follows current ionosonde observations more closely, the likely source of its
+  slightly higher sign-flip rate; earlier studies tie that tendency to higher accuracy. v4 and v9b are
+  close live; v7p6 trailed both consistently and is shut down. Live scores due in a few days.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
