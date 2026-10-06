@@ -1637,6 +1637,25 @@ product question.
   slightly higher sign-flip rate; earlier studies tie that tendency to higher accuracy. v4 and v9b are
   close live; v7p6 trailed both consistently and is shut down. Live scores due in a few days.
 
+- 2026-10-06: **How D propagates an observation, against the archive's own structure**
+  (`analysis/probe_impulse.py` on D, 240 station impulses on val_v9b; `analysis/anomaly_correlation.py` on
+  the 2009-18 ladder replays, 98 clusters, hourly anomaly minus each station's month x local-hour mean;
+  outputs in `/kass/forecast/eval/probes/`). Gain R = share of a +0.5 MHz foF2 nudge at one station carried
+  to a pixel. **Routes:** within 250 km the hand-built `qstate` carries 0.66 of D's 0.68 at lead 0;
+  attention adds 0.02-0.04 near and is the only route past 1500 km (0.02-0.04 per station, nearly flat).
+  **Frame:** earth-fixed: response centroid and best-match shift stay within 3 deg of the station at every
+  lead (local-time-tied would be -90 deg by 6 h); only the attention part drifts west, 1-3 deg/h. The data
+  agree: zonal-pair correlation peaks at the nearest offset at every lag, with a modest westward asymmetry
+  (+0.05-0.06 at 1-6 h). **Kernel vs data**, partial effect (ridge coefficient of station A in predicting
+  held-out B from all other stations; comparable to the probe), lead 0, by distance 0-250 / 250-500 /
+  500-1000 / 1000-1500 / 2000-3000 km: data 0.36 / 0.34 / 0.21 / 0.11 / 0.026, D 0.68 / 0.41 / 0.11 /
+  0.045 / 0.035. D puts ~2x the data's weight on the nearest station and half of it at 500-1500 km: the
+  shape of the `qstate` kernel (L 500 km, cut 1500 km), not of the ionosphere (flat to ~500 km, half at
+  ~1000 km). **Lead:** both decay at a similar rate to 6 h (near weight x0.44 by 3 h in D, x0.34 in the
+  data), but the data recur at 24 h (same-station corr 0.16 at 12 h, 0.22 at 24 h; partial 0.040 -> 0.067)
+  and D does not (0.12 -> 0.10). Candidate changes: widen `qstate` (L ~1000 km, cut ~2500 km) or let
+  attention own the near field; add a same-local-time-yesterday term to `qstate`.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
