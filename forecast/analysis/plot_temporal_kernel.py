@@ -28,6 +28,7 @@ series = [  # (label, (mean, ci), color, dashed)
     ("D (qstate)", model("gain_d.csv"), "#eb6834", False),
     ("Data 2009–18", data("temporal_data_2009-2018.csv"), "#1baf7a", True),
     ("Data 2024", data("temporal_data_2024.csv"), "#eda100", True),
+    ("E3 (attention bias + qstate)", model("gain_e3.csv"), "#e87ba4", False),
 ]
 
 fig, ax = plt.subplots(figsize=(10, 5.6), facecolor=SURF)

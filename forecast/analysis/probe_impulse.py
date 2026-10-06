@@ -205,7 +205,10 @@ def gain(a):
                 return model.decode(torch.from_numpy(np.c_[q, qs].astype(np.float32))[None], H, PAD)[0][0, :, 0].numpy()
         base = dec(tok)
         for k, s in enumerate(pick):
-            tp = tok.copy(); m = np.all(keys == s, 1) & (tok[:, 12] > 0.5); tp[m, 9] += DELTA
+            tp = tok.copy(); m = np.all(keys == s, 1) & (tok[:, 12] > 0.5)
+            if a.recent_h:  # a fresh deviation: only the last recent_h hours, history unchanged
+                m &= tok[:, 5] * 24 >= -a.recent_h
+            tp[m, 9] += DELTA
             r = (dec(tp) - base)[k * len(leads):(k + 1) * len(leads)] / DELTA
             lt = ((issue - issue.astype("datetime64[D]")).astype(float) / 3600 + s[1] / 15) % 24
             rows += [dict(issue=issue, slat=s[0], slon=s[1], slt=lt, lead=int(l), gain=float(g)) for l, g in zip(leads, r)]
@@ -221,5 +224,6 @@ if __name__ == "__main__":
     p = sp.add_parser("report"); p.add_argument("path")
     g = sp.add_parser("gain"); g.add_argument("--ckpt", required=True); g.add_argument("--samples", required=True); g.add_argument("--out", required=True)
     g.add_argument("--issues", type=int, default=80); g.add_argument("--stations", type=int, default=10); g.add_argument("--threads", type=int, default=8)
+    g.add_argument("--recent-h", type=float, help="perturb only the station's tokens from the last H hours (default: all 24 h, i.e. a persistent offset)")
     a = ap.parse_args()
     {"run": run, "report": report, "gain": gain}[a.cmd](a)
