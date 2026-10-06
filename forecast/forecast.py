@@ -71,7 +71,7 @@ def run_checkpoint(ckpt, tok, glob, lat, lon, times, iri_v, lead_h, dev, qstate=
     import torch
     from train.model import AnomalyModel
     ck = torch.load(ckpt, map_location=dev)
-    model = AnomalyModel(d=ck["args"]["d"], enc_layers=ck["args"]["layers"], query_self_attn=ck["args"].get("query_self_attn", True), glotec=ck["args"].get("glotec", False), spots=ck["args"].get("spots", False), f_spot=ck["args"].get("f_spot", 29), f_qry=ck["args"].get("f_qry", 10)).to(dev); model.load_state_dict(ck["model"]); model.eval()
+    model = AnomalyModel.from_args(ck["args"]).to(dev); model.load_state_dict(ck["model"]); model.eval()
     q = query_feats(times, lat, lon, iri_v, np.full(len(lat), 2)); q[:, 5] = lead_h / 24.0
     if model.f_qry > q.shape[1]:
         q = np.c_[q, qstate].astype(np.float32)

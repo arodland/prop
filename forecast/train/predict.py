@@ -22,7 +22,7 @@ VARS = ("fof2", "hmf2", "mufd")
 
 def load(ckpt, dev):
     ck = torch.load(ckpt, map_location=dev)
-    model = AnomalyModel(d=ck["args"]["d"], enc_layers=ck["args"]["layers"], query_self_attn=ck["args"].get("query_self_attn", True), glotec=ck["args"].get("glotec", False), spots=ck["args"].get("spots", False), f_spot=ck["args"].get("f_spot", 29), f_qry=ck["args"].get("f_qry", 10)).to(dev)
+    model = AnomalyModel.from_args(ck["args"]).to(dev)
     model.load_state_dict(ck["model"]); model.eval()
     return model
 

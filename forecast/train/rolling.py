@@ -53,7 +53,7 @@ def main():
         raise SystemExit("--device cuda requested but torch.cuda.is_available() is False (driver/wheel mismatch?)")
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     ck = torch.load(a.base, map_location=dev)
-    model = AnomalyModel(d=ck["args"]["d"], enc_layers=ck["args"]["layers"], query_self_attn=ck["args"].get("query_self_attn", True), glotec=ck["args"].get("glotec", False), spots=ck["args"].get("spots", False), f_spot=ck["args"].get("f_spot", 29), f_qry=ck["args"].get("f_qry", 10)).to(dev); model.load_state_dict(ck["model"])
+    model = AnomalyModel.from_args(ck["args"]).to(dev); model.load_state_dict(ck["model"])
     files = sorted(set(glob.glob(f"{a.samples}/*.npz")) | {f for h in a.history for f in glob.glob(f"{h}/*.npz")})
     base_state = {k: v.clone() for k, v in model.state_dict().items()}
     months = pd.period_range(a.months[0], a.months[1], freq="M")

@@ -22,7 +22,7 @@ class MultiheadSDPA(nn.Module):
         self.h, self.dk, self.dropout = heads, d // heads, dropout
         self.q_proj, self.k_proj, self.v_proj, self.out_proj = (nn.Linear(d, d) for _ in range(4))
 
-    def forward(self, query, key, value, key_padding_mask=None, need_weights=False):
+    def forward(self, query, key, value, key_padding_mask=None, need_weights=False, attn_bias=None):
         B, Nq, d = query.shape; Nk = key.shape[1]
         q = self.q_proj(query).view(B, Nq, self.h, self.dk).transpose(1, 2)
         k = self.k_proj(key).view(B, Nk, self.h, self.dk).transpose(1, 2)
@@ -30,6 +30,8 @@ class MultiheadSDPA(nn.Module):
         bias = None
         if key_padding_mask is not None:
             bias = torch.zeros(B, 1, 1, Nk, dtype=q.dtype, device=q.device).masked_fill(key_padding_mask[:, None, None, :], float("-inf"))
+        if attn_bias is not None:  # (B, heads, Nq, Nk) additive logit bias (AnomalyModel rel_bias)
+            bias = attn_bias if bias is None else attn_bias + bias
         if need_weights:
             w = (q @ k.transpose(-2, -1)) / self.dk ** 0.5
             if bias is not None:
@@ -70,16 +72,23 @@ class CrossAttnLayer(nn.Module):
         self.ln2 = nn.LayerNorm(d); self.ffn = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Dropout(dropout), nn.Linear(4 * d, d))
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, q, memory, memory_key_padding_mask=None, need_weights=False):
+    def forward(self, q, memory, memory_key_padding_mask=None, need_weights=False, attn_bias=None):
         h = self.ln1(q)
-        a, w = self.attn(h, memory, memory, key_padding_mask=memory_key_padding_mask, need_weights=need_weights)  # w: (B,M,N) head-averaged
+        a, w = self.attn(h, memory, memory, key_padding_mask=memory_key_padding_mask, need_weights=need_weights, attn_bias=attn_bias)  # w: (B,M,N) head-averaged
         q = q + self.drop(a)
         return q + self.drop(self.ffn(self.ln2(q))), w
 
 
 class AnomalyModel(nn.Module):
-    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY):
+    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY, rel_bias=False):
         super().__init__()
+        # rel_bias: per decoder layer and head, a learned additive bias on the query->ionosonde-token attention logits,
+        # linear in [distance/1000 km, (distance/1000 km)^2, dt/24 h, cos(2pi dt/24 h), cos(2pi dt/12 h)] with dt = query
+        # time - token time. Gives attention a direct notion of near/far and of same-local-time-yesterday (the GP's
+        # +24 h / +12 h temporal peaks) instead of leaving locality to dot products of absolute coordinates; zeros at
+        # init, so the model starts as the unbiased one. Other token kinds (null, global, GloTEC, spots) get no bias.
+        self.heads = heads
+        self.rel_bias = nn.Parameter(torch.zeros(dec_layers, 5, heads)) if rel_bias else None
         self.f_qry = f_qry  # 10, or 18 with the nearest-station state features (build_samples --qstate)
         self.f_spot = f_spot  # 29 = midpoint-only tokens (v5); 52 = midpoint + control-point slots (see spot_tokens.py)
         self.tok_in = nn.Sequential(nn.Linear(F_TOK, d), nn.GELU(), nn.Linear(d, d))
@@ -100,6 +109,12 @@ class AnomalyModel(nn.Module):
             self.decoder = nn.ModuleList([CrossAttnLayer(d, heads, dropout) for _ in range(dec_layers)])
         self.head = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, d), nn.GELU(), nn.Linear(d, 6))  # 3 means + 3 log-vars
         self.null = nn.Parameter(torch.zeros(1, 1, d))  # always-present token: with no observations the model falls back to it
+
+    @classmethod
+    def from_args(cls, args):
+        """The model a checkpoint's saved args describe (defaults cover older checkpoints)."""
+        return cls(d=args["d"], enc_layers=args["layers"], query_self_attn=args.get("query_self_attn", True), glotec=args.get("glotec", False),
+                   spots=args.get("spots", False), f_spot=args.get("f_spot", 29), f_qry=args.get("f_qry", 10), rel_bias=args.get("rel_bias", False))
 
     def _compat(self, sd, prefix, *_):
         """Load v1..v5 checkpoints: kind_emb had 2 rows (no spot kind); tok_in took 16 features (the pooled-count
@@ -135,20 +150,51 @@ class AnomalyModel(nn.Module):
         if self.spots and tok_s is not None and tok_s.shape[1] > 0:
             parts.append(self.spot_in(tok_s) + self.kind_emb[2]); pads.append(~s_mask)
         x = torch.cat(parts, 1); pad = torch.cat(pads, 1)
+        # decode() reads the ionosonde tokens' geometry for rel_bias: unit vectors and times, plus where they sit in memory
+        self._geo = (_unit(tok), tok[..., 5] * 24.0, 2, x.shape[1]) if self.rel_bias is not None else None
         for layer in self.encoder:
             x = layer(x, src_key_padding_mask=pad)
         return x, pad
 
+    def _attn_bias(self, qry):
+        """Per decoder layer, (B, heads, M, N') logit bias: rel_bias terms on the ionosonde-token columns, 0 elsewhere."""
+        tu, tt, start, n_all = self._geo
+        f = _rel_feats(qry, self._geo)  # (B, M, N, 5)
+        out = []
+        for l in range(self.rel_bias.shape[0]):
+            b = torch.einsum("bmnf,fh->bhmn", f, self.rel_bias[l])
+            full = b.new_zeros(b.shape[0], self.heads, b.shape[2], n_all); full[..., start:start + b.shape[3]] = b
+            out.append(full)
+        return out
+
     def decode(self, qry, h, pad, return_attn=False):
         """return_attn: also return cross-attention weights (B,M,N'), head- and layer-averaged, for the
         attention-mass diagnostic (analysis/attention_mass.py). Column order matches encode()'s token order."""
+        qry = qry[..., :self.qry_in[0].in_features]  # samples may carry query-state columns a no-qstate model ignores
+        biases = self._attn_bias(qry) if self.rel_bias is not None else [None] * len(self.decoder)
         q = self.qry_in(qry); ws = []
-        for layer in self.decoder:
-            q, w = layer(q, h, memory_key_padding_mask=pad, need_weights=return_attn); ws.append(w)
+        for layer, b in zip(self.decoder, biases):
+            q, w = layer(q, h, memory_key_padding_mask=pad, need_weights=return_attn, attn_bias=b); ws.append(w)
         out = self.head(q)
         if return_attn:
             return out[..., :3], out[..., 3:].clamp(-6, 4), torch.stack(ws).mean(0)
         return out[..., :3], out[..., 3:].clamp(-6, 4)
+
+
+def _unit(x):
+    """(..., >=3) features [lat/90, sin lon, cos lon, ...] -> (..., 3) unit vectors."""
+    lat = x[..., 0] * (torch.pi / 2)
+    return torch.stack([torch.cos(lat) * x[..., 2], torch.cos(lat) * x[..., 1], torch.sin(lat)], -1)
+
+
+def _rel_feats(qry, geo):
+    """(B, M, N, 5) pair features between queries and ionosonde tokens: chord distance/1000 km, its square,
+    dt/24 h, cos(2pi dt/24 h), cos(2pi dt/12 h); dt = query lead - token age offset (hours, >= 0)."""
+    tu, tt, _, _ = geo
+    dist = 6.371 * (_unit(qry)[:, :, None] - tu[:, None]).norm(dim=-1)  # chord, 1000 km units (~arc below ~3000 km)
+    dt = qry[..., 5][:, :, None] * 24.0 - tt[:, None]
+    w = 2 * torch.pi * dt
+    return torch.stack([dist, dist ** 2, dt / 24.0, torch.cos(w / 24.0), torch.cos(w / 12.0)], -1)
 
 
 def gaussian_nll(mean, logvar, target, weight=None):
@@ -161,3 +207,25 @@ def gaussian_nll(mean, logvar, target, weight=None):
     loss = (nll * m).sum() / m.sum().clamp(min=1)
     rmse = (((t - mean) ** 2 * m).sum(dim=(0, 1)) / m.sum(dim=(0, 1)).clamp(min=1)).sqrt()
     return loss, rmse.detach()
+
+
+if __name__ == "__main__":
+    # rel_bias at its zero init must not change the output; a no-qstate model must take 18-column query rows;
+    # the bias must receive gradient once the model is trained.
+    torch.manual_seed(0)
+    B, N, S, M = 2, 50, 30, 64
+    tok = torch.randn(B, N, F_TOK); tok[..., 0] = torch.rand(B, N) * 2 - 1; lon = torch.rand(B, N) * 6.28
+    tok[..., 1], tok[..., 2], tok[..., 5] = lon.sin(), lon.cos(), -torch.rand(B, N)
+    qry = torch.randn(B, M, 18); ql = torch.rand(B, M) * 6.28; qry[..., 0] = torch.rand(B, M) * 2 - 1; qry[..., 1], qry[..., 2], qry[..., 5] = ql.sin(), ql.cos(), torch.rand(B, M)
+    args = dict(tok=tok, tok_mask=torch.ones(B, N, dtype=torch.bool), glob=torch.randn(B, F_GLOB), tok_s=torch.randn(B, S, 52), s_mask=torch.ones(B, S, dtype=torch.bool))
+    a = AnomalyModel(spots=True, f_spot=52, f_qry=18).eval(); b = AnomalyModel(spots=True, f_spot=52, f_qry=18, rel_bias=True).eval()
+    b.load_state_dict(a.state_dict(), strict=False)
+    with torch.no_grad():
+        assert torch.allclose(a(qry=qry, **args)[0], b(qry=qry, **args)[0], atol=1e-6), "zero rel_bias changed the output"
+    c = AnomalyModel(spots=True, f_spot=52, f_qry=10, rel_bias=True)
+    m, lv = c(qry=qry, **args); assert m.shape == (B, M, 3)
+    with torch.no_grad():
+        c.rel_bias[:, 0] = -2.0  # distance-penalised heads: attention should concentrate on the nearest tokens
+    c(qry=qry, **args)[0].sum().backward()
+    assert c.rel_bias.grad is not None and c.rel_bias.grad.abs().sum() > 0, "no gradient reaches rel_bias"
+    print("ok: zero bias is a no-op, 18-column queries accepted by a f_qry=10 model, rel_bias gets gradient")

@@ -55,7 +55,7 @@ def dsn():
 def load_model(name):
     if name not in _models:
         ck = torch.load(MODELS / name / "best.pt", map_location=DEV)
-        m = AnomalyModel(d=ck["args"]["d"], enc_layers=ck["args"]["layers"], query_self_attn=ck["args"].get("query_self_attn", True), glotec=ck["args"].get("glotec", False), spots=ck["args"].get("spots", False), f_spot=ck["args"].get("f_spot", 29), f_qry=ck["args"].get("f_qry", 10)).to(DEV)
+        m = AnomalyModel.from_args(ck["args"]).to(DEV)
         m.load_state_dict(ck["model"]); m.eval(); m.pool = bool(ck["args"].get("pool", False)); _models[name] = m  # pooled ionosonde tokens?
         if m.spots and int(ck["args"].get("spot_res", 60)) != spot_mod.RES[0]:
             raise RuntimeError(f"checkpoint {name} was trained on {ck['args'].get('spot_res', 60)}-min spot bins but SPOT_RES={spot_mod.RES[0]}; set SPOT_RES for the loader and the service")
