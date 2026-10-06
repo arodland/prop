@@ -1656,6 +1656,20 @@ product question.
   and D does not (0.12 -> 0.10). Candidate changes: widen `qstate` (L ~1000 km, cut ~2500 km) or let
   attention own the near field; add a same-local-time-yesterday term to `qstate`.
 
+- 2026-10-07: **E2 = D recipe + `--rel-bias --no-qstate`: attention replaces qstate and beats it**
+  (seed 1, paired vs D on val_v9b; `eval/val2025/REPORT_mids_e2.txt`, probe `eval/probes/impulse_e2*`). Val EMA
+  foF2 1.003 / MUF 3.212 (D 1.007 / 3.229), best epoch 8. Holdout foF2 by lead 0.884 / 0.907 / 0.929 / 0.999 /
+  1.046 vs D 0.951 / 0.949 / 0.950 / 1.003 / 1.037 (all leads +0.4% [-0.4, +1.4]); all stations foF2 +1.7% [+0.8,
+  +2.7], hmF2 +1.9%; RO foF2 +0.6% [+0.3, +1.0]. Learned bias (layer 2): one sharp local head (logit -4.9 per
+  1000 km, -1.9 per (1000 km)^2), one moderately local head with strong cos 12 h (+2.25) and cos 24 h (+0.84)
+  lag terms, two global heads. **Kernel**, R normalised to the 0-250 km bin, lead 0, 250-500 / 500-1000 /
+  1000-1500 / 1500-2000 / 2000-3000 km: E2 0.84 / 0.51 / 0.30 / 0.22 / 0.13, data (partial) 0.93 / 0.58 / 0.31 /
+  0.13 / 0.07, D 0.60 / 0.16 / 0.07 / 0.06 / 0.05: E2 matches the data to 1500 km, a little broad beyond.
+  Still earth-fixed. **Lead**, near gain normalised to lead 0 at 1 / 3 / 6 / 12 / 24 h: E2 0.87 / 0.52 / 0.35 /
+  0.28 / 0.26, data partial 0.70 / 0.34 / 0.22 / 0.11 / 0.19: E2 holds on longer than the data, and has no
+  12 h trough (the cos 12 h term rewards 12 h lags the data says carry least), the likely cause of its 12-24 h
+  deficit. Lead-0 gain at the station 0.93 (afternoon/evening 1.05-1.07: a small overshoot).
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly

@@ -92,7 +92,7 @@ def run(a):
             tp[m, 9] += DELTA
             qs_p = qstate_for(tp, issue, glat, glon)
             lt = ((issue - issue.astype("datetime64[D]")).astype(float) / 3600 + s[1] / 15) % 24
-            for v in VARIANTS:
+            for v in a.variants.split(","):
                 t_in = tp if v in ("both", "attn") else tok; qs = qs_p if v in ("both", "qstate") else qs_base
                 r = np.stack([(decode(t_in[keep], glob_, ts, np.c_[qbase[L], qs].astype(np.float32)) - base[L]) / DELTA for L in LEADS])
                 out["resp"].append(r.astype(np.float16)); out["variant"].append(v)
@@ -109,8 +109,8 @@ def report(a):
     variant = z["variant"]; slat, slon = z["slat"], z["slon"]
     edges = np.array([0, 250, 500, 1000, 1500, 2000, 3000, 5000, 20000])
     # Zonal (E-W) and meridional (N-S) reach: pixels within 15 deg of the station's latitude row vs its longitude column.
-    print(f"{len(R) // len(VARIANTS)} station impulses, delta {float(z['delta'])} (normalised foF2); R = transferred fraction of the input anomaly\n")
-    for v in VARIANTS:
+    print(f"{(variant == 'both').sum()} station impulses, delta {float(z['delta'])} (normalised foF2); R = transferred fraction of the input anomaly\n")
+    for v in [v for v in VARIANTS if (variant == v).any()]:
         sel = variant == v
         print(f"=== {v}: mean R by distance from the station (km), rows = lead h")
         print("lead  " + " ".join(f"{a_:>5}-{b:<5}" for a_, b in zip(edges[:-1], edges[1:])))
@@ -144,7 +144,7 @@ def report(a):
     print("variant lead  centroid(median)  shift(median)  shift deg/h   (earth-fixed 0, local-time-fixed -15)")
     nlat, nlon = len(z["lat"]), len(z["lon"])
     shifts = np.arange(-30, 31)  # grid columns (2 deg each)
-    for v in VARIANTS:
+    for v in [v for v in VARIANTS if (variant == v).any()]:
         idx = np.nonzero(variant == v)[0]
         for j, L in enumerate(leads):
             cen, sh = [], []
@@ -173,6 +173,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest="cmd", required=True)
     r = sp.add_parser("run"); r.add_argument("--ckpt", required=True); r.add_argument("--samples", required=True); r.add_argument("--out", required=True)
     r.add_argument("--issues", type=int, default=40); r.add_argument("--stations", type=int, default=6); r.add_argument("--threads", type=int, default=8)
+    r.add_argument("--variants", default=",".join(VARIANTS), help="subset of both,attn,qstate (a no-qstate model only needs both)")
     p = sp.add_parser("report"); p.add_argument("path")
     a = ap.parse_args()
     run(a) if a.cmd == "run" else report(a)
