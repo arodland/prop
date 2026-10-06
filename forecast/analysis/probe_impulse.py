@@ -169,11 +169,57 @@ def report(a):
         print(f"lead {L:>2}: {g.mean():.3f}   " + "  ".join(f"{k} {x:.3f}" for k, x in by.items()))
 
 
+def gain(a):
+    """Temporal kernel at the station itself: the same perturbation as run(), decoded only at the station's own
+    location, every hour from lead 0 to 24 (as production: tokens and query state both perturbed). CSV out."""
+    import pandas as pd
+    import torch
+    from baselines.iri_cache import iri_points_cached
+    from build_samples import query_feats
+    from predict import load
+    from train import pad_tok
+    torch.set_num_threads(a.threads)
+    model = load(a.ckpt, "cpu"); args = torch.load(a.ckpt, map_location="cpu", weights_only=False)["args"]
+    files = sorted(glob.glob(f"{a.samples}/*.npz")); files = files[:: max(1, len(files) // a.issues)][: a.issues]
+    leads = np.arange(0, 25); rng = np.random.default_rng(0); rows = []
+    for n, f in enumerate(files):
+        z = np.load(f); issue = np.datetime64(int(z["issue"]), "s")
+        tok = pad_tok(z["tok"]); ts = z["tok_s"] if model.spots else np.zeros((0, model.f_spot), np.float32)
+        glob_ = np.nan_to_num(z["glob"]).astype(np.float32); f107 = float(glob_[0] * 200); keys = tok_stations(tok)
+        fresh = np.unique(keys[(tok[:, 5] * 24 >= -1.0) & (tok[:, 12] > 0.5)], axis=0)
+        if len(fresh) == 0:
+            continue
+        pick = fresh[rng.choice(len(fresh), min(a.stations, len(fresh)), replace=False)]
+        keep = np.arange(len(tok)) if len(tok) <= args["max_tok"] else np.sort(np.random.default_rng(int(z["issue"])).choice(len(tok), args["max_tok"], replace=False))
+        # One query per (station, lead), all stations of this issue in one batch.
+        qlat = np.repeat(pick[:, 0], len(leads)); qlon = np.repeat(pick[:, 1], len(leads)); L = np.tile(leads, len(pick))
+        times = issue + (L * 3600).astype("timedelta64[s]")
+        iri = iri_points_cached(times, qlat, qlon, f107); iri_v = np.c_[iri["fof2"], iri["hmf2"], iri["mufd"]]
+        q = query_feats(times, qlat, qlon, iri_v, np.full(len(qlat), 2)); q[:, 5] = L / 24.0
+
+        def dec(t_in):
+            qs = qstate_for(t_in, issue, qlat, qlon)
+            T = torch.from_numpy(t_in[keep])[None]; S = torch.from_numpy(ts)[None]
+            with torch.no_grad():
+                H, PAD = model.encode(T, torch.ones(1, len(keep), dtype=torch.bool), torch.from_numpy(glob_)[None], None, None, S, torch.ones(1, len(ts), dtype=torch.bool))
+                return model.decode(torch.from_numpy(np.c_[q, qs].astype(np.float32))[None], H, PAD)[0][0, :, 0].numpy()
+        base = dec(tok)
+        for k, s in enumerate(pick):
+            tp = tok.copy(); m = np.all(keys == s, 1) & (tok[:, 12] > 0.5); tp[m, 9] += DELTA
+            r = (dec(tp) - base)[k * len(leads):(k + 1) * len(leads)] / DELTA
+            lt = ((issue - issue.astype("datetime64[D]")).astype(float) / 3600 + s[1] / 15) % 24
+            rows += [dict(issue=issue, slat=s[0], slon=s[1], slt=lt, lead=int(l), gain=float(g)) for l, g in zip(leads, r)]
+        print(f"{issue}  ({n + 1}/{len(files)})", flush=True)
+    pd.DataFrame(rows).to_csv(a.out, index=False); print(f"{len(rows)} rows -> {a.out}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); sp = ap.add_subparsers(dest="cmd", required=True)
     r = sp.add_parser("run"); r.add_argument("--ckpt", required=True); r.add_argument("--samples", required=True); r.add_argument("--out", required=True)
     r.add_argument("--issues", type=int, default=40); r.add_argument("--stations", type=int, default=6); r.add_argument("--threads", type=int, default=8)
     r.add_argument("--variants", default=",".join(VARIANTS), help="subset of both,attn,qstate (a no-qstate model only needs both)")
     p = sp.add_parser("report"); p.add_argument("path")
+    g = sp.add_parser("gain"); g.add_argument("--ckpt", required=True); g.add_argument("--samples", required=True); g.add_argument("--out", required=True)
+    g.add_argument("--issues", type=int, default=80); g.add_argument("--stations", type=int, default=10); g.add_argument("--threads", type=int, default=8)
     a = ap.parse_args()
-    run(a) if a.cmd == "run" else report(a)
+    {"run": run, "report": report, "gain": gain}[a.cmd](a)

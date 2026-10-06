@@ -104,7 +104,25 @@ def main(a):
         ok = np.isfinite(coef)
         print(f"{h:>3}  " + " ".join(f"{np.nanmean(coef[ok & (b == k)]) if (ok & (b == k)).any() else np.nan:>11.3f}" for k in range(len(DIST) - 1)) + f"   {np.median(r2):.3f}")
 
+    if a.temporal_out:
+        # Hourly temporal kernel at the station itself, for lags 0..24 h: plain autocorrelation, and the station's own
+        # ridge coefficient in predicting a_B(T+h) from every station's a(T) *including B* (the rest of the network
+        # held fixed: the analogue of the probe's gain at the perturbed station's own location).
+        rows = []
+        for h in range(25):
+            Xa = Z[:-h] if h else Z; MA, MB = (M[:-h], M[h:]) if h else (M, M)
+            cc = ((Z[:-h] if h else Z) * (Z[h:] if h else Z)).sum(0) / np.maximum((MA * MB).sum(0), 1)
+            for j in range(len(lat)):
+                y = V[h:, j] if h else V[:, j]; ok = np.isfinite(y)
+                if ok.sum() < 5000:
+                    continue
+                A_ = Xa[ok]; y_ = y[ok]
+                w = np.linalg.solve(A_.T @ A_ + a.ridge * len(y_) * np.eye(A_.shape[1]), A_.T @ y_)
+                rows.append(dict(lag=h, cluster=int(X.columns[j]), lat=lat[j], autocorr=float(cc[j]), self_coef=float(w[j])))
+        pd.DataFrame(rows).to_csv(a.temporal_out, index=False)
+        print(f"\ntemporal kernel ({len(rows)} rows) -> {a.temporal_out}")
+
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("paths", nargs="+"); ap.add_argument("--start", type=int, default=2009); ap.add_argument("--end", type=int, default=2019); ap.add_argument("--ridge", type=float, default=0.01)
+    ap = argparse.ArgumentParser(); ap.add_argument("paths", nargs="+"); ap.add_argument("--start", type=int, default=2009); ap.add_argument("--end", type=int, default=2019); ap.add_argument("--ridge", type=float, default=0.01); ap.add_argument("--temporal-out")
     main(ap.parse_args())
