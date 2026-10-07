@@ -1670,6 +1670,22 @@ product question.
   12 h trough (the cos 12 h term rewards 12 h lags the data says carry least), the likely cause of its 12-24 h
   deficit. Lead-0 gain at the station 0.93 (afternoon/evening 1.05-1.07: a small overshoot).
 
+- 2026-10-07: **E3 = D recipe + `--rel-bias` (qstate kept): best so far** (paired vs D on val_v9b;
+  `eval/val2025/REPORT_mids_e3.txt`). Val EMA foF2 0.998 / MUF 3.204, best epoch 7. Holdout foF2 +0.9% [+0.2, +1.6]
+  (0-1 h 0.895 vs D 0.951, E2 0.884; 12-24 h 1.039 vs D 1.037, E2 1.046), MUF +0.8%; all stations foF2 +2.7%,
+  MUF +1.7%, hmF2 +2.1%; RO +0.7%. One local head (-3.9 per 1000 km, cos 24 h +0.84, cos 12 h +1.52).
+- 2026-10-07: **Temporal kernel, corrected: the earlier "E2 holds on 3-5x too long" was a probe artefact.** The
+  first probe nudged a station's whole 24 h of tokens (a persistent offset, which a model should carry) against
+  data with the slow component removed. Like-for-like (`probe_impulse.py gain --recent-h 1` vs
+  `anomaly_correlation.py --raw --history-control`; `eval/probes/temporal_kernel_fresh.png`): weight of a
+  fresh current-hour deviation at its own station, h = 0 / 1 / 3 / 6 / 12 / 18 / 24: data 2024 0.96 / 0.63 /
+  0.31 / 0.14 / 0.00 / 0.03 / 0.30, data 2009-18 0.98 / 0.54 / 0.21 / 0.06 / -0.03 / 0.00 / 0.33; D 0.88 /
+  0.70 / 0.33 / 0.13 / 0.07 / 0.05 / 0.04; E2 0.70 / 0.63 / 0.28 / 0.09 / 0.02 / 0.01 / 0.08; E3 0.88 / 0.75 /
+  0.33 / 0.14 / 0.08 / 0.06 / 0.12. All three decay like the data to ~6 h. **The real gap is the 24 h
+  recurrence**: in the data a fresh deviation is worth ~0.3 again a day later (nothing at 9-18 h); E3 gets 0.12,
+  E2 0.08, D 0.04. E2's lead-0 weight on a last-hour-only change is low (0.70): without qstate, one fresh hour
+  competes with the station's other 23 h of tokens.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
