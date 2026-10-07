@@ -81,7 +81,7 @@ class CrossAttnLayer(nn.Module):
 
 
 class AnomalyModel(nn.Module):
-    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY, rel_bias=False, lag_bias=False):
+    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY, rel_bias=False, lag_bias=False, lag_fourier=0):
         super().__init__()
         # rel_bias: per decoder layer and head, a learned additive bias on the query->ionosonde-token attention logits,
         # linear in [distance/1000 km, (distance/1000 km)^2, dt/24 h, cos(2pi dt/24 h), cos(2pi dt/12 h)] with dt = query
@@ -89,10 +89,15 @@ class AnomalyModel(nn.Module):
         # +24 h / +12 h temporal peaks) instead of leaving locality to dot products of absolute coordinates; zeros at
         # init, so the model starts as the unbiased one. Other token kinds (null, global, GloTEC, spots) get no bias.
         self.heads = heads
-        self.rel_bias = nn.Parameter(torch.zeros(dec_layers, 5, heads)) if (rel_bias or lag_bias) else None
+        self.rel_bias = nn.Parameter(torch.zeros(dec_layers, 5, heads)) if (rel_bias or lag_bias or lag_fourier) else None
         # lag_bias: replaces rel_bias's three smooth time terms with a free table per layer and head over time lag,
         # one value per hour 0..LAG_MAX h, linearly interpolated, so a sharp dip and a 24 h peak are both expressible.
         self.lag_table = nn.Parameter(torch.zeros(dec_layers, heads, LAG_MAX + 1)) if lag_bias else None
+        # lag_fourier=K: the same job as lag_table, as K harmonics of a LAG_MAX-hour period. lag = query lead - token
+        # time, so cos/sin of the lag split into a query factor times a token factor and the bias is a (B, heads, M, 2K)
+        # x (B, N, 2K) matmul: no per-pair gather, whose backward scatter-add into 49 bins doubled E4's step time.
+        # K=16 resolves features down to a 3 h period. Coefficients per layer and head: [a_1..a_K, b_1..b_K].
+        self.lag_fourier = nn.Parameter(torch.zeros(dec_layers, heads, 2 * lag_fourier)) if lag_fourier else None
         self.f_qry = f_qry  # 10, or 18 with the nearest-station state features (build_samples --qstate)
         self.f_spot = f_spot  # 29 = midpoint-only tokens (v5); 52 = midpoint + control-point slots (see spot_tokens.py)
         self.tok_in = nn.Sequential(nn.Linear(F_TOK, d), nn.GELU(), nn.Linear(d, d))
@@ -119,7 +124,7 @@ class AnomalyModel(nn.Module):
         """The model a checkpoint's saved args describe (defaults cover older checkpoints)."""
         return cls(d=args["d"], enc_layers=args["layers"], query_self_attn=args.get("query_self_attn", True), glotec=args.get("glotec", False),
                    spots=args.get("spots", False), f_spot=args.get("f_spot", 29), f_qry=args.get("f_qry", 10), rel_bias=args.get("rel_bias", False),
-                   lag_bias=args.get("lag_bias", False))
+                   lag_bias=args.get("lag_bias", False), lag_fourier=args.get("lag_fourier", 0) or 0)
 
     def _compat(self, sd, prefix, *_):
         """Load v1..v5 checkpoints: kind_emb had 2 rows (no spot kind); tok_in took 16 features (the pooled-count
@@ -165,12 +170,22 @@ class AnomalyModel(nn.Module):
         """Per decoder layer, (B, heads, M, N') logit bias: rel_bias terms on the ionosonde-token columns, 0 elsewhere."""
         tu, tt, start, n_all = self._geo
         f = _rel_feats(qry, self._geo)  # (B, M, N, 5)
+        if self.lag_fourier is not None:  # time handled by the harmonics: separable query and token factors
+            K = self.lag_fourier.shape[2] // 2; om = 2 * torch.pi / LAG_MAX * torch.arange(1, K + 1, device=qry.device, dtype=qry.dtype)
+            Lq = qry[..., 5][..., None] * 24.0 * om; Tt = tt[..., None] * om  # (B, M, K), (B, N, K)
+            cL, sL, Kmat = Lq.cos(), Lq.sin(), torch.cat([Tt.cos(), Tt.sin()], -1)
+            f = torch.cat([f[..., :2], torch.zeros_like(f[..., 2:])], -1)
         if self.lag_table is not None:  # time handled by the table: lag in hours from the dt/24 column, interpolated
             lag = (f[..., 2] * 24.0).clamp(0, LAG_MAX); i0 = lag.floor().long().clamp(max=LAG_MAX - 1); w = (lag - i0)[:, None]
             f = torch.cat([f[..., :2], torch.zeros_like(f[..., 2:])], -1)
         out = []
         for l in range(self.rel_bias.shape[0]):
             b = torch.einsum("bmnf,fh->bhmn", f, self.rel_bias[l])
+            if self.lag_fourier is not None:
+                a_, b_ = self.lag_fourier[l, :, :K], self.lag_fourier[l, :, K:]  # (heads, K)
+                Q = torch.cat([cL[:, None] * a_[None, :, None] + sL[:, None] * b_[None, :, None],
+                               sL[:, None] * a_[None, :, None] - cL[:, None] * b_[None, :, None]], -1)  # (B, heads, M, 2K)
+                b = b + torch.einsum("bhmf,bnf->bhmn", Q, Kmat)
             if self.lag_table is not None:
                 t = self.lag_table[l]  # (heads, LAG_MAX + 1)
                 b = b + t[:, i0].permute(1, 0, 2, 3) * (1 - w) + t[:, i0 + 1].permute(1, 0, 2, 3) * w  # (B, heads, M, N)
@@ -253,4 +268,25 @@ if __name__ == "__main__":
         h, pad = e.encode(tk, torch.ones(1, 3, dtype=torch.bool), torch.zeros(1, F_GLOB))
         w = e.decode(qq, h, pad, return_attn=True)[2][0, 0, 2:]  # attention over the 3 tokens (after null, global)
     assert w.argmax() == 1 and w[1] > 0.9, w
-    print("ok: zero bias is a no-op, 18-column queries accepted by a f_qry=10 model, rel_bias and lag_table get gradient")
+    # lag_fourier: zero is a no-op; the separable form equals sum_k a_k cos(w_k lag) + b_k sin(w_k lag) evaluated
+    # directly; a 24 h-peaked set of coefficients selects the 24 h-old token.
+    f_ = AnomalyModel(spots=True, f_spot=52, f_qry=18, lag_fourier=16).eval(); f_.load_state_dict(a.state_dict(), strict=False)
+    with torch.no_grad():
+        assert torch.allclose(a(qry=qry, **args)[0], f_(qry=qry, **args)[0], atol=1e-6), "zero lag_fourier changed the output"
+        f_.lag_fourier.normal_(); f_.rel_bias.normal_()
+        f_.encode(tok, args["tok_mask"], args["glob"], None, None, args["tok_s"], args["s_mask"])
+        got = f_._attn_bias(qry[..., :18])[1][:, :, :, 2:2 + N]  # layer 1, ionosonde columns
+        lag = qry[..., 5][:, :, None] * 24.0 - tok[..., 5][:, None] * 24.0
+        om = 2 * torch.pi / LAG_MAX * torch.arange(1, 17)
+        a1, b1 = f_.lag_fourier[1, :, :16], f_.lag_fourier[1, :, 16:]
+        want = torch.einsum("bmnk,hk->bhmn", (lag[..., None] * om).cos(), a1) + torch.einsum("bmnk,hk->bhmn", (lag[..., None] * om).sin(), b1)
+        dist_part = torch.einsum("bmnf,fh->bhmn", torch.cat([_rel_feats(qry, f_._geo)[..., :2], torch.zeros(B, M, N, 3)], -1), f_.rel_bias[1])
+        assert torch.allclose(got, want + dist_part, atol=1e-3), (got - want - dist_part).abs().max()
+    e = AnomalyModel(f_qry=10, lag_fourier=16).eval()
+    with torch.no_grad():
+        om = 2 * torch.pi / LAG_MAX * torch.arange(1, 17)
+        e.lag_fourier[:, :, :16] = 3.0 * (om * 24).cos(); e.lag_fourier[:, :, 16:] = 3.0 * (om * 24).sin()  # 3 * sum_k cos(w_k (lag - 24))
+        h, pad = e.encode(tk, torch.ones(1, 3, dtype=torch.bool), torch.zeros(1, F_GLOB))
+        w = e.decode(qq, h, pad, return_attn=True)[2][0, 0, 2:]
+    assert w.argmax() == 1 and w[1] > 0.9, w
+    print("ok: zero bias is a no-op, 18-column queries accepted by a f_qry=10 model, rel_bias / lag_table / lag_fourier behave")
