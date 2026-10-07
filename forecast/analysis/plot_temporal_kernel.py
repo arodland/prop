@@ -33,9 +33,10 @@ series = [  # (label, (mean, ci), color, dashed)
     ("Data 2009–18", data(f"temporal_data_2009-2018{SD}.csv"), "#1baf7a", True),
     ("Data 2024", data(f"temporal_data_2024{SD}.csv"), "#eda100", True),
     ("E3 (attention bias + qstate)", model(f"gain_e3{SM}.csv"), "#e87ba4", False),
-]
+] + ([("E4f (lag curve, no qstate)", model("gain_e4f_recent.csv"), "#008300", False),
+      ("E5f (lag curve + qstate)", model("gain_e5f_recent.csv"), "#4a3aa7", False)] if FRESH else [])
 
-fig, ax = plt.subplots(figsize=(10, 5.6), facecolor=SURF)
+fig, ax = plt.subplots(figsize=(10.5, 6.2), facecolor=SURF)
 ax.set_facecolor(SURF)
 for x in (12, 24):
     ax.axvline(x, color=GRID, lw=1, zorder=0)

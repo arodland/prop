@@ -1686,6 +1686,21 @@ product question.
   E2 0.08, D 0.04. E2's lead-0 weight on a last-hour-only change is low (0.70): without qstate, one fresh hour
   competes with the station's other 23 h of tokens.
 
+- 2026-10-07: **Lag-curve runs E4f / E5f (`--lag-fourier 16`, without / with qstate): the recurrence is learned
+  explicitly, skill does not move.** (`eval/val2025/REPORT_mids_e4f_e5f.txt`, `eval/probes/lag_curves_e4f_e5f.png`,
+  `temporal_kernel_fresh.png`.) Detour first: `--lag-bias` (a gathered per-hour table) doubled the GPU epoch
+  time (4405 s vs E2's 2290 s; backward scatter-add into 49 bins); `--lag-fourier` makes the lag curve separable
+  (query factor x token factor), one matmul per head, 2340 s. Val EMA foF2 / MUF: E4f 1.002 / 3.206, E5f
+  0.996 / 3.190 (best of all runs). Paired vs D, holdout foF2 / MUF: E4f +0.5% / +0.7% (hmF2 -0.6%, RO 0.0%),
+  E5f +1.1% [+0.4, +2.0] / +1.2%; **E5f vs E3 within noise everywhere** (holdout foF2 +0.3% [-0.3, +0.8],
+  all-stations -0.4%). Learned lag curves: in both models the local head drops ~4 logits by 3 h, stays down
+  through 9-18 h and rises to a distinct peak at exactly 24 h. Fresh-deviation gain at 0 / 3 / 12 / 24 h: E5f
+  0.90 / 0.36 / 0.08 / 0.15, E4f 0.64 / 0.31 / 0.02 / 0.11, data 2024 0.96 / 0.31 / 0.00 / 0.30. So qstate
+  models keep a 9-18 h floor (0.06-0.08) whatever the attention bias does, no-qstate models drop to ~0 but give a
+  fresh last hour too little weight at lead 0, and every model carries about half the data's 24 h
+  recurrence. None of it changes skill beyond noise: **E3 (simplest) and E5f are the candidates**, pending
+  seed 2 and the coherence gate.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
