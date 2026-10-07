@@ -8,7 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-F_TOK, F_QRY, F_GLOB, F_GLO, F_SPOT = 17, 10, 6, 14, 29  # F_TOK 17 = v1..v5's 16 + log1p(rows pooled)/3 (build_samples --pool)
+F_TOK, F_QRY, F_GLOB, F_GLO, F_SPOT = 17, 10, 6, 14, 29
+LAG_MAX = 48  # hours of query-token time lag covered by lag_bias (lead <= 24 h, tokens <= 24 h old)  # F_TOK 17 = v1..v5's 16 + log1p(rows pooled)/3 (build_samples --pool)
 
 
 class MultiheadSDPA(nn.Module):
@@ -80,7 +81,7 @@ class CrossAttnLayer(nn.Module):
 
 
 class AnomalyModel(nn.Module):
-    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY, rel_bias=False):
+    def __init__(self, d=128, heads=4, enc_layers=4, dec_layers=2, dropout=0.1, query_self_attn=False, glotec=False, spots=False, f_spot=F_SPOT, f_qry=F_QRY, rel_bias=False, lag_bias=False):
         super().__init__()
         # rel_bias: per decoder layer and head, a learned additive bias on the query->ionosonde-token attention logits,
         # linear in [distance/1000 km, (distance/1000 km)^2, dt/24 h, cos(2pi dt/24 h), cos(2pi dt/12 h)] with dt = query
@@ -88,7 +89,10 @@ class AnomalyModel(nn.Module):
         # +24 h / +12 h temporal peaks) instead of leaving locality to dot products of absolute coordinates; zeros at
         # init, so the model starts as the unbiased one. Other token kinds (null, global, GloTEC, spots) get no bias.
         self.heads = heads
-        self.rel_bias = nn.Parameter(torch.zeros(dec_layers, 5, heads)) if rel_bias else None
+        self.rel_bias = nn.Parameter(torch.zeros(dec_layers, 5, heads)) if (rel_bias or lag_bias) else None
+        # lag_bias: replaces rel_bias's three smooth time terms with a free table per layer and head over time lag,
+        # one value per hour 0..LAG_MAX h, linearly interpolated, so a sharp dip and a 24 h peak are both expressible.
+        self.lag_table = nn.Parameter(torch.zeros(dec_layers, heads, LAG_MAX + 1)) if lag_bias else None
         self.f_qry = f_qry  # 10, or 18 with the nearest-station state features (build_samples --qstate)
         self.f_spot = f_spot  # 29 = midpoint-only tokens (v5); 52 = midpoint + control-point slots (see spot_tokens.py)
         self.tok_in = nn.Sequential(nn.Linear(F_TOK, d), nn.GELU(), nn.Linear(d, d))
@@ -114,7 +118,8 @@ class AnomalyModel(nn.Module):
     def from_args(cls, args):
         """The model a checkpoint's saved args describe (defaults cover older checkpoints)."""
         return cls(d=args["d"], enc_layers=args["layers"], query_self_attn=args.get("query_self_attn", True), glotec=args.get("glotec", False),
-                   spots=args.get("spots", False), f_spot=args.get("f_spot", 29), f_qry=args.get("f_qry", 10), rel_bias=args.get("rel_bias", False))
+                   spots=args.get("spots", False), f_spot=args.get("f_spot", 29), f_qry=args.get("f_qry", 10), rel_bias=args.get("rel_bias", False),
+                   lag_bias=args.get("lag_bias", False))
 
     def _compat(self, sd, prefix, *_):
         """Load v1..v5 checkpoints: kind_emb had 2 rows (no spot kind); tok_in took 16 features (the pooled-count
@@ -160,9 +165,15 @@ class AnomalyModel(nn.Module):
         """Per decoder layer, (B, heads, M, N') logit bias: rel_bias terms on the ionosonde-token columns, 0 elsewhere."""
         tu, tt, start, n_all = self._geo
         f = _rel_feats(qry, self._geo)  # (B, M, N, 5)
+        if self.lag_table is not None:  # time handled by the table: lag in hours from the dt/24 column, interpolated
+            lag = (f[..., 2] * 24.0).clamp(0, LAG_MAX); i0 = lag.floor().long().clamp(max=LAG_MAX - 1); w = (lag - i0)[:, None]
+            f = torch.cat([f[..., :2], torch.zeros_like(f[..., 2:])], -1)
         out = []
         for l in range(self.rel_bias.shape[0]):
             b = torch.einsum("bmnf,fh->bhmn", f, self.rel_bias[l])
+            if self.lag_table is not None:
+                t = self.lag_table[l]  # (heads, LAG_MAX + 1)
+                b = b + t[:, i0].permute(1, 0, 2, 3) * (1 - w) + t[:, i0 + 1].permute(1, 0, 2, 3) * w  # (B, heads, M, N)
             full = b.new_zeros(b.shape[0], self.heads, b.shape[2], n_all); full[..., start:start + b.shape[3]] = b
             out.append(full)
         return out
@@ -228,4 +239,18 @@ if __name__ == "__main__":
         c.rel_bias[:, 0] = -2.0  # distance-penalised heads: attention should concentrate on the nearest tokens
     c(qry=qry, **args)[0].sum().backward()
     assert c.rel_bias.grad is not None and c.rel_bias.grad.abs().sum() > 0, "no gradient reaches rel_bias"
-    print("ok: zero bias is a no-op, 18-column queries accepted by a f_qry=10 model, rel_bias gets gradient")
+    # lag_bias: zero table is a no-op, and training reaches it.
+    d_ = AnomalyModel(spots=True, f_spot=52, f_qry=18, lag_bias=True).eval(); d_.load_state_dict(a.state_dict(), strict=False)
+    with torch.no_grad():
+        assert torch.allclose(a(qry=qry, **args)[0], d_(qry=qry, **args)[0], atol=1e-6), "zero lag table changed the output"
+    d_.train(); d_(qry=qry, **args)[0].sum().backward()
+    assert (d_.lag_table.grad.abs().sum((0, 1)) > 0).sum() > 40, "lag table should get gradient across the lags present (0..48 h here)"
+    # A table that is large at 24 h and very negative elsewhere must make a query attend to the 24 h-lag token.
+    e = AnomalyModel(f_qry=10, lag_bias=True).eval(); tk = torch.zeros(1, 3, F_TOK); tk[..., 2] = 1.0; tk[0, :, 5] = torch.tensor([-0.5, -1.0, -0.25]) * 1.0
+    qq = torch.zeros(1, 1, 10); qq[..., 2] = 1.0; qq[..., 5] = 0.0  # lead 0, same place: lags 12, 24 and 6 h
+    with torch.no_grad():
+        e.lag_table.fill_(-30.0); e.lag_table[:, :, 24] = 30.0
+        h, pad = e.encode(tk, torch.ones(1, 3, dtype=torch.bool), torch.zeros(1, F_GLOB))
+        w = e.decode(qq, h, pad, return_attn=True)[2][0, 0, 2:]  # attention over the 3 tokens (after null, global)
+    assert w.argmax() == 1 and w[1] > 0.9, w
+    print("ok: zero bias is a no-op, 18-column queries accepted by a f_qry=10 model, rel_bias and lag_table get gradient")

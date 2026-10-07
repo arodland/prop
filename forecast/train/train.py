@@ -206,6 +206,7 @@ def main():
     ap.add_argument("--muon-adjust-lr-fn", default="match_rms_adamw", choices=["match_rms_adamw", "original", "none"])
     ap.add_argument("--max-tok", type=int, help="ionosonde token budget applied at load time (token-budget study; samples built with --max-tok 8192)")
     ap.add_argument("--rel-bias", action="store_true", help="learned distance/time-lag bias on query->ionosonde attention (model.py rel_bias)")
+    ap.add_argument("--lag-bias", action="store_true", help="free per-hour time-lag table on query->ionosonde attention, replacing --rel-bias's smooth time terms (implies --rel-bias)")
     ap.add_argument("--no-qstate", action="store_true", help="ignore the samples' nearest-station query-state columns (f_qry 10)")
     ap.add_argument("--recency-tau", type=float, help="hours; with --max-tok, keep tokens with P ∝ exp(age/τ) instead of uniformly")
     a = ap.parse_args()
@@ -224,13 +225,13 @@ def main():
     spot_res = int(z0["spot_res"]) if "spot_res" in z0.files else 60
     spot_baseline = str(z0["spot_baseline"]) if "spot_baseline" in z0.files else "frozen"  # baseline scheme of the samples
     f_qry = F_QRY if a.no_qstate else int(z0["qry"].shape[1])  # 18 with --qstate samples  # spot bin resolution the samples were built with (SPOT_RES for the service)
-    model = AnomalyModel(d=a.d, enc_layers=a.layers, dropout=a.dropout, query_self_attn=False, glotec=a.glotec, spots=a.spots, f_spot=f_spot, f_qry=f_qry, rel_bias=a.rel_bias).to(dev)
+    model = AnomalyModel(d=a.d, enc_layers=a.layers, dropout=a.dropout, query_self_attn=False, glotec=a.glotec, spots=a.spots, f_spot=f_spot, f_qry=f_qry, rel_bias=a.rel_bias, lag_bias=a.lag_bias).to(dev)
     print(f"{sum(p.numel() for p in model.parameters()) / 1e6:.2f}M params, {len(tr.dataset)} train / {len(va.dataset)} val samples, device {dev}")
     if a.optimizer == "muon":
         # Muon on the weight matrices, AdamW on biases/LayerNorm gains and on the embedding-like tensors (null token,
         # kind embeddings) and the output head, per the usual Muon guidance. match_rms_adamw scaling keeps --lr's meaning.
         from muon import Muon
-        skip = {"null", "kind_emb", "head.3.weight", "rel_bias"}
+        skip = {"null", "kind_emb", "head.3.weight", "rel_bias", "lag_table"}
         mats = [p for n, p in model.named_parameters() if p.ndim >= 2 and n not in skip]
         rest = [p for n, p in model.named_parameters() if p.ndim < 2 or n in skip]
         opt = Muon([{"params": mats, "use_muon": True, "lr": a.lr, "weight_decay": a.wd},
