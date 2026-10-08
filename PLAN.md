@@ -1718,6 +1718,15 @@ product question.
   `2026-10-v11` / `2026-10-v11-spots` in `deploy/scheduler.patch.md`. The `prop-forecast` image must be rebuilt
   from this branch first (the deployed model code has no rel_bias / lag_fourier).
 
+- 2026-10-08: **v11 + `--glotec`: the GloTEC penalty is gone, but so is any benefit** (`mids_d_e5f_glotec`,
+  seed 1; `eval/val2025/REPORT_v11_glotec.txt`). Paired vs v11: holdout foF2 -0.4% [-0.9, +0.1], MUF -0.3%, hmF2
+  +0.1%; all stations and RO within +-0.3% (v11's own seed 2 is -0.6% on holdout foF2, so this is seed noise).
+  Dropping GloTEC at prediction time changes nothing (holdout foF2 +0.0% [-0.2, +0.2], MUF +0.2%): with ionosondes
+  present the model ignores it. GloTEC-only vs no inputs: hmF2 +2.7% [+1.8, +3.6], MUF +1.4%, foF2 +1.3% [-0.0,
+  +2.5], RO 0.0%: the pathway carries a little, mostly hmF2. GloTEC is ~1.5% of train_mids_d issue times (2025-05
+  on), so its pathway is undertrained; it may matter more once the 2025-26 archive grows. **v11 stays without
+  GloTEC**: no skill to gain, and it adds a live-feed dependency and latency.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
