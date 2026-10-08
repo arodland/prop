@@ -75,6 +75,22 @@
           make_maps => 1, renderhtml => 1, no_holdout => 1,
       });
     },
+    # v11 (= E5f in PLAN.md: mids_d data and recipe + --lag-fourier 16, i.e. a learned distance and time-lag bias
+    # on attention, qstate kept); checkpoint /kass/forecast/models/mids_d_e5f (seed 1) -> /home/prop/checkpoints/v11.
+    # Needs the prop-forecast image rebuilt from a branch with rel_bias / lag_fourier in train/model.py (e62d139 or
+    # later): the deployed image cannot load the checkpoint's extra parameters.
+    sub {
+      one_run($run_time, $state, '2026-10-v11', {
+          forecast_v2 => { model => 'v11', glotec => 0, spots => 0 },
+          make_maps => 1, renderhtml => 1, no_holdout => 1,
+      });
+    },
+    sub {
+      one_run($run_time, $state, '2026-10-v11-spots', {
+          forecast_v2 => { model => 'v11', glotec => 0, spots => 1 },
+          make_maps => 1, renderhtml => 1, no_holdout => 1,
+      });
+    },
     # v7p6 side by side with and without live spot tokens (spots => 1 needs prop-spots.timer running);
     # shut down 2026-10-05 (trailed v4 and v9b live)
     sub {

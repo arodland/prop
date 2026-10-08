@@ -1707,6 +1707,17 @@ product question.
   0.894 at 0-1 h, 1.037 / 1.044 at 12-24 h), a tighter spread than D's two seeds. Val EMA seed 2: 1.002 / 25.58
   / 3.204. **E5f is the candidate**; remaining check is the monthly coherence gate.
 
+- 2026-10-08: **E5f passes the monthly coherence gate, with the fewest sign flips of any model** (October 2025
+  daily 00Z, 31 days, ionosonde inputs; `eval/coherence_oct2025_e5f.parquet`, maps `maps/coh/2025-10-DD_e5f`).
+  Monthly means GP / sp3 / D / E5f: anomaly RMS 0.75 / 0.92 / 0.91 / 0.92; fine-scale 0.000 / 0.0004 / 0.0004 /
+  0.0003 (gate < 0.01); grad_far 0.020 / 0.048 / 0.059 / 0.057 (E5f 2.8x GP, gate 3.5x); change per hour 0.12 /
+  0.22 / 0.22 / 0.21; **sign flips 2.4 / 9.7 / 10.2 / 8.0%** (gate < 10%), worst day 9.6 / 16.9 / 16.2 / 12.7%,
+  days over 10% 13 (sp3) / 16 (D) / 9 (E5f). Paired by day, E5f - D sign flips -2.2 pp [-2.7, -1.8], lower on all 31
+  days; E5f - sp3 -1.7 pp [-2.6, -1.0]. So the attention bias both lifts skill and removes D's extra flicker.
+  **Promotion name: E5f = v11** (Andrew), checkpoint `models/mids_d_e5f` (seed 1); scheduler entries
+  `2026-10-v11` / `2026-10-v11-spots` in `deploy/scheduler.patch.md`. The `prop-forecast` image must be rebuilt
+  from this branch first (the deployed model code has no rel_bias / lag_fourier).
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
