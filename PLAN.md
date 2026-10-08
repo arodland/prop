@@ -1701,6 +1701,12 @@ product question.
   recurrence. None of it changes skill beyond noise: **E3 (simplest) and E5f are the candidates**, pending
   seed 2 and the coherence gate.
 
+- 2026-10-08: **E5f's gain over D replicates at seed 2** (`eval/val2025/REPORT_mids_e5f_seed2.txt`, paired vs
+  D seed 2): holdout foF2 +2.1% [+1.4, +2.8] (seed 1 pair: +1.1%), MUF +1.9%, hmF2 +0.3%; all stations foF2
+  +3.0%, hmF2 +2.8%, MUF +2.3%; RO foF2 +1.1%. The two E5f seeds agree closely by lead (holdout foF2 0.891 /
+  0.894 at 0-1 h, 1.037 / 1.044 at 12-24 h), a tighter spread than D's two seeds. Val EMA seed 2: 1.002 / 25.58
+  / 3.204. **E5f is the candidate**; remaining check is the monthly coherence gate.
+
 ## Open questions
 
 1. Test set 2025-01 → 2026-06 frozen? Live experiments already ran over it, so you know roughly
