@@ -75,6 +75,11 @@ def query_df(con, sql, params=None):
     return df
 
 
+def wrap_lon(lon):
+    """Station longitudes are stored 0..360; /stationdata (renderer, prop-cosmic distances) uses the map frame, -180..180."""
+    return ((lon + 180) % 360) - 180
+
+
 def db_inputs(con, t0, held_station_ids):
     """Last 24 h of ionosonde rows before t0 - 15 min, quality- and bounds-filtered, with station geometry and cluster."""
     st = query_df(con, "SELECT id, latitude::float AS lat, longitude::float AS lon FROM station")
@@ -218,7 +223,7 @@ def forecast_24h():
         curr = inp.sort_values("time").groupby("station_id").last().reset_index().merge(st_in[["id"]], left_on="station_id", right_on="id")
         # renderer contract (renderer.py filter_data / plot.draw_dots): station.latitude/longitude, time in ms, cs in [0, 1]
         curr_json = (curr.rename(columns={"lat": "station.latitude", "lon": "station.longitude"})
-                     .assign(time=lambda d: pd.to_datetime(d.time).to_numpy().astype("datetime64[ms]").astype("int64"), cs=lambda d: np.where(d.cs < 0, 0.85, d.cs / 100.0))  # ms, resolution-safe
+                     .assign(time=lambda d: pd.to_datetime(d.time).to_numpy().astype("datetime64[ms]").astype("int64"), cs=lambda d: np.where(d.cs < 0, 0.85, d.cs / 100.0), **{"station.longitude": lambda d: wrap_lon(d["station.longitude"])})  # ms, resolution-safe
                      .assign(**{"station.id": lambda d: d.station_id})  # assimilate's json_normalize schema: prop-cosmic reads station.id
                      [["station.id", "station.latitude", "station.longitude", "time", "cs", "fof2", "hmf2", "mufd"]].to_json(orient="records"))
         with torch.no_grad():
@@ -244,7 +249,7 @@ def forecast_24h():
                 smu, slv = model.decode(torch.from_numpy(sq)[None].to(DEV), H, PAD)
                 sp = np.c_[si["fof2"], si["hmf2"], si["mufd"]] + smu[0].cpu().numpy() * ANOM_SCALE
                 s_fof2 = np.exp(0.5 * slv[0, :, 0].cpu().numpy()) * ANOM_SCALE[0]
-                pred_json = pd.DataFrame({"station.latitude": st_in.lat.to_numpy(), "station.longitude": st_in.lon.to_numpy(), "time": int(tv.astype("int64")) * 1000,
+                pred_json = pd.DataFrame({"station.latitude": st_in.lat.to_numpy(), "station.longitude": wrap_lon(st_in.lon.to_numpy()), "time": int(tv.astype("int64")) * 1000,
                                           "fof2": sp[:, 0], "hmf2": sp[:, 1], "mufd": sp[:, 2], "stdev_fof2": s_fof2,
                                           "cs": np.clip(1.0 - s_fof2 / (2 * ANOM_SCALE[0]), 0.3, 1.0),  # dot alpha: confident = opaque; never filtered out
                                           "run_id": run_id, "station.id": st_in.id.to_numpy()}).to_json(orient="records")
